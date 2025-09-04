@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Core SDK Features
+
 - **Unified AI Provider Interface**: Single SDK for multiple AI providers including OpenAI, Anthropic, and Google Gemini
 - **Simplified Authentication**: Secure API key authentication with automatic base URL configuration
 - **Async/Await Support**: Full async support using Tokio runtime for all API operations
@@ -21,52 +22,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### API Endpoints
 
 ##### Health Monitoring
+
 - `health_check()` - Basic API health status check
 - `detailed_health_check()` - Detailed health check including service status (database, Redis, providers)
 
 ##### Chat Completions
+
 - `create_chat_completion()` - Standard chat completion with configurable parameters
 - `create_chat_completion_stream()` - Streaming chat completion for real-time responses
 - Support for multiple chat roles (User, Assistant, System)
 - Configurable temperature, max tokens, and model selection
 
 ##### User Account Management
+
 - `get_user_account()` - Retrieve current user account information and credit balance
 - Support for multiple subscription plans (free, plus, pro)
 
 ##### API Key Management
+
 - `create_api_key()` - Generate new API keys with optional expiration
 - `list_api_keys()` - List all API keys for authenticated user
 - `update_api_key()` - Update API key properties (description, etc.)
 - `delete_api_key()` - Remove API keys
 
 ##### Usage Tracking & Billing
+
 - `get_credit_stats()` - Retrieve credit balance and usage information
 - `get_usage_stats()` - Get comprehensive usage statistics with daily breakdowns
 - Credit transaction history tracking
 - Monthly usage reset functionality
 
-
 #### Data Models
 
 ##### Core Models
+
 - `User` - User account information with credit tracking
 - `ApiKey` - API key management with expiration and activity status
 - `ChatMessage` / `ChatRole` - Chat completion message structures
 - `ChatCompletionRequest` / `ChatCompletionResponse` - Chat API request/response types
 
 ##### Usage & Billing Models
+
 - `CreditInfo` - Credit balance and allocation details
 - `UsageStats` - Comprehensive usage statistics
 - `DailyUsage` - Daily usage breakdowns
 - `CreditTransaction` - Individual credit transactions with metadata
 
 ##### System Health Models
+
 - `HealthCheck` - API health status with uptime and service information
 - `HealthStatus` - Enum for health states (Healthy, Degraded, Unhealthy, NeedsInit)
 - `HealthServices` - Individual service health status
 
 #### Authentication & Configuration
+
 - `AuthConfig` - Simplified authentication configuration builder
 - Automatic base URL configuration (defaults to `api.enosislabs.com`)
 - Support for custom base URLs and timeouts when needed
@@ -74,12 +83,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Convenience methods: `RainyClient::with_api_key()` for one-line setup
 
 #### HTTP Client Features
+
 - Configurable timeouts and retry logic
 - Automatic JSON serialization/deserialization
 - HTTP status code handling with appropriate error mapping
 - Streaming response support for large data
 
 #### Examples & Documentation
+
 - Comprehensive example files demonstrating all major features:
   - `basic_usage.rs` - Complete walkthrough of core functionality
   - `chat_completion.rs` - Advanced chat completion patterns
@@ -88,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Contributing guide with development setup and testing guidelines
 
 #### Development & Build
+
 - Rust 2021 edition compatibility
 - Modular crate structure with feature flags
 - Comprehensive dependency management
@@ -97,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Technical Details
 
 #### Dependencies
+
 - **reqwest**: HTTP client with async support and JSON handling
 - **tokio**: Async runtime for concurrent operations
 - **serde**: Serialization framework for API data models
@@ -108,11 +121,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **base64**: Encoding support for authentication
 
 #### Feature Flags
+
 - `rate-limiting`: Enable governor crate for rate limiting
 - `logging`: Enable tracing crate for request logging
 - Default features: Core functionality without optional dependencies
 
 #### Architecture
+
 - Modular endpoint organization in `src/endpoints/`
 - Clean separation of concerns between authentication, client, and models
 - Builder pattern for configuration
@@ -120,6 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Async trait implementations for all API operations
 
 ### Security
+
 - Secure API key handling with proper header injection
 - **SECURITY**: Removed all administrative operations to prevent API structure exposure
 - Input validation for all API parameters
@@ -127,12 +143,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero admin surface area for public SDK distribution
 
 ### Performance
+
 - Efficient HTTP connection pooling via reqwest
 - Minimal memory footprint with streaming support
 - Configurable timeouts to prevent hanging requests
 - Rate limiting to respect API provider limits
 
 ### Breaking Changes
+
 - **REMOVED**: All administrative operations for security reasons:
   - `create_user_account()` - Admin-only operation removed
   - `list_all_users()` - Potential security exposure removed  
@@ -142,6 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SIMPLIFIED**: Authentication now requires only API key (no admin key support)
 
 ### User Experience Improvements
+
 - **Simplified Client Creation**: New `RainyClient::with_api_key("key")` convenience method
 - **Zero Configuration**: Base URL automatically set to `api.enosislabs.com`
 - **Cleaner API**: Removed complex admin/user authentication switching

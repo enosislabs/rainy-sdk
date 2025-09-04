@@ -42,6 +42,7 @@ rainy-sdk = { version = "0.1.0", features = ["rate-limiting", "logging"] }
 ```
 
 Available features:
+
 - `rate-limiting`: Built-in rate limiting with governor crate
 - `logging`: Request/response logging with tracing crate
 
@@ -93,7 +94,6 @@ use rainy_sdk::RainyClient;
 // Simplest possible setup
 let client = RainyClient::with_api_key("ra-20250125143052Axxxxxxxxxxxxxxxxxxxx")?;
 ```
-
 
 ### Core Operations
 
@@ -175,7 +175,6 @@ println!("Created key: {}", new_key.key);
 client.delete_api_key(new_key.id).await?;
 ```
 
-
 ## 🧪 Examples
 
 Explore the `examples/` directory for comprehensive usage examples:
@@ -231,7 +230,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 ## 📞 Contact & Support
 
 - **Website**: [enosislabs.com](https://enosislabs.com)
-- **Email**: hello@enosislabs.com
+- **Email**: <hello@enosislabs.com>
 - **GitHub**: [github.com/enosislabs](https://github.com/enosislabs)
 - **Documentation**: [docs.rs/rainy-sdk](https://docs.rs/rainy-sdk)
 

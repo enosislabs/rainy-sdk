@@ -18,7 +18,8 @@ If you discover a security vulnerability in the Rainy SDK, please help us by rep
 **Please do NOT report security vulnerabilities through public GitHub issues.**
 
 Instead, please report security vulnerabilities by emailing:
-- **Email**: security@enosislabs.com
+
+- **Email**: <security@enosislabs.com>
 - **Subject**: `[SECURITY] Vulnerability Report - Rainy SDK`
 
 ### What to Include
@@ -44,6 +45,7 @@ When reporting a security vulnerability, please include:
 ### Security Updates
 
 Security updates will be released as patch versions (e.g., 0.1.1, 0.1.2) with:
+
 - A security advisory on GitHub
 - Release notes describing the vulnerability and fix
 - Updated dependencies if applicable
@@ -51,6 +53,7 @@ Security updates will be released as patch versions (e.g., 0.1.1, 0.1.2) with:
 ### Responsible Disclosure
 
 We kindly ask that you:
+
 - Give us reasonable time to fix the issue before public disclosure
 - Avoid accessing or modifying user data
 - Avoid disrupting our services
@@ -130,8 +133,9 @@ We're continuously working to improve security:
 ## Contact
 
 For security-related questions or concerns:
-- **Security Issues**: security@enosislabs.com
-- **General Support**: hello@enosislabs.com
+
+- **Security Issues**: <security@enosislabs.com>
+- **General Support**: <hello@enosislabs.com>
 - **Documentation**: [docs.rs/rainy-sdk](https://docs.rs/rainy-sdk)
 
 Thank you for helping keep the Rainy SDK and its users secure! 🔒

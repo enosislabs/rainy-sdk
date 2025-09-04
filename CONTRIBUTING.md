@@ -126,6 +126,7 @@ All contributions to this repository must include a Developer Certificate of Ori
 #### Why is sign-off required?
 
 The sign-off serves several important purposes:
+
 - **Legal compliance**: It certifies that you have the legal right to submit the code
 - **Chain of custody**: It helps track who contributed what and when
 - **Intellectual property**: It ensures proper attribution and licensing
@@ -141,6 +142,7 @@ git commit -s -m "Your commit message"
 ```
 
 This automatically adds a sign-off line at the end of your commit message:
+
 ```
 Signed-off-by: Your Name <your.email@example.com>
 ```
@@ -157,6 +159,7 @@ git log --show-signature
 ```
 
 Or to see just the sign-off lines:
+
 ```bash
 git log --pretty=format:"%H %s%n%b%n" | grep "Signed-off-by"
 ```
@@ -395,7 +398,7 @@ For new features, please include:
 ### Security Issues
 
 - **DO NOT** report security vulnerabilities in public issues
-- Email security@enosislabs.com instead
+- Email <security@enosislabs.com> instead
 - Include detailed reproduction steps and potential impact
 
 ## 📜 Code of Conduct
@@ -421,6 +424,7 @@ We are committed to providing a welcoming and inclusive environment for all cont
 ### Enforcement
 
 Violations of the code of conduct may result in:
+
 - Warning from maintainers
 - Temporary ban from contributing
 - Permanent ban in severe cases
@@ -428,6 +432,7 @@ Violations of the code of conduct may result in:
 ## 🙏 Recognition
 
 Contributors will be recognized in:
+
 - **CHANGELOG.md**: For all releases
 - **README.md**: Notable contributors section
 - **GitHub releases**: Contributor mentions

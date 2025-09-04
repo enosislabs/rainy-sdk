@@ -1,0 +1,81 @@
+name: MSRV
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      msrv:
+        description: 'Minimum Supported Rust Version to test against'
+        required: false
+        default: '1.70.0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  msrv:
+    name: Check MSRV
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install specified Rust version
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ github.event.inputs.msrv || '1.70.0' }}
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Check if project builds with MSRV
+      run: cargo check --all-targets
+
+    - name: Run tests with MSRV
+      run: cargo test --lib
+
+    - name: Verify Cargo.lock compatibility
+      run: |
+        # Check that all dependencies support the MSRV
+        cargo update --locked
+
+    - name: Generate MSRV report
+      run: |
+        echo "## MSRV Compatibility Report" > msrv_report.md
+        echo "" >> msrv_report.md
+        echo "**Tested Rust Version:** ${{ github.event.inputs.msrv || '1.70.0' }}" >> msrv_report.md
+        echo "" >> msrv_report.md
+        echo "### Build Status: ✅ PASSED" >> msrv_report.md
+        echo "### Test Status: ✅ PASSED" >> msrv_report.md
+        echo "" >> msrv_report.md
+        echo "**Note:** This confirms the project is compatible with Rust ${{ github.event.inputs.msrv || '1.70.0' }} or later." >> msrv_report.md
+
+    - name: Upload MSRV report
+      uses: actions/upload-artifact@v4
+      with:
+        name: msrv-report
+        path: msrv_report.md
+
+  update-msrv:
+    name: Update MSRV Badge
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    needs: msrv
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update README with MSRV badge
+      run: |
+        MSRV="${{ github.event.inputs.msrv || '1.70.0' }}"
+        # This would update a badge in README.md if it exists
+        # For now, just output the badge URL
+        echo "MSRV Badge URL: https://img.shields.io/badge/msrv-${MSRV//./_}-orange"
+        echo "Update your README.md with this badge to show MSRV compatibility"

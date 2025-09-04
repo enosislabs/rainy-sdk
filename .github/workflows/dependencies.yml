@@ -1,0 +1,92 @@
+name: Dependencies
+
+on:
+  schedule:
+    # Run weekly on Mondays at 3 AM UTC
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+jobs:
+  update-dependencies:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install cargo-edit
+      run: cargo install cargo-edit
+
+    - name: Update dependencies
+      run: |
+        # Update all dependencies to their latest compatible versions
+        cargo update
+
+        # Check if Cargo.lock was modified
+        if git diff --quiet Cargo.lock; then
+          echo "No dependency updates available"
+          echo "UPDATE_AVAILABLE=false" >> $GITHUB_ENV
+        else
+          echo "Dependency updates available"
+          echo "UPDATE_AVAILABLE=true" >> $GITHUB_ENV
+        fi
+
+    - name: Run tests with updated dependencies
+      if: env.UPDATE_AVAILABLE == 'true'
+      run: cargo test
+
+    - name: Run clippy with updated dependencies
+      if: env.UPDATE_AVAILABLE == 'true'
+      run: cargo clippy -- -D warnings
+
+    - name: Generate dependency update summary
+      if: env.UPDATE_AVAILABLE == 'true'
+      run: |
+        echo "## Dependency Update Summary" > dependency_update.md
+        echo "" >> dependency_update.md
+        echo "Updated dependencies in Cargo.lock:" >> dependency_update.md
+        echo "" >> dependency_update.md
+        git diff Cargo.lock | grep -E "^\+" | grep -v "^+++" | head -20 >> dependency_update.md
+        echo "" >> dependency_update.md
+        echo "**Full diff:** See the commit for complete changes." >> dependency_update.md
+
+    - name: Create Pull Request
+      if: env.UPDATE_AVAILABLE == 'true'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "chore: update dependencies"
+        title: "⬆️ Update Dependencies"
+        body: |
+          ## Dependency Updates
+
+          This PR updates project dependencies to their latest compatible versions.
+
+          ### Changes
+          - Updated dependencies in `Cargo.lock`
+          - All tests pass
+          - Clippy warnings resolved
+
+          ### Testing
+          - ✅ All tests pass
+          - ✅ Clippy clean
+          - ✅ Build successful
+
+          ---
+          *This PR was automatically created by the dependency update workflow.*
+        branch: automated/dependency-updates
+        delete-branch: true
+        labels: |
+          dependencies
+          automated

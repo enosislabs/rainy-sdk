@@ -1,0 +1,89 @@
+name: Verify Sign-offs
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  verify-signoffs:
+    name: Verify Commit Sign-offs
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for sign-off verification
+
+    - name: Verify commit sign-offs
+      run: |
+        # Check all commits in the PR for sign-off
+        echo "Verifying sign-offs for commits in this PR..."
+
+        # Get the commits in this PR
+        if [ -n "$GITHUB_BASE_REF" ]; then
+          # For pull requests, check commits since the base branch
+          git log --oneline --no-merges ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > commits.txt
+        else
+          # For direct pushes, check the recent commits
+          git log --oneline --no-merges -10 > commits.txt
+        fi
+
+        # Check each commit for sign-off
+        MISSING_SIGNOFFS=""
+        while IFS= read -r commit_line; do
+          if [ -n "$commit_line" ]; then
+            COMMIT_HASH=$(echo "$commit_line" | awk '{print $1}')
+            COMMIT_MSG=$(git log --format=%B -n 1 "$COMMIT_HASH")
+
+            if ! echo "$COMMIT_MSG" | grep -q "Signed-off-by:"; then
+              MISSING_SIGNOFFS="$MISSING_SIGNOFFS$COMMIT_HASH: $(echo "$commit_line" | cut -d' ' -f2-)\n"
+            fi
+          fi
+        done < commits.txt
+
+        if [ -n "$MISSING_SIGNOFFS" ]; then
+          echo "::error::The following commits are missing sign-off:"
+          echo "$MISSING_SIGNOFFS"
+          echo ""
+          echo "Please sign off your commits by:"
+          echo "1. For command line: git commit -s --amend (then force push)"
+          echo "2. For GitHub web interface: Check 'Sign off and commit changes'"
+          echo ""
+          echo "See CONTRIBUTING.md for more details about sign-off requirements."
+          exit 1
+        else
+          echo "✅ All commits are properly signed off!"
+        fi
+
+    - name: Comment on PR if sign-offs missing
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## 🚨 Commit Sign-off Required
+
+          Some commits in this pull request are missing the required Developer Certificate of Origin (DCO) sign-off.
+
+          ### How to Fix
+
+          **For command line users:**
+          \`\`\`bash
+          git commit -s --amend
+          git push --force-with-lease
+          \`\`\`
+
+          **For GitHub web interface users:**
+          - Squash your commits
+          - Check the "Sign off and commit changes" checkbox when committing
+
+          ### Why is this required?
+
+          Sign-offs certify that you have the legal right to submit the code and help track contributions properly.
+
+          See [CONTRIBUTING.md](${{ github.server_url }}/${{ github.repository }}/blob/main/CONTRIBUTING.md#commit-sign-off) for complete details.`
+          })
