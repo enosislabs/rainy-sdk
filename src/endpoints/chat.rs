@@ -114,6 +114,7 @@ impl RainyClient {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionResponse>> + Send>>> {
+        use eventsource_stream::Eventsource;
         use futures::StreamExt;
 
         let mut request_with_stream = request;
@@ -133,33 +134,29 @@ impl RainyClient {
             return Err(self.handle_response::<ChatCompletionResponse>(response).await.err().unwrap());
         }
 
-        let stream = response.bytes_stream().map(|chunk| {
-            match chunk {
-                Ok(bytes) => {
-                    // Parse SSE format (simplified)
-                    let text = String::from_utf8_lossy(&bytes);
-                    if let Some(json_data) = text.strip_prefix("data: ") {
-                        if json_data.trim() == "[DONE]" {
-                            return Ok(None);
+        let stream = response
+            .bytes_stream()
+            .eventsource()
+            .filter_map(|event| async move {
+                match event {
+                    Ok(event) => {
+                        // Handle the [DONE] marker
+                        if event.data.trim() == "[DONE]" {
+                            return None;
                         }
-                        match serde_json::from_str::<ChatCompletionResponse>(json_data) {
-                            Ok(response) => Ok(Some(response)),
-                            Err(e) => Err(RainyError::Json(e)),
+                        
+                        // Parse the JSON data
+                        match serde_json::from_str::<ChatCompletionResponse>(&event.data) {
+                            Ok(response) => Some(Ok(response)),
+                            Err(e) => Some(Err(RainyError::Json(e))),
                         }
-                    } else {
-                        Ok(None)
+                    }
+                    Err(e) => {
+                        // Convert eventsource error to RainyError
+                        Some(Err(RainyError::Network(format!("SSE parsing error: {}", e))))
                     }
                 }
-                Err(e) => Err(RainyError::Http(e)),
-            }
-        })
-        .filter_map(|result| async move {
-            match result {
-                Ok(Some(response)) => Some(Ok(response)),
-                Ok(None) => None,
-                Err(e) => Some(Err(e)),
-            }
-        });
+            });
 
         Ok(Box::pin(stream))
     }

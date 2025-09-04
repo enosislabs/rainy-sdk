@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Improved
+
+- **Robust SSE Streaming**: Replaced manual Server-Sent Events parsing with `eventsource-stream` library for more reliable and specification-compliant streaming
+  - Enhanced error handling for SSE parsing failures
+  - Better compatibility with various SSE format variations
+  - Improved maintainability and reduced custom parsing complexity
+
 ## [0.1.0] - 2025-09-04
 
 ### Added
