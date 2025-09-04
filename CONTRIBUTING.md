@@ -25,7 +25,7 @@ Thank you for your interest in contributing to the Rainy SDK! We welcome contrib
 ```bash
 # Fork the repository on GitHub
 # Then clone your fork
-git clone https://github.com/your-username/rainy-sdk.git
+git clone https://github.com/enosislabs/rainy-sdk.git
 cd rainy-sdk
 ```
 
@@ -119,7 +119,49 @@ git commit -m "feat: add new chat completion streaming support
 Closes #123"
 ```
 
-### 5. Push and Create Pull Request
+### 5. Commit Sign-Off
+
+All contributions to this repository must include a Developer Certificate of Origin (DCO) sign-off. This is a lightweight way to certify that you have the right to submit the code you're contributing.
+
+#### Why is sign-off required?
+
+The sign-off serves several important purposes:
+- **Legal compliance**: It certifies that you have the legal right to submit the code
+- **Chain of custody**: It helps track who contributed what and when
+- **Intellectual property**: It ensures proper attribution and licensing
+- **Open source standards**: It follows industry best practices for contribution tracking
+
+#### How to sign off your commits
+
+**For command line users:**
+Simply add the `-s` flag when committing:
+
+```bash
+git commit -s -m "Your commit message"
+```
+
+This automatically adds a sign-off line at the end of your commit message:
+```
+Signed-off-by: Your Name <your.email@example.com>
+```
+
+**For GitHub web interface users:**
+GitHub makes this process easy by providing a sign-off option in the commit interface. When creating or editing files through GitHub's web interface, you'll see a checkbox for "Sign off and commit changes" - simply check this box before committing.
+
+#### Verifying your sign-off
+
+You can verify that your commits are properly signed off by checking the commit log:
+
+```bash
+git log --show-signature
+```
+
+Or to see just the sign-off lines:
+```bash
+git log --pretty=format:"%H %s%n%b%n" | grep "Signed-off-by"
+```
+
+### 6. Push and Create Pull Request
 
 ```bash
 # Push your branch
