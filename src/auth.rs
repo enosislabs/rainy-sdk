@@ -1,69 +1,104 @@
 use crate::error::{RainyError, Result};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
+/// Authentication configuration for the Rainy API
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
-    pub api_key: Option<String>,
+    /// API key for authentication
+    pub api_key: String,
+    
+    /// Base URL for the API (defaults to official endpoint)
     pub base_url: String,
-    pub timeout: Duration,
+    
+    /// Request timeout in seconds
+    pub timeout_seconds: u64,
+    
+    /// Maximum number of retry attempts
+    pub max_retries: u32,
+    
+    /// Enable automatic retry with exponential backoff
+    pub enable_retry: bool,
+    
+    /// User agent string for requests
     pub user_agent: String,
 }
 
-impl Default for AuthConfig {
-    fn default() -> Self {
+impl AuthConfig {
+    /// Create a new auth config with an API key
+    pub fn new(api_key: impl Into<String>) -> Self {
         Self {
-            api_key: None,
-            base_url: "https://api.enosislabs.com".to_string(),
-            timeout: Duration::from_secs(30),
-            user_agent: format!("rainy-sdk/{}", env!("CARGO_PKG_VERSION")),
+            api_key: api_key.into(),
+            base_url: crate::DEFAULT_BASE_URL.to_string(),
+            timeout_seconds: 30,
+            max_retries: 3,
+            enable_retry: true,
+            user_agent: format!("rainy-sdk-rust/{}", crate::VERSION),
         }
     }
-}
-
-impl AuthConfig {
-    /// Creates a new AuthConfig with default values.
-    ///
-    /// The base URL is automatically set to `https://api.enosislabs.com`,
-    /// so you typically only need to call `.with_api_key()` or `.with_admin_key()`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use rainy_sdk::{AuthConfig, RainyClient};
-    ///
-    /// // Simple API key authentication
-    /// let client = RainyClient::new(
-    ///     AuthConfig::new().with_api_key("your-api-key")
-    /// )?;
-    /// # Ok::<(), rainy_sdk::error::RainyError>(())
-    /// ```
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Sets the API key for authentication.
-    ///
-    /// This is the primary authentication method for regular users.
-    pub fn with_api_key<S: Into<String>>(mut self, api_key: S) -> Self {
-        self.api_key = Some(api_key.into());
-        self
-    }
-
-    /// Overrides the default base URL.
-    ///
-    /// By default, the SDK connects to `https://api.enosislabs.com`.
-    /// Use this method only if you need to connect to a different endpoint.
-    pub fn with_base_url<S: Into<String>>(mut self, base_url: S) -> Self {
+    
+    /// Set custom base URL
+    pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = base_url.into();
         self
     }
-
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
+    
+    /// Set request timeout
+    pub fn with_timeout(mut self, seconds: u64) -> Self {
+        self.timeout_seconds = seconds;
         self
     }
+    
+    /// Set maximum retry attempts
+    pub fn with_max_retries(mut self, retries: u32) -> Self {
+        self.max_retries = retries;
+        self
+    }
+    
+    /// Enable or disable automatic retries
+    pub fn with_retry(mut self, enable: bool) -> Self {
+        self.enable_retry = enable;
+        self
+    }
+    
+    /// Set custom user agent
+    pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
+        self.user_agent = user_agent.into();
+        self
+    }
+    
+    /// Validate the API key format
+    pub fn validate(&self) -> Result<()> {
+        if self.api_key.is_empty() {
+            return Err(RainyError::Authentication {
+                code: "EMPTY_API_KEY".to_string(),
+                message: "API key cannot be empty".to_string(),
+                retryable: false,
+            });
+        }
+        
+        // Basic API key format validation (starts with 'ra-')
+        if !self.api_key.starts_with("ra-") {
+            return Err(RainyError::Authentication {
+                code: "INVALID_API_KEY_FORMAT".to_string(),
+                message: "API key must start with 'ra-'".to_string(),
+                retryable: false,
+            });
+        }
+        
+        // Validate URL format
+        if let Err(_) = url::Url::parse(&self.base_url) {
+            return Err(RainyError::InvalidRequest {
+                code: "INVALID_BASE_URL".to_string(),
+                message: "Base URL is not a valid URL".to_string(),
+                details: None,
+            });
+        }
+        
+        Ok(())
+    }
 
+    /// Build headers for HTTP requests
     pub fn build_headers(&self) -> Result<HeaderMap> {
         let mut headers = HeaderMap::new();
 
@@ -77,59 +112,46 @@ impl AuthConfig {
         );
 
         // Set authorization header
-        if let Some(api_key) = &self.api_key {
-            let auth_value = format!("Bearer {api_key}");
-            headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
-        } else {
-            return Err(RainyError::Authentication {
-                code: "MISSING_API_KEY".to_string(),
-                message: "API key is required".to_string(),
-                retryable: false,
-            });
-        }
+        let auth_value = format!("Bearer {}", self.api_key);
+        headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
 
         Ok(headers)
     }
 
-    pub fn validate(&self) -> Result<()> {
-        if self.api_key.is_none() {
-            return Err(RainyError::Authentication {
-                code: "MISSING_API_KEY".to_string(),
-                message: "API key must be provided".to_string(),
-                retryable: false,
-            });
-        }
-
-        if self.base_url.is_empty() {
-            return Err(RainyError::InvalidRequest {
-                code: "INVALID_BASE_URL".to_string(),
-                message: "Base URL cannot be empty".to_string(),
-                details: None,
-            });
-        }
-
-        Ok(())
+    /// Get timeout duration
+    pub fn timeout(&self) -> Duration {
+        Duration::from_secs(self.timeout_seconds)
     }
 }
 
+impl std::fmt::Display for AuthConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AuthConfig {{ base_url: {}, timeout: {}s, retries: {} }}", 
+               self.base_url, self.timeout_seconds, self.max_retries)
+    }
+}
+
+// Legacy rate limiter - kept for backward compatibility but marked deprecated
+#[deprecated(note = "Use the governor-based rate limiting in RainyClient instead")]
 #[derive(Debug)]
 pub struct RateLimiter {
     requests_per_minute: u32,
-    last_request: Instant,
+    last_request: std::time::Instant,
     request_count: u32,
 }
 
+#[allow(deprecated)]
 impl RateLimiter {
     pub fn new(requests_per_minute: u32) -> Self {
         Self {
             requests_per_minute,
-            last_request: Instant::now(),
+            last_request: std::time::Instant::now(),
             request_count: 0,
         }
     }
 
     pub async fn wait_if_needed(&mut self) -> Result<()> {
-        let now = Instant::now();
+        let now = std::time::Instant::now();
         let elapsed = now.duration_since(self.last_request);
 
         // Reset counter if a minute has passed
@@ -143,7 +165,7 @@ impl RateLimiter {
             let wait_time = Duration::from_secs(60) - elapsed;
             tokio::time::sleep(wait_time).await;
             self.request_count = 0;
-            self.last_request = Instant::now();
+            self.last_request = std::time::Instant::now();
         }
 
         self.request_count += 1;

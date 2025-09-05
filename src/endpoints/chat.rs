@@ -120,11 +120,11 @@ impl RainyClient {
         let mut request_with_stream = request;
         request_with_stream.stream = Some(true);
 
-        let url = format!("{}/api/v1/chat/completions", self.config.base_url);
-        let headers = self.config.build_headers()?;
+        let url = format!("{}/api/v1/chat/completions", self.auth_config().base_url);
+        let headers = self.auth_config().build_headers()?;
 
         let response = self
-            .http_client
+            .http_client()
             .post(&url)
             .headers(headers)
             .json(&request_with_stream)

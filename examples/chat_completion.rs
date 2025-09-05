@@ -1,11 +1,11 @@
-use rainy_sdk::{AuthConfig, ChatCompletionRequest, ChatMessage, RainyClient};
+use rainy_sdk::{ChatCompletionRequest, ChatMessage, RainyClient};
 use std::error::Error;
 use std::io::{self, Write};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize client - base URL defaults to api.enosislabs.com
-    let client = RainyClient::new(AuthConfig::new().with_api_key("your-api-key-here"))?;
+    let client = RainyClient::with_api_key("your-api-key-here")?;
 
     println!("💬 Rainy API Chat Example");
     println!("=========================");
