@@ -1,0 +1,22 @@
+# Rust formatter configuration for rainy-sdk
+# This ensures consistent formatting across all environments
+# Only using stable rustfmt options
+
+# Edition
+edition = "2024"
+
+# Line width and wrapping
+max_width = 100
+hard_tabs = false
+tab_spaces = 4
+
+# Newlines and spacing
+newline_style = "Unix"
+remove_nested_parens = true
+use_small_heuristics = "Default"
+
+# Function formatting
+fn_params_layout = "Tall"
+
+# Import organization
+reorder_imports = true
