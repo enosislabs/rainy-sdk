@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
             Err(e) => {
-                eprintln!("❌ Error: {}", e);
+                eprintln!("❌ Error: {e}");
 
                 // Remove the failed user message from history
                 conversation_history.pop();

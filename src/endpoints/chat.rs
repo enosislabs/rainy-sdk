@@ -153,7 +153,7 @@ impl RainyClient {
                     }
                     Err(e) => {
                         // Convert eventsource error to RainyError
-                        Some(Err(RainyError::Network(format!("SSE parsing error: {}", e))))
+                        Some(Err(RainyError::Network(format!("SSE parsing error: {e}"))))
                     }
                 }
             });

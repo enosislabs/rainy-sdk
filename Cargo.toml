@@ -11,6 +11,18 @@ documentation = "https://docs.rs/rainy-sdk"
 readme = "README.md"
 keywords = ["ai", "api", "openai", "anthropic", "gemini"]
 categories = ["api-bindings", "asynchronous", "web-programming::http-client"]
+rust-version = "1.70.0"
+
+# Package metadata for better crates.io presentation
+[package.metadata.docs.rs]
+# Build docs with all features
+all-features = true
+# Set default target
+default-target = "x86_64-unknown-linux-gnu"
+# Additional targets to build docs for
+targets = ["x86_64-pc-windows-msvc", "x86_64-apple-darwin", "aarch64-apple-darwin"]
+# Use rustdoc-args for better documentation
+rustdoc-args = ["--cfg", "docsrs"]
 
 # Include specific files for packaging
 include = [
@@ -24,12 +36,13 @@ include = [
 [dependencies]
 futures = "0.3.31"
 
-# HTTP client
-reqwest = { version = "0.12", features = ["json", "gzip", "stream"] }
+# HTTP client - optimized for production
+reqwest = { version = "0.12", features = ["json", "gzip", "stream", "rustls-tls"], default-features = false }
 
 # SSE parsing
 eventsource-stream = "0.2"
-tokio = { version = "1.47", features = ["full"] }
+# Tokio - only needed features for production
+tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "time", "io-util", "sync", "net"] }
 
 # Serialization
 serde = { version = "1.0.219", features = ["derive"] }
@@ -59,3 +72,44 @@ logging = ["tracing"]
 [dev-dependencies]
 tokio-test = "0.4.4"
 mockito = "1.7"
+
+# Production optimizations
+[profile.release]
+# Enable all optimizations
+opt-level = 3
+# Enable link-time optimization for smaller and faster code
+lto = true
+# Reduce number of codegen units for better optimization
+codegen-units = 1
+# Remove debug symbols in release builds
+debug = false
+# Panic = abort reduces code size and improves performance
+panic = "abort"
+# Enable strip symbols to reduce binary size
+strip = "symbols"
+
+# Development profile optimizations
+[profile.dev]
+# Faster compilation during development
+opt-level = 0
+debug = true
+# Faster incremental compilation
+incremental = true
+
+# Test profile optimizations
+[profile.test]
+opt-level = 1
+debug = true
+
+# Benchmark profile
+[profile.bench]
+opt-level = 3
+debug = false
+lto = true
+
+# Optimized dependencies
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.release.package."*"]
+opt-level = 3

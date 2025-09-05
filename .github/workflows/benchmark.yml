@@ -1,0 +1,206 @@
+name: Performance Benchmarks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run benchmarks weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install cargo-criterion
+      run: cargo install cargo-criterion
+
+    - name: Create benchmark directory
+      run: mkdir -p benches
+
+    - name: Create basic benchmark
+      run: |
+        cat > benches/client_benchmark.rs << 'EOF'
+        use criterion::{black_box, criterion_group, criterion_main, Criterion};
+        use rainy_sdk::{RainyClient, AuthConfig};
+
+        fn bench_client_creation(c: &mut Criterion) {
+            c.bench_function("client_creation", |b| {
+                b.iter(|| {
+                    let auth = AuthConfig::api_key(black_box("test-key"));
+                    RainyClient::new(auth, None)
+                })
+            });
+        }
+
+        fn bench_auth_config_creation(c: &mut Criterion) {
+            c.bench_function("auth_config_creation", |b| {
+                b.iter(|| {
+                    AuthConfig::api_key(black_box("test-key-12345"))
+                })
+            });
+        }
+
+        criterion_group!(benches, bench_client_creation, bench_auth_config_creation);
+        criterion_main!(benches);
+        EOF
+
+    - name: Add criterion to Cargo.toml
+      run: |
+        cat >> Cargo.toml << 'EOF'
+
+        [[bench]]
+        name = "client_benchmark"
+        harness = false
+
+        [dev-dependencies.criterion]
+        version = "0.5"
+        features = ["html_reports"]
+        EOF
+
+    - name: Run benchmarks
+      run: cargo criterion --bench client_benchmark
+
+    - name: Store benchmark results
+      uses: benchmark-action/github-action-benchmark@v1
+      if: github.event_name != 'pull_request'
+      with:
+        tool: 'cargo'
+        output-file-path: target/criterion/client_benchmark/base/estimates.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+        comment-on-alert: true
+        alert-threshold: '150%'
+        fail-on-alert: false
+
+    - name: Upload benchmark artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: |
+          target/criterion/
+          !target/criterion/**/raw.csv
+        retention-days: 30
+
+  size-analysis:
+    name: Binary Size Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install cargo-bloat
+      run: cargo install cargo-bloat
+
+    - name: Build release binary
+      run: cargo build --release
+
+    - name: Analyze binary size
+      run: |
+        echo "## Binary Size Analysis" > size_analysis.md
+        echo "" >> size_analysis.md
+        
+        # Overall size
+        size_bytes=$(stat -c%s target/release/librainy_sdk.rlib 2>/dev/null || echo "0")
+        size_kb=$((size_bytes / 1024))
+        echo "**Library Size:** ${size_kb} KB (${size_bytes} bytes)" >> size_analysis.md
+        echo "" >> size_analysis.md
+        
+        # Dependencies contribution
+        echo "### Top Dependencies by Size" >> size_analysis.md
+        echo '```' >> size_analysis.md
+        cargo bloat --release --crates | head -20 >> size_analysis.md
+        echo '```' >> size_analysis.md
+
+    - name: Upload size analysis
+      uses: actions/upload-artifact@v4
+      with:
+        name: size-analysis
+        path: size_analysis.md
+
+  memory-usage:
+    name: Memory Usage Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+
+    - name: Install valgrind
+      run: sudo apt-get update && sudo apt-get install -y valgrind
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Create memory test
+      run: |
+        cat > examples/memory_test.rs << 'EOF'
+        use rainy_sdk::RainyClient;
+        use std::time::Duration;
+
+        #[tokio::main]
+        async fn main() -> Result<(), Box<dyn std::error::Error>> {
+            // Test basic client creation and operation memory usage
+            let client = RainyClient::with_api_key("test-key")?;
+            
+            // Simulate some operations
+            for _i in 0..100 {
+                let _client = RainyClient::with_api_key("test-key")?;
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            
+            println!("Memory test completed");
+            Ok(())
+        }
+        EOF
+
+    - name: Build memory test
+      run: cargo build --example memory_test --release
+
+    - name: Run memory analysis
+      run: |
+        echo "## Memory Usage Analysis" > memory_analysis.md
+        echo "" >> memory_analysis.md
+        echo "### Valgrind Memory Check" >> memory_analysis.md
+        echo '```' >> memory_analysis.md
+        timeout 60s valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all \
+          target/release/examples/memory_test 2>&1 | tail -20 >> memory_analysis.md || true
+        echo '```' >> memory_analysis.md
+
+    - name: Upload memory analysis
+      uses: actions/upload-artifact@v4
+      with:
+        name: memory-analysis
+        path: memory_analysis.md

@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             );
         }
         Err(e) => {
-            println!("❌ Health check failed: {}", e);
+            println!("❌ Health check failed: {e}");
             return Ok(());
         }
     }
@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("📈 Used This Month: {:.2}", user.credits_used_this_month);
         }
         Err(e) => {
-            println!("❌ Failed to get user account: {}", e);
+            println!("❌ Failed to get user account: {e}");
         }
     }
 
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("📊 Usage: {} tokens", response.usage.total_tokens);
         }
         Err(e) => {
-            println!("❌ Chat completion failed: {}", e);
+            println!("❌ Chat completion failed: {e}");
         }
     }
 
@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         Err(e) => {
-            println!("❌ Failed to get usage stats: {}", e);
+            println!("❌ Failed to get usage stats: {e}");
         }
     }
 
@@ -107,7 +107,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         Err(e) => {
-            println!("❌ Failed to list API keys: {}", e);
+            println!("❌ Failed to list API keys: {e}");
         }
     }
 

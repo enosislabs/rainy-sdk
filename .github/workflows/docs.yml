@@ -1,0 +1,248 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  docs:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install mdbook
+      run: cargo install mdbook
+
+    - name: Generate API documentation
+      run: |
+        # Generate documentation with all features
+        RUSTDOCFLAGS="--cfg docsrs" cargo doc --all-features --no-deps
+        
+        # Create documentation index
+        cat > target/doc/index.html << 'EOF'
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Rainy SDK Documentation</title>
+            <meta http-equiv="refresh" content="0; url=rainy_sdk/index.html">
+        </head>
+        <body>
+            <p>Redirecting to <a href="rainy_sdk/index.html">Rainy SDK Documentation</a>...</p>
+        </body>
+        </html>
+        EOF
+
+    - name: Test documentation
+      run: cargo test --doc --all-features
+
+    - name: Check documentation warnings
+      run: |
+        # Check for broken links and missing documentation
+        RUSTDOCFLAGS="-D warnings -D missing_docs -D rustdoc::broken_intra_doc_links" \
+        cargo doc --all-features --no-deps
+
+    - name: Generate coverage report for docs
+      run: |
+        # Install cargo-deadlinks to check for broken links
+        cargo install cargo-deadlinks
+        
+        # Check for dead links in documentation
+        cargo deadlinks --dir target/doc
+
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: target/doc
+        destination_dir: docs
+        enable_jekyll: false
+        cname: ''
+
+    - name: Upload documentation artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation
+        path: target/doc/
+        retention-days: 30
+
+  examples:
+    name: Test Examples
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Check examples compile
+      run: |
+        # Test that all examples compile
+        cargo check --examples
+        
+        # Test specific examples
+        cargo check --example basic_usage
+        cargo check --example chat_completion
+
+    - name: Run examples (dry-run)
+      run: |
+        # Create a test script that validates examples without actual API calls
+        cat > test_examples.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "Testing example compilation..."
+        
+        # Test basic_usage example compilation
+        cargo build --example basic_usage
+        echo "✓ basic_usage compiles"
+        
+        # Test chat_completion example compilation  
+        cargo build --example chat_completion
+        echo "✓ chat_completion compiles"
+        
+        echo "All examples passed compilation tests!"
+        EOF
+        
+        chmod +x test_examples.sh
+        ./test_examples.sh
+
+  readme-sync:
+    name: Sync README with docs
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+
+    - name: Check README examples
+      run: |
+        # Extract code blocks from README and test them
+        cat > check_readme.rs << 'EOF'
+        //! Test code from README examples
+        use rainy_sdk::{RainyClient, ChatCompletionRequest, ChatMessage, ChatRole};
+        use std::error::Error;
+
+        // This function contains the example from README
+        #[allow(dead_code)]
+        async fn readme_example() -> Result<(), Box<dyn Error>> {
+            // Initialize client with your API key - automatically connects to api.enosislabs.com
+            let client = RainyClient::with_api_key("your-api-key-here")?;
+
+            // Create a simple chat completion
+            let messages = vec![
+                ChatMessage {
+                    role: ChatRole::User,
+                    content: "Hello! Tell me a joke.".to_string(),
+                }
+            ];
+
+            let request = ChatCompletionRequest {
+                model: "gemini-pro".to_string(),
+                messages,
+                max_tokens: Some(150),
+                temperature: Some(0.7),
+                stream: None,
+            };
+
+            let _response = client.create_chat_completion(request).await?;
+            // println!("Response: {}", response.choices[0].message.content);
+
+            Ok(())
+        }
+
+        fn main() {
+            println!("README example code compiles successfully!");
+        }
+        EOF
+        
+        # Test that README example compiles
+        rustc --crate-type bin check_readme.rs --extern rainy_sdk=target/debug/deps/librainy_sdk.rlib -L target/debug/deps
+        echo "✓ README example compiles"
+
+    - name: Generate API usage examples
+      run: |
+        # Create comprehensive usage examples documentation
+        cat > USAGE_EXAMPLES.md << 'EOF'
+        # Rainy SDK Usage Examples
+
+        This document provides comprehensive usage examples for the Rainy SDK.
+
+        ## Table of Contents
+
+        - [Basic Setup](#basic-setup)
+        - [Authentication](#authentication)
+        - [Chat Completions](#chat-completions)
+        - [User Management](#user-management)
+        - [Error Handling](#error-handling)
+        - [Advanced Features](#advanced-features)
+
+        ## Basic Setup
+
+        ```rust
+        use rainy_sdk::RainyClient;
+
+        #[tokio::main]
+        async fn main() -> Result<(), Box<dyn std::error::Error>> {
+            let client = RainyClient::with_api_key("your-api-key")?;
+            
+            // Your code here
+            
+            Ok(())
+        }
+        ```
+
+        ## Authentication
+
+        The SDK uses API key authentication. Simply provide your API key when creating the client.
+
+        ## Chat Completions
+
+        See examples/ directory for comprehensive chat completion examples.
+
+        ## Error Handling
+
+        The SDK provides comprehensive error handling with the `RainyError` type.
+
+        ## Advanced Features
+
+        - Rate limiting (optional feature)
+        - Request logging (optional feature)
+        - Streaming responses
+        EOF
+
+    - name: Upload usage examples
+      uses: actions/upload-artifact@v4
+      with:
+        name: usage-examples
+        path: USAGE_EXAMPLES.md
