@@ -3,7 +3,7 @@
 # Only using stable rustfmt options
 
 # Edition
-edition = "2024"
+edition = "2021"
 
 # Line width and wrapping
 max_width = 100
