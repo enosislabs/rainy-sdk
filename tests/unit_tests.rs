@@ -1,8 +1,5 @@
 use rainy_sdk::models::model_constants::*;
-use rainy_sdk::models::*;
-use rainy_sdk::{
-    AuthConfig, ChatCompletionRequest, ChatMessage, MessageRole, RainyError, RetryConfig,
-};
+use rainy_sdk::{AuthConfig, ChatCompletionRequest, ChatMessage, MessageRole, RainyError, RetryConfig};
 
 #[cfg(test)]
 mod tests {
