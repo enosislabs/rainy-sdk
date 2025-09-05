@@ -45,8 +45,8 @@ jobs:
         fn bench_client_creation(c: &mut Criterion) {
             c.bench_function("client_creation", |b| {
                 b.iter(|| {
-                    let auth = AuthConfig::api_key(black_box("test-key"));
-                    RainyClient::new(auth, None)
+                    let auth = AuthConfig::new().with_api_key(black_box("test-key"));
+                    RainyClient::new(auth)
                 })
             });
         }
@@ -54,7 +54,7 @@ jobs:
         fn bench_auth_config_creation(c: &mut Criterion) {
             c.bench_function("auth_config_creation", |b| {
                 b.iter(|| {
-                    AuthConfig::api_key(black_box("test-key-12345"))
+                    AuthConfig::new().with_api_key(black_box("test-key-12345"))
                 })
             });
         }
