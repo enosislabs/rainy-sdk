@@ -59,12 +59,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let client = RainyClient::with_api_key("ra-your-api-key")?;
 
     // Simple chat completion
-    let response = client.simple_chat(models::GPT_4O, "Hello! Tell me a joke.").await?;
+    let response = client.simple_chat(models::model_constants::GPT_4O, "Hello! Tell me a joke.").await?;
     println!("Response: {}", response);
 
     // Advanced usage with metadata
     let request = ChatCompletionRequest::new(
-        models::CLAUDE_SONNET_4,
+        models::model_constants::CLAUDE_SONNET_4,
         vec![ChatMessage::user("Explain quantum computing")]
     )
     .with_temperature(0.7)

@@ -195,7 +195,7 @@ pub struct RequestMetadata {
 }
 
 /// Predefined model constants for convenience
-pub mod models {
+pub mod model_constants {
     // OpenAI models
     pub const GPT_4O: &str = "gpt-4o";
     pub const GPT_5: &str = "gpt-5";
