@@ -20,7 +20,7 @@ jobs:
         include:
           # Test MSRV (Minimum Supported Rust Version)
           - os: ubuntu-latest
-            rust: 1.70.0
+            rust: 1.75.0
           # Test nightly for additional checks
           - os: ubuntu-latest
             rust: nightly
