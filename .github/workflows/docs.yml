@@ -147,9 +147,25 @@ jobs:
 
     - name: Check README examples
       run: |
-        # Extract code blocks from README and test them
-        cat > check_readme.rs << 'EOF'
-        //! Test code from README examples
+        # Create a temporary test crate for README examples
+        mkdir -p test_readme
+        cd test_readme
+
+        # Create Cargo.toml for the test crate
+        cat > Cargo.toml << 'EOF'
+        [package]
+        name = "test-readme"
+        version = "0.1.0"
+        edition = "2021"
+
+        [dependencies]
+        rainy-sdk = { path = ".." }
+        tokio = { version = "1.0", features = ["full"] }
+        EOF
+
+        # Create src/main.rs with the README example
+        mkdir -p src
+        cat > src/main.rs << 'EOF'
         use rainy_sdk::{RainyClient, ChatCompletionRequest, ChatMessage, ChatRole};
         use std::error::Error;
 
@@ -181,13 +197,16 @@ jobs:
             Ok(())
         }
 
-        fn main() {
+        #[tokio::main]
+        async fn main() -> Result<(), Box<dyn Error>> {
             println!("README example code compiles successfully!");
+            readme_example().await?;
+            Ok(())
         }
         EOF
-        
+
         # Test that README example compiles
-        rustc --crate-type bin check_readme.rs --extern rainy_sdk=target/debug/deps/librainy_sdk.rlib -L target/debug/deps
+        cargo check
         echo "✓ README example compiles"
 
     - name: Generate API usage examples
