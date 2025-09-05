@@ -81,7 +81,11 @@ impl AuthConfig {
             let auth_value = format!("Bearer {api_key}");
             headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
         } else {
-            return Err(RainyError::Config("API key is required".to_string()));
+            return Err(RainyError::Authentication {
+                code: "MISSING_API_KEY".to_string(),
+                message: "API key is required".to_string(),
+                retryable: false,
+            });
         }
 
         Ok(headers)
@@ -89,11 +93,19 @@ impl AuthConfig {
 
     pub fn validate(&self) -> Result<()> {
         if self.api_key.is_none() {
-            return Err(RainyError::Config("API key must be provided".to_string()));
+            return Err(RainyError::Authentication {
+                code: "MISSING_API_KEY".to_string(),
+                message: "API key must be provided".to_string(),
+                retryable: false,
+            });
         }
 
         if self.base_url.is_empty() {
-            return Err(RainyError::Config("Base URL cannot be empty".to_string()));
+            return Err(RainyError::InvalidRequest {
+                code: "INVALID_BASE_URL".to_string(),
+                message: "Base URL cannot be empty".to_string(),
+                details: None,
+            });
         }
 
         Ok(())

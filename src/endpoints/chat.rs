@@ -153,12 +153,19 @@ impl RainyClient {
                         // Parse the JSON data
                         match serde_json::from_str::<ChatCompletionResponse>(&event.data) {
                             Ok(response) => Some(Ok(response)),
-                            Err(e) => Some(Err(RainyError::Json(e))),
+                            Err(e) => Some(Err(RainyError::Serialization {
+                                message: e.to_string(),
+                                source_error: Some(e.to_string()),
+                            })),
                         }
                     }
                     Err(e) => {
                         // Convert eventsource error to RainyError
-                        Some(Err(RainyError::Network(format!("SSE parsing error: {e}"))))
+                        Some(Err(RainyError::Network {
+                            message: format!("SSE parsing error: {e}"),
+                            retryable: true,
+                            source_error: Some(e.to_string()),
+                        }))
                     }
                 }
             });

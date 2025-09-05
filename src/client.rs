@@ -82,44 +82,52 @@ impl RainyClient {
             let result = response.json::<T>().await?;
             Ok(result)
         } else {
+            let request_id = response.headers()
+                .get("x-request-id")
+                .and_then(|v| v.to_str().ok())
+                .map(String::from);
+            
             let error_text = response.text().await.unwrap_or_default();
 
             match status {
                 reqwest::StatusCode::UNAUTHORIZED => Err(RainyError::Authentication {
+                    code: "UNAUTHORIZED".to_string(),
                     message: "Invalid API key".to_string(),
+                    retryable: false,
                 }),
-                reqwest::StatusCode::FORBIDDEN => Err(RainyError::Authorization {
+                reqwest::StatusCode::FORBIDDEN => Err(RainyError::Authentication {
+                    code: "FORBIDDEN".to_string(),
                     message: "Insufficient permissions".to_string(),
+                    retryable: false,
                 }),
                 reqwest::StatusCode::TOO_MANY_REQUESTS => Err(RainyError::RateLimit {
+                    code: "RATE_LIMIT_EXCEEDED".to_string(),
                     message: "Rate limit exceeded".to_string(),
+                    retry_after: None,
+                    current_usage: None,
                 }),
                 reqwest::StatusCode::BAD_REQUEST => {
                     // Try to parse as API error
-                    if let Ok(api_error) = serde_json::from_str::<serde_json::Value>(&error_text) {
-                        let message = api_error
-                            .get("error")
-                            .and_then(|e| e.get("message"))
-                            .and_then(|m| m.as_str())
-                            .unwrap_or("Bad request");
-
-                        Err(RainyError::Api {
-                            status,
-                            message: message.to_string(),
-                            code: None,
+                    if let Ok(api_error) = serde_json::from_str::<crate::error::ApiErrorResponse>(&error_text) {
+                        Err(RainyError::InvalidRequest {
+                            code: api_error.error.code,
+                            message: api_error.error.message,
+                            details: api_error.error.details,
                         })
                     } else {
-                        Err(RainyError::Api {
-                            status,
+                        Err(RainyError::InvalidRequest {
+                            code: "BAD_REQUEST".to_string(),
                             message: error_text,
-                            code: None,
+                            details: None,
                         })
                     }
                 }
                 _ => Err(RainyError::Api {
-                    status,
+                    code: status.canonical_reason().unwrap_or("UNKNOWN").to_string(),
                     message: error_text,
-                    code: None,
+                    status_code: status.as_u16(),
+                    retryable: status.is_server_error(),
+                    request_id,
                 }),
             }
         }

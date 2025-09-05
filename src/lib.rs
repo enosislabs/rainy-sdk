@@ -57,7 +57,7 @@ mod endpoints;
 
 pub use auth::AuthConfig;
 pub use client::RainyClient;
-pub use error::{RainyError, Result};
+pub use error::{RainyError, Result, ApiErrorResponse, ApiErrorDetails};
 pub use models::*;
 
 // Re-export commonly used types
