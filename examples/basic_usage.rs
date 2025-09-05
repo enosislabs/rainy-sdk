@@ -1,4 +1,4 @@
-use rainy_sdk::{AuthConfig, ChatCompletionRequest, ChatMessage, ChatRole, RainyClient};
+use rainy_sdk::{AuthConfig, ChatCompletionRequest, ChatMessage, RainyClient};
 use std::error::Error;
 
 #[tokio::main]
@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("✅ API Status: {:?}", health.status);
             println!("⏱️  Uptime: {:.2}s", health.uptime);
             println!(
-                "🔗 Services: Database={}, Redis={}, Providers={}",
+                "🔗 Services: Database={}, Redis={:?}, Providers={}",
                 health.services.database, health.services.redis, health.services.providers
             );
         }
@@ -46,18 +46,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a chat completion
     println!("\n3. Creating chat completion...");
-    let messages = vec![ChatMessage {
-        role: ChatRole::User,
-        content: "Hello! Can you tell me a short joke?".to_string(),
-    }];
+    let messages = vec![ChatMessage::user("Hello! Can you tell me a short joke?")];
 
-    let request = ChatCompletionRequest {
-        model: "gemini-pro".to_string(),
-        messages,
-        max_tokens: Some(150),
-        temperature: Some(0.7),
-        stream: None,
-    };
+    let request = ChatCompletionRequest::new("gemini-pro", messages)
+        .with_max_tokens(150)
+        .with_temperature(0.7);
 
     match client.create_chat_completion(request).await {
         Ok(response) => {
@@ -65,7 +58,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             if let Some(choice) = response.choices.first() {
                 println!("   {}", choice.message.content);
             }
-            println!("📊 Usage: {} tokens", response.usage.total_tokens);
+            if let Some(usage) = &response.usage {
+                println!("📊 Usage: {} tokens", usage.total_tokens);
+            }
         }
         Err(e) => {
             println!("❌ Chat completion failed: {e}");

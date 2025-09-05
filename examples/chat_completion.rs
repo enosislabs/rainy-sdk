@@ -1,4 +1,4 @@
-use rainy_sdk::{AuthConfig, ChatCompletionRequest, ChatMessage, ChatRole, RainyClient};
+use rainy_sdk::{AuthConfig, ChatCompletionRequest, ChatMessage, RainyClient};
 use std::error::Error;
 use std::io::{self, Write};
 
@@ -26,19 +26,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
 
         // Add user message to history
-        conversation_history.push(ChatMessage {
-            role: ChatRole::User,
-            content: input.to_string(),
-        });
+        conversation_history.push(ChatMessage::user(input));
 
         // Create chat completion request
-        let request = ChatCompletionRequest {
-            model: "gemini-pro".to_string(),
-            messages: conversation_history.clone(),
-            max_tokens: Some(500),
-            temperature: Some(0.7),
-            stream: None,
-        };
+        let request = ChatCompletionRequest::new("gemini-pro", conversation_history.clone())
+            .with_max_tokens(500)
+            .with_temperature(0.7);
 
         match client.create_chat_completion(request).await {
             Ok(response) => {
@@ -46,12 +39,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     println!("🤖 Assistant: {}", choice.message.content);
 
                     // Add assistant response to history
-                    conversation_history.push(ChatMessage {
-                        role: ChatRole::Assistant,
-                        content: choice.message.content.clone(),
-                    });
+                    conversation_history.push(ChatMessage::assistant(choice.message.content.clone()));
 
-                    println!("📊 Tokens used: {}", response.usage.total_tokens);
+                    if let Some(usage) = &response.usage {
+                        println!("📊 Tokens used: {}", usage.total_tokens);
+                    }
                 }
             }
             Err(e) => {
