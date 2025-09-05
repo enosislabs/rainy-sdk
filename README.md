@@ -1,4 +1,4 @@
-# 🌧️ Rainy SDK
+# 🌧️ Rainy SDK v0.2.0
 
 [![Crates.io](https://img.shields.io/crates/v/rainy-sdk.svg)](https://crates.io/crates/rainy-sdk)
 [![Documentation](https://docs.rs/rainy-sdk/badge.svg)](https://docs.rs/rainy-sdk)
@@ -9,12 +9,13 @@ The official Rust SDK for the **Rainy API by Enosis Labs** - a unified interface
 ## ✨ Features
 
 - **🚀 Unified API**: Single interface for multiple AI providers
-- **🔐 Type-Safe Authentication**: Secure API key management
+- **🔐 Type-Safe Authentication**: Secure API key management with validation
 - **⚡ Async/Await**: Full async support with Tokio runtime
-- **📊 Usage Tracking**: Built-in credit and usage monitoring
-- **🛡️ Error Handling**: Comprehensive error types and recovery
-- **📈 Rate Limiting**: Automatic rate limit handling and backoff
-- **📚 Rich Documentation**: Complete API documentation with examples
+- **📊 Rich Metadata**: Response times, provider info, token usage, credit tracking
+- **🛡️ Enhanced Error Handling**: Comprehensive error types with retryability
+- **🔄 Intelligent Retry**: Exponential backoff with jitter for resilience
+- **📈 Rate Limiting**: Optional governor-based rate limiting
+- **📚 Rich Documentation**: Complete API documentation with practical examples
 
 ## 📦 Installation
 
@@ -22,7 +23,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rainy-sdk = "0.1.0"
+rainy-sdk = "0.2.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -38,43 +39,41 @@ Enable additional features as needed:
 
 ```toml
 [dependencies]
-rainy-sdk = { version = "0.1.0", features = ["rate-limiting", "logging"] }
+rainy-sdk = { version = "0.2.0", features = ["rate-limiting", "tracing"] }
 ```
 
 Available features:
 
 - `rate-limiting`: Built-in rate limiting with governor crate
-- `logging`: Request/response logging with tracing crate
+- `tracing`: Request/response logging with tracing crate
 
 ## 🚀 Quick Start
 
 ```rust
-use rainy_sdk::{RainyClient, ChatCompletionRequest, ChatMessage, ChatRole};
+use rainy_sdk::{RainyClient, ChatCompletionRequest, ChatMessage, models};
 use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Initialize client with your API key - automatically connects to api.enosislabs.com
-    let client = RainyClient::with_api_key("your-api-key-here")?;
+    // Initialize client with your API key
+    let client = RainyClient::with_api_key("ra-your-api-key")?;
 
-    // Create a simple chat completion
-    let messages = vec![
-        ChatMessage {
-            role: ChatRole::User,
-            content: "Hello! Tell me a joke.".to_string(),
-        }
-    ];
+    // Simple chat completion
+    let response = client.simple_chat(models::GPT_4O, "Hello! Tell me a joke.").await?;
+    println!("Response: {}", response);
 
-    let request = ChatCompletionRequest {
-        model: "gemini-pro".to_string(),
-        messages,
-        max_tokens: Some(150),
-        temperature: Some(0.7),
-        stream: None,
-    };
+    // Advanced usage with metadata
+    let request = ChatCompletionRequest::new(
+        models::CLAUDE_SONNET_4,
+        vec![ChatMessage::user("Explain quantum computing")]
+    )
+    .with_temperature(0.7)
+    .with_max_tokens(200);
 
-    let response = client.create_chat_completion(request).await?;
+    let (response, metadata) = client.chat_completion(request).await?;
     println!("Response: {}", response.choices[0].message.content);
+    println!("Provider: {:?}", metadata.provider);
+    println!("Response time: {}ms", metadata.response_time.unwrap_or_default());
 
     Ok(())
 }

@@ -1,4 +1,4 @@
-use rainy_sdk::{AuthConfig, ChatCompletionRequest, ChatMessage, ChatRole, RainyClient};
+use rainy_sdk::{AuthConfig, ChatCompletionRequest, ChatMessage, RainyClient};
 use std::env;
 
 #[cfg(test)]
@@ -6,16 +6,12 @@ mod integration_tests {
     use super::*;
 
     fn get_test_client() -> RainyClient {
-        let api_key = env::var("RAINY_TEST_API_KEY").unwrap_or_else(|_| "test-key".to_string());
+        let api_key = env::var("RAINY_TEST_API_KEY").unwrap_or_else(|_| "ra-test-key".to_string());
         let base_url =
             env::var("RAINY_TEST_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
 
-        RainyClient::new(
-            AuthConfig::new()
-                .with_api_key(api_key)
-                .with_base_url(base_url),
-        )
-        .expect("Failed to create test client")
+        RainyClient::with_config(AuthConfig::new(&api_key).with_base_url(base_url))
+            .expect("Failed to create test client")
     }
 
     #[tokio::test]
@@ -25,7 +21,7 @@ mod integration_tests {
 
         match result {
             Ok(health) => {
-                assert!(matches!(health.status, rainy_sdk::HealthStatus::Healthy));
+                assert_eq!(health.status, "healthy");
             }
             Err(_) => {
                 // If API is not available, that's okay for CI
@@ -36,18 +32,11 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_chat_completion_request_creation() {
-        let messages = vec![ChatMessage {
-            role: ChatRole::User,
-            content: "Hello, world!".to_string(),
-        }];
+        let messages = vec![ChatMessage::user("Hello, world!")];
 
-        let request = ChatCompletionRequest {
-            model: "gemini-pro".to_string(),
-            messages,
-            max_tokens: Some(100),
-            temperature: Some(0.7),
-            stream: None,
-        };
+        let request = ChatCompletionRequest::new("gemini-pro", messages)
+            .with_max_tokens(100)
+            .with_temperature(0.7);
 
         // Test serialization
         let json = serde_json::to_string(&request).unwrap();
@@ -57,10 +46,10 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_rate_limiting() {
-        let client = get_test_client().with_rate_limit(5);
+        let client = get_test_client();
 
-        // This test would require a running API server
-        // For now, just test that the client can be created with rate limiting
+        // Rate limiting is now handled internally by the client
+        // This test just ensures the client can be created
         let _ = client; // Prevent unused variable warning
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     auth::AuthConfig,
-    error::{RainyError, Result, ApiErrorResponse},
+    error::{ApiErrorResponse, RainyError, Result},
     models::*,
     retry::{retry_with_backoff, RetryConfig},
 };
@@ -11,14 +11,18 @@ use reqwest::{
 use std::time::Instant;
 
 #[cfg(feature = "rate-limiting")]
-use governor::{Quota, RateLimiter, state::{InMemoryState, NotKeyed}, clock::DefaultClock};
+use governor::{
+    clock::DefaultClock,
+    state::{InMemoryState, NotKeyed},
+    Quota, RateLimiter,
+};
 
 /// Main client for interacting with the Rainy API
 pub struct RainyClient {
     client: Client,
     auth_config: AuthConfig,
     retry_config: RetryConfig,
-    
+
     #[cfg(feature = "rate-limiting")]
     rate_limiter: Option<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>,
 }
@@ -29,33 +33,33 @@ impl RainyClient {
         let auth_config = AuthConfig::new(api_key);
         Self::with_config(auth_config)
     }
-    
+
     /// Create a new client with custom configuration
     pub fn with_config(auth_config: AuthConfig) -> Result<Self> {
         // Validate configuration
         auth_config.validate()?;
-        
+
         // Build HTTP client
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", auth_config.api_key))
-                .map_err(|e| RainyError::Authentication {
+            HeaderValue::from_str(&format!("Bearer {}", auth_config.api_key)).map_err(|e| {
+                RainyError::Authentication {
                     code: "INVALID_API_KEY".to_string(),
                     message: format!("Invalid API key format: {}", e),
                     retryable: false,
-                })?,
+                }
+            })?,
         );
         headers.insert(
             USER_AGENT,
-            HeaderValue::from_str(&auth_config.user_agent)
-                .map_err(|e| RainyError::Network {
-                    message: format!("Invalid user agent: {}", e),
-                    retryable: false,
-                    source_error: None,
-                })?,
+            HeaderValue::from_str(&auth_config.user_agent).map_err(|e| RainyError::Network {
+                message: format!("Invalid user agent: {}", e),
+                retryable: false,
+                source_error: None,
+            })?,
         );
-        
+
         let client = Client::builder()
             .timeout(auth_config.timeout())
             .default_headers(headers)
@@ -65,14 +69,14 @@ impl RainyClient {
                 retryable: false,
                 source_error: Some(e.to_string()),
             })?;
-        
+
         let retry_config = RetryConfig::new(auth_config.max_retries);
-        
+
         #[cfg(feature = "rate-limiting")]
-        let rate_limiter = Some(RateLimiter::direct(
-            Quota::per_second(std::num::NonZeroU32::new(10).unwrap())
-        ));
-        
+        let rate_limiter = Some(RateLimiter::direct(Quota::per_second(
+            std::num::NonZeroU32::new(10).unwrap(),
+        )));
+
         Ok(Self {
             client,
             auth_config,
@@ -81,76 +85,76 @@ impl RainyClient {
             rate_limiter,
         })
     }
-    
+
     /// Set custom retry configuration
     pub fn with_retry_config(mut self, retry_config: RetryConfig) -> Self {
         self.retry_config = retry_config;
         self
     }
-    
-    
+
     /// Get available models and providers
     pub async fn get_available_models(&self) -> Result<AvailableModels> {
         let url = format!("{}/api/v1/models", self.auth_config.base_url);
-        
+
         let operation = || async {
             let response = self.client.get(&url).send().await?;
             self.handle_response(response).await
         };
-        
+
         if self.auth_config.enable_retry {
             retry_with_backoff(&self.retry_config, operation).await
         } else {
             operation().await
         }
     }
-    
+
     /// Create a chat completion
-    pub async fn chat_completion(&self, request: ChatCompletionRequest) -> Result<(ChatCompletionResponse, RequestMetadata)> {
+    pub async fn chat_completion(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> Result<(ChatCompletionResponse, RequestMetadata)> {
         #[cfg(feature = "rate-limiting")]
         if let Some(ref limiter) = self.rate_limiter {
             limiter.until_ready().await;
         }
-        
+
         let url = format!("{}/api/v1/chat/completions", self.auth_config.base_url);
         let start_time = Instant::now();
-        
+
         let operation = || async {
-            let response = self.client
-                .post(&url)
-                .json(&request)
-                .send()
-                .await?;
-            
+            let response = self.client.post(&url).json(&request).send().await?;
+
             let metadata = self.extract_metadata(&response, start_time);
             let chat_response: ChatCompletionResponse = self.handle_response(response).await?;
-            
+
             Ok((chat_response, metadata))
         };
-        
+
         if self.auth_config.enable_retry {
             retry_with_backoff(&self.retry_config, operation).await
         } else {
             operation().await
         }
     }
-    
+
     /// Create a simple chat completion with just a prompt
-    pub async fn simple_chat(&self, model: impl Into<String>, prompt: impl Into<String>) -> Result<String> {
-        let request = ChatCompletionRequest::new(
-            model,
-            vec![ChatMessage::user(prompt)],
-        );
-        
+    pub async fn simple_chat(
+        &self,
+        model: impl Into<String>,
+        prompt: impl Into<String>,
+    ) -> Result<String> {
+        let request = ChatCompletionRequest::new(model, vec![ChatMessage::user(prompt)]);
+
         let (response, _) = self.chat_completion(request).await?;
-        
-        Ok(response.choices
+
+        Ok(response
+            .choices
             .into_iter()
             .next()
             .map(|choice| choice.message.content)
             .unwrap_or_default())
     }
-    
+
     /// Handle HTTP response and extract typed data
     pub(crate) async fn handle_response<T>(&self, response: Response) -> Result<T>
     where
@@ -162,7 +166,7 @@ impl RainyClient {
             .get("x-request-id")
             .and_then(|v| v.to_str().ok())
             .map(String::from);
-        
+
         if status.is_success() {
             let text = response.text().await?;
             serde_json::from_str(&text).map_err(|e| RainyError::Serialization {
@@ -171,7 +175,7 @@ impl RainyClient {
             })
         } else {
             let text = response.text().await.unwrap_or_default();
-            
+
             // Try to parse structured error response
             if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&text) {
                 let error = error_response.error;
@@ -192,11 +196,11 @@ impl RainyClient {
             }
         }
     }
-    
+
     /// Extract metadata from response headers
     fn extract_metadata(&self, response: &Response, start_time: Instant) -> RequestMetadata {
         let headers = response.headers();
-        
+
         RequestMetadata {
             response_time: Some(start_time.elapsed().as_millis() as u64),
             provider: headers
@@ -221,11 +225,16 @@ impl RainyClient {
                 .map(String::from),
         }
     }
-    
+
     /// Map API error response to RainyError
-    fn map_api_error<T>(&self, error: crate::error::ApiErrorDetails, status_code: u16, request_id: Option<String>) -> Result<T> {
+    fn map_api_error<T>(
+        &self,
+        error: crate::error::ApiErrorDetails,
+        status_code: u16,
+        request_id: Option<String>,
+    ) -> Result<T> {
         let retryable = error.retryable.unwrap_or(status_code >= 500);
-        
+
         let rainy_error = match error.code.as_str() {
             "INVALID_API_KEY" | "EXPIRED_API_KEY" => RainyError::Authentication {
                 code: error.code,
@@ -234,21 +243,25 @@ impl RainyClient {
             },
             "INSUFFICIENT_CREDITS" => {
                 // Extract credit info from details if available
-                let (current_credits, estimated_cost, reset_date) = if let Some(details) = error.details {
-                    let current = details.get("current_credits")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.0);
-                    let cost = details.get("estimated_cost")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.0);
-                    let reset = details.get("reset_date")
-                        .and_then(|v| v.as_str())
-                        .map(String::from);
-                    (current, cost, reset)
-                } else {
-                    (0.0, 0.0, None)
-                };
-                
+                let (current_credits, estimated_cost, reset_date) =
+                    if let Some(details) = error.details {
+                        let current = details
+                            .get("current_credits")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0);
+                        let cost = details
+                            .get("estimated_cost")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0);
+                        let reset = details
+                            .get("reset_date")
+                            .and_then(|v| v.as_str())
+                            .map(String::from);
+                        (current, cost, reset)
+                    } else {
+                        (0.0, 0.0, None)
+                    };
+
                 RainyError::InsufficientCredits {
                     code: error.code,
                     message: error.message,
@@ -256,40 +269,44 @@ impl RainyClient {
                     estimated_cost,
                     reset_date,
                 }
-            },
+            }
             "RATE_LIMIT_EXCEEDED" => {
-                let retry_after = error.details
+                let retry_after = error
+                    .details
                     .as_ref()
                     .and_then(|d| d.get("retry_after"))
                     .and_then(|v| v.as_u64());
-                
+
                 RainyError::RateLimit {
                     code: error.code,
                     message: error.message,
                     retry_after,
                     current_usage: None,
                 }
-            },
-            "INVALID_REQUEST" | "MISSING_REQUIRED_FIELD" | "INVALID_MODEL" => RainyError::InvalidRequest {
-                code: error.code,
-                message: error.message,
-                details: error.details,
-            },
+            }
+            "INVALID_REQUEST" | "MISSING_REQUIRED_FIELD" | "INVALID_MODEL" => {
+                RainyError::InvalidRequest {
+                    code: error.code,
+                    message: error.message,
+                    details: error.details,
+                }
+            }
             "PROVIDER_ERROR" | "PROVIDER_UNAVAILABLE" => {
-                let provider = error.details
+                let provider = error
+                    .details
                     .as_ref()
                     .and_then(|d| d.get("provider"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown")
                     .to_string();
-                
+
                 RainyError::Provider {
                     code: error.code,
                     message: error.message,
                     provider,
                     retryable,
                 }
-            },
+            }
             _ => RainyError::Api {
                 code: error.code,
                 message: error.message,
@@ -298,15 +315,15 @@ impl RainyClient {
                 request_id: request_id.clone(),
             },
         };
-        
+
         Err(rainy_error)
     }
-    
+
     /// Get the current authentication configuration
     pub fn auth_config(&self) -> &AuthConfig {
         &self.auth_config
     }
-    
+
     /// Get the base URL being used
     pub fn base_url(&self) -> &str {
         &self.auth_config.base_url
@@ -318,8 +335,6 @@ impl RainyClient {
     }
 
     // Legacy methods for backward compatibility
-    
-    
 
     /// Make a generic request (internal method, kept for endpoint compatibility)
     pub(crate) async fn make_request<T: serde::de::DeserializeOwned>(

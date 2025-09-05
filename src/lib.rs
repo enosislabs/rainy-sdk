@@ -58,9 +58,9 @@ mod endpoints;
 
 pub use auth::AuthConfig;
 pub use client::RainyClient;
-pub use error::{RainyError, Result, ApiErrorResponse, ApiErrorDetails};
+pub use error::{ApiErrorDetails, ApiErrorResponse, RainyError, Result};
 pub use models::*;
-pub use retry::{RetryConfig, retry_with_backoff};
+pub use retry::{retry_with_backoff, RetryConfig};
 
 // Re-export commonly used types
 pub use reqwest;

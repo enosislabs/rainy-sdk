@@ -7,16 +7,16 @@ use tokio::time::sleep;
 pub struct RetryConfig {
     /// Maximum number of retry attempts
     pub max_retries: u32,
-    
+
     /// Base delay between retries in milliseconds
     pub base_delay_ms: u64,
-    
+
     /// Maximum delay between retries in milliseconds
     pub max_delay_ms: u64,
-    
+
     /// Multiplier for exponential backoff
     pub backoff_multiplier: f64,
-    
+
     /// Whether to add jitter to delays
     pub jitter: bool,
 }
@@ -41,13 +41,13 @@ impl RetryConfig {
             ..Default::default()
         }
     }
-    
+
     /// Calculate delay for a specific attempt
     pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
         let base_delay = self.base_delay_ms as f64;
         let multiplier = self.backoff_multiplier.powi(attempt as i32);
         let mut delay = base_delay * multiplier;
-        
+
         // Add jitter if enabled (±25%)
         if self.jitter && attempt > 0 {
             use rand::Rng;
@@ -55,25 +55,22 @@ impl RetryConfig {
             let jitter_factor = rng.gen_range(0.75..=1.25);
             delay *= jitter_factor;
         }
-        
+
         // Cap at maximum delay
         delay = delay.min(self.max_delay_ms as f64);
-        
+
         Duration::from_millis(delay as u64)
     }
 }
 
 /// Execute a function with retry logic
-pub async fn retry_with_backoff<F, Fut, T>(
-    config: &RetryConfig,
-    operation: F,
-) -> Result<T>
+pub async fn retry_with_backoff<F, Fut, T>(config: &RetryConfig, operation: F) -> Result<T>
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = Result<T>>,
 {
     let mut last_error = None;
-    
+
     for attempt in 0..=config.max_retries {
         match operation().await {
             Ok(result) => return Ok(result),
@@ -82,10 +79,10 @@ where
                 if !error.is_retryable() || attempt == config.max_retries {
                     return Err(error);
                 }
-                
+
                 // Calculate delay for next attempt
                 let delay = config.delay_for_attempt(attempt);
-                
+
                 #[cfg(feature = "tracing")]
                 tracing::warn!(
                     "Request failed (attempt {}/{}), retrying in {:?}: {}",
@@ -94,9 +91,9 @@ where
                     delay,
                     error
                 );
-                
+
                 last_error = Some(error);
-                
+
                 // Wait before retrying
                 if attempt < config.max_retries {
                     sleep(delay).await;
@@ -104,7 +101,7 @@ where
             }
         }
     }
-    
+
     // This should never be reached, but just in case
     Err(last_error.unwrap_or_else(|| RainyError::Network {
         message: "All retry attempts failed".to_string(),
@@ -116,16 +113,16 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_delay_calculation() {
         let config = RetryConfig::default();
-        
+
         // Test delay progression
         let delay0 = config.delay_for_attempt(0);
         let delay1 = config.delay_for_attempt(1);
         let delay2 = config.delay_for_attempt(2);
-        
+
         assert!(delay0.as_millis() >= 1000);
         assert!(delay1.as_millis() >= delay0.as_millis());
         assert!(delay2.as_millis() >= delay1.as_millis());

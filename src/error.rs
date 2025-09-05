@@ -1,78 +1,75 @@
-use thiserror::Error;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 /// Comprehensive error type for Rainy SDK operations
 #[derive(Error, Debug, Clone)]
 pub enum RainyError {
     /// Authentication-related errors
     #[error("Authentication failed: {message}")]
-    Authentication { 
+    Authentication {
         code: String,
         message: String,
         retryable: bool,
     },
-    
+
     /// Request validation errors
     #[error("Invalid request: {message}")]
-    InvalidRequest { 
+    InvalidRequest {
         code: String,
         message: String,
         details: Option<serde_json::Value>,
     },
-    
+
     /// Provider-specific errors
     #[error("Provider error ({provider}): {message}")]
-    Provider { 
+    Provider {
         code: String,
         message: String,
         provider: String,
         retryable: bool,
     },
-    
+
     /// Rate limiting errors
     #[error("Rate limit exceeded: {message}")]
-    RateLimit { 
+    RateLimit {
         code: String,
         message: String,
         retry_after: Option<u64>,
         current_usage: Option<String>,
     },
-    
+
     /// Credit system errors
     #[error("Insufficient credits: {message}")]
-    InsufficientCredits { 
+    InsufficientCredits {
         code: String,
         message: String,
         current_credits: f64,
         estimated_cost: f64,
         reset_date: Option<String>,
     },
-    
+
     /// Network-related errors
     #[error("Network error: {message}")]
-    Network { 
+    Network {
         message: String,
         retryable: bool,
         source_error: Option<String>,
     },
-    
+
     /// General API errors
     #[error("API error [{status_code}]: {message}")]
-    Api { 
+    Api {
         code: String,
         message: String,
         status_code: u16,
         retryable: bool,
         request_id: Option<String>,
     },
-    
+
     /// Timeout errors
     #[error("Request timeout: {message}")]
-    Timeout {
-        message: String,
-        duration_ms: u64,
-    },
-    
+    Timeout { message: String, duration_ms: u64 },
+
     /// Serialization/deserialization errors
     #[error("Serialization error: {message}")]
     Serialization {
@@ -94,7 +91,7 @@ impl RainyError {
             _ => false,
         }
     }
-    
+
     /// Get retry delay in seconds if applicable
     pub fn retry_after(&self) -> Option<u64> {
         match self {
@@ -102,20 +99,20 @@ impl RainyError {
             _ => None,
         }
     }
-    
+
     /// Get the error code
     pub fn code(&self) -> Option<&str> {
         match self {
-            RainyError::Authentication { code, .. } |
-            RainyError::InvalidRequest { code, .. } |
-            RainyError::Provider { code, .. } |
-            RainyError::RateLimit { code, .. } |
-            RainyError::InsufficientCredits { code, .. } |
-            RainyError::Api { code, .. } => Some(code),
+            RainyError::Authentication { code, .. }
+            | RainyError::InvalidRequest { code, .. }
+            | RainyError::Provider { code, .. }
+            | RainyError::RateLimit { code, .. }
+            | RainyError::InsufficientCredits { code, .. }
+            | RainyError::Api { code, .. } => Some(code),
             _ => None,
         }
     }
-    
+
     /// Get request ID if available
     pub fn request_id(&self) -> Option<&str> {
         match self {

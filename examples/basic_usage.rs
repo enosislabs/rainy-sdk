@@ -4,10 +4,7 @@ use std::error::Error;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize the client - base URL automatically set to api.enosislabs.com
-    let client = RainyClient::with_config(
-        AuthConfig::new("your-api-key-here")
-            .with_timeout(30)
-    )?;
+    let client = RainyClient::with_config(AuthConfig::new("your-api-key-here").with_timeout(30))?;
 
     println!("🌟 Rainy API SDK Example");
     println!("========================");

@@ -39,7 +39,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     println!("🤖 Assistant: {}", choice.message.content);
 
                     // Add assistant response to history
-                    conversation_history.push(ChatMessage::assistant(choice.message.content.clone()));
+                    conversation_history
+                        .push(ChatMessage::assistant(choice.message.content.clone()));
 
                     if let Some(usage) = &response.usage {
                         println!("📊 Tokens used: {}", usage.total_tokens);
