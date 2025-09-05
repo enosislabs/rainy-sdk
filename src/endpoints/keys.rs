@@ -34,7 +34,11 @@ impl RainyClient {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn create_api_key(&self, description: &str, expires_in_days: Option<u32>) -> Result<ApiKey> {
+    pub async fn create_api_key(
+        &self,
+        description: &str,
+        expires_in_days: Option<u32>,
+    ) -> Result<ApiKey> {
         let mut body = serde_json::json!({
             "description": description
         });
@@ -77,12 +81,9 @@ impl RainyClient {
             api_keys: Vec<ApiKey>,
         }
 
-        let response: ApiKeysResponse = self.make_request(
-            reqwest::Method::GET,
-            "/users/account",
-            None,
-        )
-        .await?;
+        let response: ApiKeysResponse = self
+            .make_request(reqwest::Method::GET, "/users/account", None)
+            .await?;
 
         Ok(response.api_keys)
     }
@@ -154,11 +155,7 @@ impl RainyClient {
     /// # }
     /// ```
     pub async fn delete_api_key(&self, key_id: &str) -> Result<()> {
-        self.make_request(
-            reqwest::Method::DELETE,
-            &format!("/keys/{key_id}"),
-            None,
-        )
-        .await
+        self.make_request(reqwest::Method::DELETE, &format!("/keys/{key_id}"), None)
+            .await
     }
 }

@@ -19,11 +19,7 @@ impl RainyClient {
     ///
     /// Returns detailed health information, including service status.
     pub async fn detailed_health_check(&self) -> Result<HealthCheck> {
-        self.make_request(
-            reqwest::Method::GET,
-            "/health?detailed=true",
-            None,
-        )
-        .await
+        self.make_request(reqwest::Method::GET, "/health?detailed=true", None)
+            .await
     }
 }

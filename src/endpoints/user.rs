@@ -3,7 +3,6 @@ use crate::error::Result;
 use crate::models::User;
 
 impl RainyClient {
-
     /// Get current user account information
     ///
     /// This endpoint requires user authentication with an API key.

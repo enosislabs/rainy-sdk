@@ -48,8 +48,10 @@ impl RainyError {
     pub fn is_retryable(&self) -> bool {
         match self {
             RainyError::Http(err) => {
-                err.is_timeout() || err.is_connect() || err.status().is_some_and(|s| s.is_server_error())
-            },
+                err.is_timeout()
+                    || err.is_connect()
+                    || err.status().is_some_and(|s| s.is_server_error())
+            }
             RainyError::RateLimit { .. } => true,
             RainyError::Network(_) => true,
             _ => false,

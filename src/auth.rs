@@ -23,15 +23,15 @@ impl Default for AuthConfig {
 
 impl AuthConfig {
     /// Creates a new AuthConfig with default values.
-    /// 
+    ///
     /// The base URL is automatically set to `https://api.enosislabs.com`,
     /// so you typically only need to call `.with_api_key()` or `.with_admin_key()`.
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use rainy_sdk::{AuthConfig, RainyClient};
-    /// 
+    ///
     /// // Simple API key authentication
     /// let client = RainyClient::new(
     ///     AuthConfig::new().with_api_key("your-api-key")
@@ -43,16 +43,15 @@ impl AuthConfig {
     }
 
     /// Sets the API key for authentication.
-    /// 
+    ///
     /// This is the primary authentication method for regular users.
     pub fn with_api_key<S: Into<String>>(mut self, api_key: S) -> Self {
         self.api_key = Some(api_key.into());
         self
     }
 
-
     /// Overrides the default base URL.
-    /// 
+    ///
     /// By default, the SDK connects to `https://api.enosislabs.com`.
     /// Use this method only if you need to connect to a different endpoint.
     pub fn with_base_url<S: Into<String>>(mut self, base_url: S) -> Self {
@@ -82,9 +81,7 @@ impl AuthConfig {
             let auth_value = format!("Bearer {api_key}");
             headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
         } else {
-            return Err(RainyError::Config(
-                "API key is required".to_string(),
-            ));
+            return Err(RainyError::Config("API key is required".to_string()));
         }
 
         Ok(headers)
@@ -92,9 +89,7 @@ impl AuthConfig {
 
     pub fn validate(&self) -> Result<()> {
         if self.api_key.is_none() {
-            return Err(RainyError::Config(
-                "API key must be provided".to_string(),
-            ));
+            return Err(RainyError::Config("API key must be provided".to_string()));
         }
 
         if self.base_url.is_empty() {

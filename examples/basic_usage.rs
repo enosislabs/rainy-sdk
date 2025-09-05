@@ -1,4 +1,4 @@
-use rainy_sdk::{AuthConfig, RainyClient, ChatCompletionRequest, ChatMessage, ChatRole};
+use rainy_sdk::{AuthConfig, ChatCompletionRequest, ChatMessage, ChatRole, RainyClient};
 use std::error::Error;
 
 #[tokio::main]
@@ -7,7 +7,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let client = RainyClient::new(
         AuthConfig::new()
             .with_api_key("your-api-key-here")
-            .with_timeout(std::time::Duration::from_secs(30))
+            .with_timeout(std::time::Duration::from_secs(30)),
     )?;
 
     println!("🌟 Rainy API SDK Example");
@@ -19,10 +19,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(health) => {
             println!("✅ API Status: {:?}", health.status);
             println!("⏱️  Uptime: {:.2}s", health.uptime);
-            println!("🔗 Services: Database={}, Redis={}, Providers={}",
-                health.services.database,
-                health.services.redis,
-                health.services.providers
+            println!(
+                "🔗 Services: Database={}, Redis={}, Providers={}",
+                health.services.database, health.services.redis, health.services.providers
             );
         }
         Err(e) => {
@@ -47,12 +46,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a chat completion
     println!("\n3. Creating chat completion...");
-    let messages = vec![
-        ChatMessage {
-            role: ChatRole::User,
-            content: "Hello! Can you tell me a short joke?".to_string(),
-        }
-    ];
+    let messages = vec![ChatMessage {
+        role: ChatRole::User,
+        content: "Hello! Can you tell me a short joke?".to_string(),
+    }];
 
     let request = ChatCompletionRequest {
         model: "gemini-pro".to_string(),
@@ -84,8 +81,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("📅 Daily Usage (last {} days):", usage.daily_usage.len());
 
             for daily in usage.daily_usage.iter().take(3) {
-                println!("   {}: {:.2} credits, {} requests",
-                    daily.date, daily.credits_used, daily.requests);
+                println!(
+                    "   {}: {:.2} credits, {} requests",
+                    daily.date, daily.credits_used, daily.requests
+                );
             }
         }
         Err(e) => {
@@ -99,7 +98,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(keys) => {
             println!("🔑 Found {} API keys:", keys.len());
             for key in keys.iter().take(3) {
-                println!("   - {}: {} (Active: {})",
+                println!(
+                    "   - {}: {} (Active: {})",
                     key.key.chars().take(20).collect::<String>() + "...",
                     key.description.as_deref().unwrap_or("No description"),
                     key.is_active

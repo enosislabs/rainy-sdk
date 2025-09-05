@@ -16,7 +16,6 @@ mod tests {
             .with_api_key("test-key")
             .with_base_url("https://api.example.com");
         assert!(config.validate().is_ok());
-
     }
 
     #[test]

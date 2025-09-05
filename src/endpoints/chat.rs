@@ -123,7 +123,8 @@ impl RainyClient {
         let url = format!("{}/api/v1/chat/completions", self.config.base_url);
         let headers = self.config.build_headers()?;
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(&url)
             .headers(headers)
             .json(&request_with_stream)
@@ -131,7 +132,11 @@ impl RainyClient {
             .await?;
 
         if !response.status().is_success() {
-            return Err(self.handle_response::<ChatCompletionResponse>(response).await.err().unwrap());
+            return Err(self
+                .handle_response::<ChatCompletionResponse>(response)
+                .await
+                .err()
+                .unwrap());
         }
 
         let stream = response
@@ -144,7 +149,7 @@ impl RainyClient {
                         if event.data.trim() == "[DONE]" {
                             return None;
                         }
-                        
+
                         // Parse the JSON data
                         match serde_json::from_str::<ChatCompletionResponse>(&event.data) {
                             Ok(response) => Some(Ok(response)),

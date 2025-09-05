@@ -42,12 +42,9 @@ impl RainyClient {
             credits: CreditInfo,
         }
 
-        let response: CreditStatsResponse = self.make_request(
-            reqwest::Method::GET,
-            &endpoint,
-            None,
-        )
-        .await?;
+        let response: CreditStatsResponse = self
+            .make_request(reqwest::Method::GET, &endpoint, None)
+            .await?;
 
         Ok(response.credits)
     }

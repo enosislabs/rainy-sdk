@@ -16,9 +16,7 @@ impl RainyClient {
     pub fn new(config: AuthConfig) -> Result<Self> {
         config.validate()?;
 
-        let http_client = HttpClient::builder()
-            .timeout(config.timeout)
-            .build()?;
+        let http_client = HttpClient::builder().timeout(config.timeout).build()?;
 
         Ok(Self {
             http_client,
@@ -28,22 +26,21 @@ impl RainyClient {
     }
 
     /// Creates a new RainyClient with just an API key.
-    /// 
+    ///
     /// This is a convenience method that automatically configures the client
     /// to connect to `https://api.enosislabs.com`.
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use rainy_sdk::RainyClient;
-    /// 
+    ///
     /// let client = RainyClient::with_api_key("your-api-key")?;
     /// # Ok::<(), rainy_sdk::error::RainyError>(())
     /// ```
     pub fn with_api_key<S: Into<String>>(api_key: S) -> Result<Self> {
         Self::new(AuthConfig::new().with_api_key(api_key))
     }
-
 
     pub fn with_rate_limit(mut self, requests_per_minute: u32) -> Self {
         let rate_limiter = RateLimiter::new(requests_per_minute);
@@ -88,21 +85,15 @@ impl RainyClient {
             let error_text = response.text().await.unwrap_or_default();
 
             match status {
-                reqwest::StatusCode::UNAUTHORIZED => {
-                    Err(RainyError::Authentication {
-                        message: "Invalid API key".to_string(),
-                    })
-                }
-                reqwest::StatusCode::FORBIDDEN => {
-                    Err(RainyError::Authorization {
-                        message: "Insufficient permissions".to_string(),
-                    })
-                }
-                reqwest::StatusCode::TOO_MANY_REQUESTS => {
-                    Err(RainyError::RateLimit {
-                        message: "Rate limit exceeded".to_string(),
-                    })
-                }
+                reqwest::StatusCode::UNAUTHORIZED => Err(RainyError::Authentication {
+                    message: "Invalid API key".to_string(),
+                }),
+                reqwest::StatusCode::FORBIDDEN => Err(RainyError::Authorization {
+                    message: "Insufficient permissions".to_string(),
+                }),
+                reqwest::StatusCode::TOO_MANY_REQUESTS => Err(RainyError::RateLimit {
+                    message: "Rate limit exceeded".to_string(),
+                }),
                 reqwest::StatusCode::BAD_REQUEST => {
                     // Try to parse as API error
                     if let Ok(api_error) = serde_json::from_str::<serde_json::Value>(&error_text) {
@@ -125,13 +116,11 @@ impl RainyClient {
                         })
                     }
                 }
-                _ => {
-                    Err(RainyError::Api {
-                        status,
-                        message: error_text,
-                        code: None,
-                    })
-                }
+                _ => Err(RainyError::Api {
+                    status,
+                    message: error_text,
+                    code: None,
+                }),
             }
         }
     }
