@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec![ChatMessage::user("Test message")],
     );
     match client.chat_completion(request).await {
-        Ok((response, metadata)) => {
+        Ok((_response, metadata)) => {
             println!("✅ Success with metadata:");
             println!("   Provider: {:?}", metadata.provider);
             println!(
