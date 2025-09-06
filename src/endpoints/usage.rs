@@ -3,17 +3,17 @@ use crate::error::Result;
 use crate::models::{CreditInfo, UsageStats};
 
 impl RainyClient {
-    /// Get credit statistics
+    /// Fetches information about the user's current credit balance and estimated costs.
     ///
-    /// This endpoint returns information about the user's credit usage.
+    /// This endpoint is deprecated in favor of `get_credit_info`.
     ///
     /// # Arguments
     ///
-    /// * `days` - Optional number of days to look back (default: 30)
+    /// * `days` - Optional number of days of usage to consider for estimations. Defaults to 30.
     ///
     /// # Returns
     ///
-    /// Returns credit information including balance, usage, and allocation.
+    /// A `Result` containing `CreditInfo` with the user's current balance and cost estimates.
     ///
     /// # Example
     ///
@@ -24,10 +24,10 @@ impl RainyClient {
     ///
     /// let credits = client.get_credit_stats(Some(7)).await?;
     /// println!("Current credits: {}", credits.current_credits);
-    /// println!("Estimated cost: {}", credits.estimated_cost);
     /// # Ok(())
     /// # }
     /// ```
+    #[deprecated(since = "0.2.0", note = "Please use `get_credit_info` instead")]
     pub async fn get_credit_stats(&self, days: Option<u32>) -> Result<CreditInfo> {
         let endpoint = if let Some(days) = days {
             format!("/usage/credits?days={days}")
@@ -47,17 +47,18 @@ impl RainyClient {
         Ok(response.credits)
     }
 
-    /// Get usage statistics
+    /// Fetches detailed usage statistics for the user's account.
     ///
-    /// This endpoint returns detailed usage statistics.
+    /// This includes total requests, total tokens, a daily breakdown of usage,
+    /// and a list of recent credit transactions.
     ///
     /// # Arguments
     ///
-    /// * `days` - Optional number of days to look back (default: 30)
+    /// * `days` - The number of past days to include in the statistics. Defaults to 30.
     ///
     /// # Returns
     ///
-    /// Returns comprehensive usage statistics including daily usage and recent transactions.
+    /// A `Result` containing a `UsageStats` object with detailed usage data.
     ///
     /// # Example
     ///
@@ -67,11 +68,11 @@ impl RainyClient {
     /// let client = RainyClient::with_api_key("user-api-key")?;
     ///
     /// let usage = client.get_usage_stats(Some(30)).await?;
-    /// println!("Total requests: {}", usage.total_requests);
-    /// println!("Total tokens: {}", usage.total_tokens);
+    /// println!("Total requests in the last 30 days: {}", usage.total_requests);
+    /// println!("Total tokens in the last 30 days: {}", usage.total_tokens);
     ///
-    /// for daily in &usage.daily_usage {
-    ///     println!("{}: {} credits used", daily.date, daily.credits_used);
+    /// if let Some(daily) = usage.daily_usage.first() {
+    ///     println!("{}: {:.2} credits used", daily.date, daily.credits_used);
     /// }
     /// # Ok(())
     /// # }

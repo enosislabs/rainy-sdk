@@ -8,14 +8,14 @@ The official Rust SDK for the **Rainy API by Enosis Labs** - a unified interface
 
 ## ✨ Features
 
-- **🚀 Unified API**: Single interface for multiple AI providers
-- **🔐 Type-Safe Authentication**: Secure API key management with validation
-- **⚡ Async/Await**: Full async support with Tokio runtime
-- **📊 Rich Metadata**: Response times, provider info, token usage, credit tracking
-- **🛡️ Enhanced Error Handling**: Comprehensive error types with retryability
-- **🔄 Intelligent Retry**: Exponential backoff with jitter for resilience
-- **📈 Rate Limiting**: Optional governor-based rate limiting
-- **📚 Rich Documentation**: Complete API documentation with practical examples
+- **🚀 Unified API**: Single interface for multiple AI providers.
+- **🔐 Type-Safe Authentication**: Secure API key management with validation.
+- **⚡ Async/Await**: Full async support with Tokio runtime.
+- **📊 Rich Metadata**: Get response times, provider info, token usage, and credit tracking.
+- **🛡️ Enhanced Error Handling**: Comprehensive error types with retryability.
+- **🔄 Intelligent Retry**: Exponential backoff with jitter for resilience.
+- **📈 Rate Limiting**: Optional governor-based rate limiting.
+- **📚 Rich Documentation**: Complete API documentation with practical examples.
 
 ## 📦 Installation
 
@@ -44,36 +44,43 @@ rainy-sdk = { version = "0.2.0", features = ["rate-limiting", "tracing"] }
 
 Available features:
 
-- `rate-limiting`: Built-in rate limiting with governor crate
-- `tracing`: Request/response logging with tracing crate
+- `rate-limiting`: Built-in rate limiting with the `governor` crate.
+- `tracing`: Request/response logging with the `tracing` crate.
 
 ## 🚀 Quick Start
 
 ```rust
-use rainy_sdk::{RainyClient, ChatCompletionRequest, ChatMessage, models};
+use rainy_sdk::{RainyClient, models::{self, ChatCompletionRequest, ChatMessage}};
+use std::env;
 use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Initialize client with your API key
-    let client = RainyClient::with_api_key("ra-your-api-key")?;
+    // It's recommended to set your API key as an environment variable.
+    env::set_var("RAINY_API_KEY", "ra-your-api-key");
 
-    // Simple chat completion
+    // Initialize the client. It will automatically read the RAINY_API_KEY.
+    let client = RainyClient::new()?;
+
+    // Perform a health check to ensure connectivity.
+    let health = client.health_check().await?;
+    println!("API Status: {}", health.status);
+
+    // Simple chat completion.
     let response = client.simple_chat(models::model_constants::GPT_4O, "Hello! Tell me a joke.").await?;
     println!("Response: {}", response);
 
-    // Advanced usage with metadata
+    // Advanced usage with metadata.
     let request = ChatCompletionRequest::new(
         models::model_constants::CLAUDE_SONNET_4,
-        vec![ChatMessage::user("Explain quantum computing")]
+        vec![ChatMessage::user("Explain quantum computing in simple terms.")]
     )
     .with_temperature(0.7)
     .with_max_tokens(200);
 
     let (response, metadata) = client.chat_completion(request).await?;
-    println!("Response: {}", response.choices[0].message.content);
-    println!("Provider: {:?}", metadata.provider);
-    println!("Response time: {}ms", metadata.response_time.unwrap_or_default());
+    println!("\nFull Response:\n{:?}", response.choices[0].message.content);
+    println!("\nMetadata:\nProvider: {:?}, Response Time: {}ms", metadata.provider, metadata.response_time.unwrap_or_default());
 
     Ok(())
 }
@@ -83,15 +90,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 ### Authentication
 
-The SDK uses API key authentication:
-
-#### API Key Authentication
+The SDK can be authenticated by providing an API key directly or by setting the `RAINY_API_KEY` environment variable.
 
 ```rust
 use rainy_sdk::RainyClient;
+use std::env;
 
-// Simplest possible setup
-let client = RainyClient::with_api_key("ra-20250125143052Axxxxxxxxxxxxxxxxxxxx")?;
+# fn main() -> Result<(), rainy_sdk::RainyError> {
+// Recommended: Initialize from environment variable
+env::set_var("RAINY_API_KEY", "ra-your-api-key");
+let client_from_env = RainyClient::new()?;
+
+// Or, provide the key directly
+let client_from_key = RainyClient::with_api_key("ra-your-api-key")?;
+# Ok(())
+# }
 ```
 
 ### Core Operations
@@ -99,53 +112,54 @@ let client = RainyClient::with_api_key("ra-20250125143052Axxxxxxxxxxxxxxxxxxxx")
 #### Health Check
 
 ```rust
+# async fn example(client: &rainy_sdk::RainyClient) -> rainy_sdk::Result<()> {
 let health = client.health_check().await?;
-println!("API Status: {:?}", health.status);
+println!("API Status: {}", health.status);
+# Ok(())
+# }
 ```
 
 #### User Account Management
 
 ```rust
+# async fn example(client: &rainy_sdk::RainyClient) -> rainy_sdk::Result<()> {
 // Get user account information
 let user = client.get_user_account().await?;
-println!("Credits: {:.2}", user.current_credits);
+println!("User Credits: {:.2}", user.current_credits);
 
-// Get credit information
+// Get credit balance information
 let credits = client.get_credit_info().await?;
-println!("Balance: {:.2}", credits.current_balance);
+println!("Current Balance: {:.2}", credits.current_credits);
+# Ok(())
+# }
 ```
 
 #### Chat Completions
 
 ```rust
+# use rainy_sdk::{models::{ChatMessage, ChatCompletionRequest}};
+# async fn example(client: &rainy_sdk::RainyClient) -> rainy_sdk::Result<()> {
 let messages = vec![
-    ChatMessage {
-        role: ChatRole::System,
-        content: "You are a helpful assistant.".to_string(),
-    },
-    ChatMessage {
-        role: ChatRole::User,
-        content: "Explain quantum computing in simple terms.".to_string(),
-    }
+    ChatMessage::system("You are a helpful assistant that provides concise answers."),
+    ChatMessage::user("Explain quantum computing in one sentence."),
 ];
 
-let request = ChatCompletionRequest {
-    model: "gpt-4".to_string(),
-    messages,
-    max_tokens: Some(500),
-    temperature: Some(0.7),
-    stream: None,
-};
+let request = ChatCompletionRequest::new("gpt-4o", messages)
+    .with_max_tokens(100)
+    .with_temperature(0.5);
 
 let response = client.create_chat_completion(request).await?;
-for choice in response.choices {
+if let Some(choice) = response.choices.first() {
     println!("Response: {}", choice.message.content);
 }
+# Ok(())
+# }
 ```
 
 #### Usage Statistics
 
 ```rust
+# async fn example(client: &rainy_sdk::RainyClient) -> rainy_sdk::Result<()> {
 // Get usage stats for the last 30 days
 let usage = client.get_usage_stats(Some(30)).await?;
 println!("Total requests: {}", usage.total_requests);
@@ -155,31 +169,37 @@ println!("Total tokens: {}", usage.total_tokens);
 for daily in usage.daily_usage {
     println!("{}: {:.2} credits used", daily.date, daily.credits_used);
 }
+# Ok(())
+# }
 ```
 
 #### API Key Management
 
 ```rust
+# async fn example(client: &rainy_sdk::RainyClient) -> rainy_sdk::Result<()> {
 // List all API keys
 let keys = client.list_api_keys().await?;
-for key in keys {
-    println!("Key: {}... Active: {}", &key.key[..20], key.is_active);
+for key in &keys {
+    println!("Key ID: {}, Description: {}", key.id, key.description.as_deref().unwrap_or("N/A"));
 }
 
-// Create new API key
-let new_key = client.create_api_key(Some("My new key".to_string())).await?;
-println!("Created key: {}", new_key.key);
+// Create a new API key (requires master key privileges)
+let new_key = client.create_api_key("My new temporary key", Some(30)).await?;
+println!("Created key: {}", new_key.key); // The key is only returned on creation
 
-// Delete API key
-client.delete_api_key(new_key.id).await?;
+// Delete the API key
+client.delete_api_key(&new_key.id.to_string()).await?;
+println!("API key deleted successfully.");
+# Ok(())
+# }
 ```
 
 ## 🧪 Examples
 
 Explore the `examples/` directory for comprehensive usage examples:
 
-- **Basic Usage** (`examples/basic_usage.rs`): Complete walkthrough of all SDK features
-- **Chat Completion** (`examples/chat_completion.rs`): Advanced chat completion patterns
+- **Basic Usage** (`examples/basic_usage.rs`): Complete walkthrough of all SDK features.
+- **Chat Completion** (`examples/chat_completion.rs`): Advanced chat completion patterns.
 
 Run examples with:
 

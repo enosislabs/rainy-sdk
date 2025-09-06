@@ -2,30 +2,75 @@ use crate::error::{RainyError, Result};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT};
 use std::time::Duration;
 
-/// Authentication configuration for the Rainy API
+/// Manages authentication and configuration for the Rainy API client.
+///
+/// This struct holds all the necessary configuration for connecting to the Rainy API,
+/// including the API key, base URL, timeout settings, and retry logic. It provides
+/// a builder pattern for easy and readable configuration.
+///
+/// # Examples
+///
+/// ```
+/// # use rainy_sdk::auth::AuthConfig;
+/// let config = AuthConfig::new("ra-your-api-key")
+///     .with_base_url("https://api.example.com")
+///     .with_timeout(60)
+///     .with_max_retries(5)
+///     .with_retry(true);
+///
+/// assert_eq!(config.timeout_seconds, 60);
+/// assert_eq!(config.max_retries, 5);
+/// ```
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
-    /// API key for authentication
+    /// The API key used for authenticating with the Rainy API.
+    ///
+    /// This key is sent in the `Authorization` header of every request.
+    /// It must start with the prefix `ra-`.
     pub api_key: String,
 
-    /// Base URL for the API (defaults to official endpoint)
+    /// The base URL for the Rainy API.
+    ///
+    /// Defaults to `https://api.enosislabs.com`. This can be overridden for testing
+    /// or for connecting to a self-hosted instance of the Rainy API.
     pub base_url: String,
 
-    /// Request timeout in seconds
+    /// The timeout for HTTP requests, in seconds.
+    ///
+    /// This is the maximum amount of time the client will wait for a response
+    /// from the server. Defaults to 30 seconds.
     pub timeout_seconds: u64,
 
-    /// Maximum number of retry attempts
+    /// The maximum number of retry attempts for failed requests.
+    ///
+    /// This setting applies only when `enable_retry` is `true`. Defaults to 3.
     pub max_retries: u32,
 
-    /// Enable automatic retry with exponential backoff
+    /// A flag to enable or disable automatic retries with exponential backoff.
+    ///
+    /// When `true`, the client will automatically retry failed requests that are
+    /// deemed retryable (e.g., network errors, server-side 5xx errors).
+    /// Defaults to `true`.
     pub enable_retry: bool,
 
-    /// User agent string for requests
+    /// The user agent string sent with each request.
+    ///
+    /// Defaults to `rainy-sdk-rust/{version}`.
     pub user_agent: String,
 }
 
 impl AuthConfig {
-    /// Create a new auth config with an API key
+    /// Creates a new `AuthConfig` with the given API key and default settings.
+    ///
+    /// This is the primary way to start building a client configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `api_key` - Your Rainy API key. It is automatically converted into a `String`.
+    ///
+    /// # Returns
+    ///
+    /// A new `AuthConfig` instance with default values for base URL, timeout, etc.
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
             api_key: api_key.into(),
@@ -37,37 +82,72 @@ impl AuthConfig {
         }
     }
 
-    /// Set custom base URL
+    /// Sets a custom base URL for the API.
+    ///
+    /// Use this to connect to a different API endpoint, such as a staging server
+    /// or a self-hosted instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `base_url` - The new base URL to use.
     pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = base_url.into();
         self
     }
 
-    /// Set request timeout
+    /// Sets the request timeout in seconds.
+    ///
+    /// # Arguments
+    ///
+    /// * `seconds` - The timeout duration in seconds.
     pub fn with_timeout(mut self, seconds: u64) -> Self {
         self.timeout_seconds = seconds;
         self
     }
 
-    /// Set maximum retry attempts
+    /// Sets the maximum number of retry attempts.
+    ///
+    /// This only has an effect if retries are enabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `retries` - The maximum number of times to retry a failed request.
     pub fn with_max_retries(mut self, retries: u32) -> Self {
         self.max_retries = retries;
         self
     }
 
-    /// Enable or disable automatic retries
+    /// Enables or disables automatic retries.
+    ///
+    /// # Arguments
+    ///
+    /// * `enable` - Set to `true` to enable retries, `false` to disable.
     pub fn with_retry(mut self, enable: bool) -> Self {
         self.enable_retry = enable;
         self
     }
 
-    /// Set custom user agent
+    /// Sets a custom user agent string for all requests.
+    ///
+    /// # Arguments
+    ///
+    /// * `user_agent` - The custom user agent string.
     pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
         self.user_agent = user_agent.into();
         self
     }
 
-    /// Validate the API key format
+    /// Validates the `AuthConfig` to ensure it is correctly configured.
+    ///
+    /// This method checks for:
+    /// - A non-empty API key.
+    /// - The correct API key format (must start with `ra-`).
+    /// - A valid base URL format.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the configuration is valid.
+    /// * `Err(RainyError)` if validation fails.
     pub fn validate(&self) -> Result<()> {
         if self.api_key.is_empty() {
             return Err(RainyError::Authentication {
@@ -98,7 +178,14 @@ impl AuthConfig {
         Ok(())
     }
 
-    /// Build headers for HTTP requests
+    /// Builds the set of HTTP headers required for API requests.
+    ///
+    /// This includes the `Authorization`, `User-Agent`, and `Content-Type` headers.
+    ///
+    /// # Returns
+    ///
+    /// A `reqwest::header::HeaderMap` containing the necessary headers, or an
+    /// error if the headers could not be created.
     pub fn build_headers(&self) -> Result<HeaderMap> {
         let mut headers = HeaderMap::new();
 
@@ -118,7 +205,7 @@ impl AuthConfig {
         Ok(headers)
     }
 
-    /// Get timeout duration
+    /// Returns the request timeout as a `std::time::Duration`.
     pub fn timeout(&self) -> Duration {
         Duration::from_secs(self.timeout_seconds)
     }
@@ -134,7 +221,12 @@ impl std::fmt::Display for AuthConfig {
     }
 }
 
-// Legacy rate limiter - kept for backward compatibility but marked deprecated
+/// A simple, legacy rate limiter.
+///
+/// This implementation is basic and not recommended for production use.
+/// It is kept for backward compatibility. The preferred way to handle rate
+/// limiting is by enabling the `rate-limiting` feature, which uses a more
+/// robust `governor`-based implementation in the `RainyClient`.
 #[deprecated(note = "Use the governor-based rate limiting in RainyClient instead")]
 #[derive(Debug)]
 pub struct RateLimiter {
@@ -145,6 +237,11 @@ pub struct RateLimiter {
 
 #[allow(deprecated)]
 impl RateLimiter {
+    /// Creates a new `RateLimiter`.
+    ///
+    /// # Arguments
+    ///
+    /// * `requests_per_minute` - The number of requests allowed per minute.
     pub fn new(requests_per_minute: u32) -> Self {
         Self {
             requests_per_minute,
@@ -153,6 +250,9 @@ impl RateLimiter {
         }
     }
 
+    /// Pauses execution if the rate limit has been exceeded.
+    ///
+    /// This async function will block until the next request is allowed.
     pub async fn wait_if_needed(&mut self) -> Result<()> {
         let now = std::time::Instant::now();
         let elapsed = now.duration_since(self.last_request);

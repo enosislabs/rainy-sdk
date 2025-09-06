@@ -17,7 +17,38 @@ use governor::{
     Quota, RateLimiter,
 };
 
-/// Main client for interacting with the Rainy API
+/// The main client for interacting with the Rainy API.
+///
+/// `RainyClient` provides a high-level, asynchronous interface for all API endpoints,
+/// including chat completions, user account management, and more. It handles
+/// authentication, request signing, error handling, and retries automatically.
+///
+/// # Examples
+///
+/// Basic client initialization and a simple API call:
+///
+/// ```rust,no_run
+/// use rainy_sdk::RainyClient;
+/// use std::env;
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), rainy_sdk::RainyError> {
+///     // It's recommended to set the API key via an environment variable.
+///     env::set_var("RAINY_API_KEY", "ra-your-api-key");
+///
+///     // Create a new client. This will read the API key from the environment.
+///     let client = RainyClient::new()?;
+///
+///     // Or, provide the API key directly.
+///     let client_with_key = RainyClient::with_api_key("ra-your-api-key")?;
+///
+///     // Use the client to make an API call.
+///     let health = client.health_check().await?;
+///     println!("API Health: {:?}", health.status);
+///
+///     Ok(())
+/// }
+/// ```
 pub struct RainyClient {
     client: Client,
     auth_config: AuthConfig,
@@ -28,13 +59,37 @@ pub struct RainyClient {
 }
 
 impl RainyClient {
-    /// Create a new client with an API key
+    /// Creates a new `RainyClient` using an API key provided directly.
+    ///
+    /// This is a convenient way to create a client if you are managing the API key
+    /// manually. For more configuration options, see `with_config`.
+    ///
+    /// # Arguments
+    ///
+    /// * `api_key` - Your Rainy API key.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the new `RainyClient` or a `RainyError` if
+    /// the configuration is invalid.
     pub fn with_api_key(api_key: impl Into<String>) -> Result<Self> {
         let auth_config = AuthConfig::new(api_key);
         Self::with_config(auth_config)
     }
 
-    /// Create a new client with custom configuration
+    /// Creates a new `RainyClient` with a custom `AuthConfig`.
+    ///
+    /// This method provides full control over the client's configuration, including
+    /// base URL, timeouts, and retry behavior.
+    ///
+    /// # Arguments
+    ///
+    /// * `auth_config` - The `AuthConfig` to use for this client.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the new `RainyClient` or a `RainyError` if
+    /// the configuration is invalid.
     pub fn with_config(auth_config: AuthConfig) -> Result<Self> {
         // Validate configuration
         auth_config.validate()?;
@@ -86,13 +141,29 @@ impl RainyClient {
         })
     }
 
-    /// Set custom retry configuration
+    /// Sets a custom retry configuration for the client.
+    ///
+    /// This allows you to override the default retry behavior.
+    ///
+    /// # Arguments
+    ///
+    /// * `retry_config` - The `RetryConfig` to use.
+    ///
+    /// # Returns
+    ///
+    /// The client instance with the new retry configuration.
     pub fn with_retry_config(mut self, retry_config: RetryConfig) -> Self {
         self.retry_config = retry_config;
         self
     }
 
-    /// Get available models and providers
+    /// Fetches the list of available models and their providers from the API.
+    ///
+    /// This is useful for discovering which models are available for chat completions.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing `AvailableModels` on success, or a `RainyError` on failure.
     pub async fn get_available_models(&self) -> Result<AvailableModels> {
         let url = format!("{}/api/v1/models", self.auth_config.base_url);
 
@@ -108,7 +179,40 @@ impl RainyClient {
         }
     }
 
-    /// Create a chat completion
+    /// Sends a request to create a chat completion.
+    ///
+    /// This is the primary method for interacting with AI models. It takes a
+    /// `ChatCompletionRequest` and returns a `ChatCompletionResponse` along with
+    /// `RequestMetadata`.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - A `ChatCompletionRequest` detailing the model, messages, and other parameters.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a tuple of `(ChatCompletionResponse, RequestMetadata)` on success,
+    /// or a `RainyError` on failure.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use rainy_sdk::{RainyClient, models::{ChatCompletionRequest, ChatMessage, model_constants}};
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), rainy_sdk::RainyError> {
+    /// let client = RainyClient::new()?;
+    /// let request = ChatCompletionRequest::new(
+    ///     model_constants::GPT_4O,
+    ///     vec![ChatMessage::user("What is the capital of France?")]
+    /// );
+    ///
+    /// let (response, metadata) = client.chat_completion(request).await?;
+    ///
+    /// println!("Response: {}", response.choices[0].message.content);
+    /// println!("Provider: {:?}", metadata.provider);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn chat_completion(
         &self,
         request: ChatCompletionRequest,
@@ -137,7 +241,19 @@ impl RainyClient {
         }
     }
 
-    /// Create a simple chat completion with just a prompt
+    /// A simplified method for sending a single chat prompt.
+    ///
+    /// This is a convenience wrapper around `chat_completion` for cases where you only
+    /// need to send a single user message and get a text response.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The model to use for the completion (e.g., `"gpt-4o"`).
+    /// * `prompt` - The user's message.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the AI's response as a `String`, or a `RainyError`.
     pub async fn simple_chat(
         &self,
         model: impl Into<String>,
@@ -155,7 +271,10 @@ impl RainyClient {
             .unwrap_or_default())
     }
 
-    /// Handle HTTP response and extract typed data
+    /// Centralized handler for processing HTTP responses.
+    ///
+    /// This internal method checks the response status, deserializes the body into
+    /// the target type `T` on success, or maps the error to a `RainyError` on failure.
     pub(crate) async fn handle_response<T>(&self, response: Response) -> Result<T>
     where
         T: serde::de::DeserializeOwned,
@@ -197,7 +316,7 @@ impl RainyClient {
         }
     }
 
-    /// Extract metadata from response headers
+    /// Extracts `RequestMetadata` from the response headers.
     fn extract_metadata(&self, response: &Response, start_time: Instant) -> RequestMetadata {
         let headers = response.headers();
 
@@ -226,7 +345,7 @@ impl RainyClient {
         }
     }
 
-    /// Map API error response to RainyError
+    /// Maps a structured `ApiErrorDetails` from the server into a specific `RainyError`.
     fn map_api_error<T>(
         &self,
         error: crate::error::ApiErrorDetails,
@@ -319,24 +438,29 @@ impl RainyClient {
         Err(rainy_error)
     }
 
-    /// Get the current authentication configuration
+    /// Returns a reference to the current `AuthConfig`.
     pub fn auth_config(&self) -> &AuthConfig {
         &self.auth_config
     }
 
-    /// Get the base URL being used
+    /// Returns the base URL the client is configured to use.
     pub fn base_url(&self) -> &str {
         &self.auth_config.base_url
     }
 
-    /// Get the HTTP client (for internal use by endpoints)
+    /// Returns a reference to the internal `reqwest::Client`.
+    ///
+    /// This is exposed for use by the endpoint modules but is not typically
+    /// needed for direct use.
     pub(crate) fn http_client(&self) -> &Client {
         &self.client
     }
 
     // Legacy methods for backward compatibility
 
-    /// Make a generic request (internal method, kept for endpoint compatibility)
+    /// A generic request maker for internal use by endpoint implementations.
+    ///
+    /// This method centralizes request creation logic for various API endpoints.
     pub(crate) async fn make_request<T: serde::de::DeserializeOwned>(
         &self,
         method: reqwest::Method,

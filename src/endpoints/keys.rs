@@ -3,18 +3,21 @@ use crate::error::Result;
 use crate::models::ApiKey;
 
 impl RainyClient {
-    /// Create a new API key
+    /// Creates a new API key.
     ///
-    /// This endpoint requires user authentication with a master API key.
+    /// This endpoint allows for the programmatic creation of new API keys, which can
+    /// be useful for provisioning users or services. A master API key with appropriate
+    /// permissions is required.
     ///
     /// # Arguments
     ///
-    /// * `description` - Description of what this API key will be used for
-    /// * `expires_in_days` - Optional expiration time in days
+    /// * `description` - A human-readable description of what the key will be used for.
+    /// * `expires_in_days` - An optional number of days until the key expires.
     ///
     /// # Returns
     ///
-    /// Returns the created API key information.
+    /// A `Result` containing the newly created `ApiKey`. The actual key string is
+    /// only returned on creation.
     ///
     /// # Example
     ///
@@ -23,12 +26,12 @@ impl RainyClient {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = RainyClient::with_api_key("master-api-key")?;
     ///
-    /// let api_key = client.create_api_key(
-    ///     "Production API key",
-    ///     Some(365)
+    /// let new_key = client.create_api_key(
+    ///     "Temporary key for batch processing",
+    ///     Some(7)
     /// ).await?;
     ///
-    /// println!("Created API key: {}", api_key.key);
+    /// println!("Created API key: {}", new_key.key);
     /// # Ok(())
     /// # }
     /// ```
@@ -49,13 +52,12 @@ impl RainyClient {
             .await
     }
 
-    /// List all API keys for the current user
-    ///
-    /// This endpoint requires user authentication.
+    /// Lists all API keys associated with the current user account.
     ///
     /// # Returns
     ///
-    /// Returns a vector of all API keys owned by the authenticated user.
+    /// A `Result` containing a vector of `ApiKey` structs. Note that the `key`
+    /// field in the returned structs will be masked for security.
     ///
     /// # Example
     ///
@@ -66,7 +68,7 @@ impl RainyClient {
     ///
     /// let keys = client.list_api_keys().await?;
     /// for key in keys {
-    ///     println!("Key: {} - Active: {}", key.key, key.is_active);
+    ///     println!("Key ID: {} - Description: {}", key.id, key.description.as_deref().unwrap_or("N/A"));
     /// }
     /// # Ok(())
     /// # }
@@ -78,42 +80,39 @@ impl RainyClient {
         }
 
         let response: ApiKeysResponse = self
-            .make_request(reqwest::Method::GET, "/users/account", None)
+            .make_request(reqwest::Method::GET, "/keys", None)
             .await?;
 
         Ok(response.api_keys)
     }
 
-    /// Update an API key
-    ///
-    /// This endpoint requires user authentication.
+    /// Updates the description or status of an existing API key.
     ///
     /// # Arguments
     ///
-    /// * `key_id` - The UUID of the API key to update
-    /// * `updates` - JSON object containing the fields to update
+    /// * `key_id` - The UUID of the API key to update.
+    /// * `updates` - A `serde_json::Value` object containing the fields to update.
+    ///   For example, `json!({ "description": "New description", "is_active": false })`.
     ///
     /// # Returns
     ///
-    /// Returns the updated API key information.
+    /// A `Result` containing the updated `ApiKey`.
     ///
     /// # Example
     ///
     /// ```rust,no_run
     /// # use rainy_sdk::{RainyClient, AuthConfig};
+    /// # use serde_json::json;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// use serde_json::json;
-    ///
     /// let client = RainyClient::with_api_key("user-api-key")?;
+    /// let key_id_to_update = "550e8400-e29b-41d4-a716-446655440000";
     ///
     /// let updates = json!({
-    ///     "description": "Updated description"
+    ///     "description": "Updated key description"
     /// });
     ///
-    /// let updated_key = client.update_api_key(
-    ///     "550e8400-e29b-41d4-a716-446655440000",
-    ///     updates
-    /// ).await?;
+    /// let updated_key = client.update_api_key(key_id_to_update, updates).await?;
+    /// assert_eq!(updated_key.description.as_deref(), Some("Updated key description"));
     /// # Ok(())
     /// # }
     /// ```
@@ -126,13 +125,13 @@ impl RainyClient {
         .await
     }
 
-    /// Delete an API key
+    /// Deletes an API key.
     ///
-    /// This endpoint requires user authentication.
+    /// This action is irreversible.
     ///
     /// # Arguments
     ///
-    /// * `key_id` - The UUID of the API key to delete
+    /// * `key_id` - The UUID of the API key to delete.
     ///
     /// # Example
     ///
@@ -140,8 +139,9 @@ impl RainyClient {
     /// # use rainy_sdk::RainyClient;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = RainyClient::with_api_key("user-api-key")?;
+    /// let key_id_to_delete = "550e8400-e29b-41d4-a716-446655440000";
     ///
-    /// client.delete_api_key("550e8400-e29b-41d4-a716-446655440000").await?;
+    /// client.delete_api_key(key_id_to_delete).await?;
     /// println!("API key deleted successfully");
     /// # Ok(())
     /// # }
