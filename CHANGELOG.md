@@ -5,6 +5,122 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-09-05
+
+### Added
+
+#### Enhanced Error Handling
+- **Structured Error Types**: Comprehensive error codes with retryability flags
+- **API Error Response Parsing**: Automatic mapping of API errors to SDK error types
+- **Retry-Aware Errors**: Errors now include retry recommendations and delay suggestions
+- **Detailed Error Context**: Enhanced error messages with request IDs and additional metadata
+
+#### Advanced Retry Logic
+- **Exponential Backoff with Jitter**: Intelligent retry delays to prevent thundering herd
+- **Configurable Retry Policies**: Customizable retry attempts, base delays, and max delays
+- **Retry-Aware Operations**: Built-in retry logic for all API operations
+- **Smart Retry Decisions**: Automatic retry for network errors, rate limits, and server errors
+
+#### Enhanced Type Safety
+- **Comprehensive Model Types**: Expanded type definitions for all API interactions
+- **Streaming Support**: Added streaming response capabilities for chat completions
+- **Enhanced Chat Models**: Improved chat message structures with better validation
+- **Provider-Specific Types**: Dedicated types for different AI providers
+
+#### Performance & Metadata
+- **Request Metadata**: Access to response times, provider information, and usage statistics
+- **Performance Headers**: Response time tracking and provider identification
+- **Enhanced Logging**: Better request/response tracking with metadata
+- **Usage Statistics**: Detailed token and credit usage information
+
+#### Credit System Integration
+- **Real-time Credit Tracking**: Live credit balance monitoring
+- **Cost Estimation**: Request cost prediction before execution
+- **Credit Warnings**: Proactive alerts for low credit situations
+- **Usage Analytics**: Enhanced credit usage reporting
+
+#### Model Discovery
+- **Dynamic Model Listing**: Runtime discovery of available models
+- **Provider Information**: Detailed provider capabilities and status
+- **Model Metadata**: Model specifications and limitations
+- **Active Provider Tracking**: Real-time provider availability
+
+### Improved
+
+#### Client Implementation
+- **Enhanced HTTP Client**: Improved connection pooling and timeout handling
+- **Better Authentication**: Streamlined API key validation and header management
+- **Request Metadata**: Automatic extraction of response metadata
+- **Error Recovery**: Improved error handling with automatic retries
+
+#### API Compatibility
+- **Breaking Changes**: Updated method signatures for better consistency
+- **Enhanced Validation**: Better input validation and error reporting
+- **Provider Routing**: Intelligent provider selection based on availability
+- **Rate Limit Handling**: Improved rate limiting with automatic backoff
+
+#### Developer Experience
+- **Comprehensive Documentation**: Updated inline docs with v0.2.0 features
+- **Example Updates**: Enhanced examples showcasing new capabilities
+- **Type Safety**: Better compile-time guarantees with improved types
+- **Error Messages**: More descriptive error messages for debugging
+
+### Changed
+
+#### Authentication Configuration
+- **API Key Validation**: Enhanced validation with format checking
+- **Configuration Builder**: Improved builder pattern for client setup
+- **Timeout Management**: Better timeout configuration and handling
+- **Base URL Flexibility**: More flexible base URL configuration
+
+#### Response Types
+- **Enhanced Metadata**: Response objects now include comprehensive metadata
+- **Provider Information**: Responses include provider routing information
+- **Usage Statistics**: Detailed usage information in all responses
+- **Error Details**: More detailed error information with context
+
+### Deprecated
+
+#### Legacy Error Types
+- **Old Error Variants**: Some error types marked for removal in future versions
+- **Legacy Methods**: Certain methods deprecated in favor of new implementations
+- **Outdated Examples**: Examples updated to reflect new API patterns
+
+### Removed
+
+#### Cache Feature
+- **Removed Caching**: Optional response caching feature removed for simplicity
+- **Cache Dependencies**: Associated cache-related dependencies cleaned up
+
+### Technical Details
+
+#### Dependencies Updated
+- **Enhanced Compatibility**: Updated dependencies for better performance
+- **Security Updates**: Security patches and vulnerability fixes
+- **Performance Improvements**: Optimized dependency usage
+
+#### Architecture Improvements
+- **Modular Design**: Better separation of concerns
+- **Error Handling**: Centralized error handling patterns
+- **Async Patterns**: Improved async/await patterns throughout
+- **Type Safety**: Enhanced type safety with better generics
+
+### Migration Guide
+
+#### Breaking Changes
+1. **Error Types**: Error enum structure has changed - update error handling code
+2. **Method Signatures**: Some method signatures updated for consistency
+3. **Response Types**: Response structures include additional metadata fields
+4. **Authentication**: API key validation is now more strict
+
+#### Migration Steps
+1. Update error handling to use new `RainyError` variants
+2. Handle new metadata fields in response types
+3. Update authentication code for enhanced validation
+4. Review and update retry logic if using custom retry implementations
+
+---
+
 ## [Unreleased]
 
 ### Improved
