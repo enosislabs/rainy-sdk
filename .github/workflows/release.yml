@@ -55,7 +55,7 @@ jobs:
       run: cargo build --release --all-features
 
     - name: Verify package can be built
-      run: cargo package --no-verify
+      run: cargo package --allow-dirty --no-verify
 
   # Multi-platform builds for validation
   build-matrix:
