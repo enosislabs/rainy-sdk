@@ -135,23 +135,52 @@ jobs:
     name: Create GitHub Release
     needs: publish
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write  # Required for creating releases and uploading assets
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
 
     - name: Extract version from tag
       id: get_version
       run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
+    - name: Generate crate package
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        echo "Generating crate package for version $VERSION"
+        cargo package --allow-dirty
+        ls -la target/package/
+
+    - name: Verify crate file exists
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        CRATE_FILE="target/package/rainy-sdk-$VERSION.crate"
+        if [ ! -f "$CRATE_FILE" ]; then
+          echo "Error: Crate file $CRATE_FILE not found!"
+          ls -la target/package/
+          exit 1
+        fi
+        echo "Crate file found: $CRATE_FILE"
+        ls -lh "$CRATE_FILE"
+
     - name: Extract changelog for this version
       id: extract_changelog
       run: |
         VERSION="${{ steps.get_version.outputs.version }}"
-        
+
         # Extract changelog section for this version
         sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
-        
+
         # If the changelog section is empty, create a default one
         if [ ! -s release_notes.md ]; then
           echo "## Changes in Release $VERSION" > release_notes.md
