@@ -18,15 +18,13 @@ impl RainyClient {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use rainy_sdk::{RainyClient, AuthConfig};
+    /// # use rainy_sdk::RainyClient;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RainyClient::new(
-    ///     AuthConfig::new().with_api_key("user-api-key")
-    /// )?;
+    /// let client = RainyClient::with_api_key("user-api-key")?;
     ///
     /// let credits = client.get_credit_stats(Some(7)).await?;
-    /// println!("Current balance: {}", credits.current_balance);
-    /// println!("Used this month: {}", credits.used_this_month);
+    /// println!("Current credits: {}", credits.current_credits);
+    /// println!("Estimated cost: {}", credits.estimated_cost);
     /// # Ok(())
     /// # }
     /// ```
@@ -64,11 +62,9 @@ impl RainyClient {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use rainy_sdk::{RainyClient, AuthConfig};
+    /// # use rainy_sdk::RainyClient;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RainyClient::new(
-    ///     AuthConfig::new().with_api_key("user-api-key")
-    /// )?;
+    /// let client = RainyClient::with_api_key("user-api-key")?;
     ///
     /// let usage = client.get_usage_stats(Some(30)).await?;
     /// println!("Total requests: {}", usage.total_requests);

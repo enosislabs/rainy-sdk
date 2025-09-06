@@ -19,11 +19,9 @@ impl RainyClient {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use rainy_sdk::{RainyClient, AuthConfig};
+    /// # use rainy_sdk::RainyClient;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RainyClient::new(
-    ///     AuthConfig::new().with_api_key("master-api-key")
-    /// )?;
+    /// let client = RainyClient::with_api_key("master-api-key")?;
     ///
     /// let api_key = client.create_api_key(
     ///     "Production API key",
@@ -62,11 +60,9 @@ impl RainyClient {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use rainy_sdk::{RainyClient, AuthConfig};
+    /// # use rainy_sdk::RainyClient;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RainyClient::new(
-    ///     AuthConfig::new().with_api_key("user-api-key")
-    /// )?;
+    /// let client = RainyClient::with_api_key("user-api-key")?;
     ///
     /// let keys = client.list_api_keys().await?;
     /// for key in keys {
@@ -108,9 +104,7 @@ impl RainyClient {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// use serde_json::json;
     ///
-    /// let client = RainyClient::new(
-    ///     AuthConfig::new().with_api_key("user-api-key")
-    /// )?;
+    /// let client = RainyClient::with_api_key("user-api-key")?;
     ///
     /// let updates = json!({
     ///     "description": "Updated description"
@@ -143,11 +137,9 @@ impl RainyClient {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use rainy_sdk::{RainyClient, AuthConfig};
+    /// # use rainy_sdk::RainyClient;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RainyClient::new(
-    ///     AuthConfig::new().with_api_key("user-api-key")
-    /// )?;
+    /// let client = RainyClient::with_api_key("user-api-key")?;
     ///
     /// client.delete_api_key("550e8400-e29b-41d4-a716-446655440000").await?;
     /// println!("API key deleted successfully");

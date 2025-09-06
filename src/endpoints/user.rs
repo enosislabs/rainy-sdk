@@ -14,11 +14,9 @@ impl RainyClient {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use rainy_sdk::{RainyClient, AuthConfig};
+    /// # use rainy_sdk::RainyClient;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RainyClient::new(
-    ///     AuthConfig::new().with_api_key("user-api-key")
-    /// )?;
+    /// let client = RainyClient::with_api_key("user-api-key")?;
     ///
     /// let user = client.get_user_account().await?;
     /// println!("Current credits: {}", user.current_credits);

@@ -20,26 +20,20 @@ impl RainyClient {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use rainy_sdk::{RainyClient, AuthConfig, ChatCompletionRequest, ChatMessage, ChatRole};
+    /// # use rainy_sdk::{RainyClient, ChatCompletionRequest, ChatMessage, MessageRole};
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RainyClient::new(
-    ///     AuthConfig::new().with_api_key("user-api-key")
-    /// )?;
+    /// let client = RainyClient::with_api_key("user-api-key")?;
     ///
     /// let messages = vec![
     ///     ChatMessage {
-    ///         role: ChatRole::User,
+    ///         role: MessageRole::User,
     ///         content: "Hello, how are you?".to_string(),
     ///     }
     /// ];
     ///
-    /// let request = ChatCompletionRequest {
-    ///     model: "gemini-pro".to_string(),
-    ///     messages,
-    ///     max_tokens: Some(150),
-    ///     temperature: Some(0.7),
-    ///     stream: None,
-    /// };
+    /// let request = ChatCompletionRequest::new("gemini-pro", messages)
+    ///     .with_max_tokens(150)
+    ///     .with_temperature(0.7);
     ///
     /// let response = client.create_chat_completion(request).await?;
     ///
@@ -73,27 +67,22 @@ impl RainyClient {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use rainy_sdk::{RainyClient, AuthConfig, ChatCompletionRequest, ChatMessage, ChatRole};
+    /// # use rainy_sdk::{RainyClient, ChatCompletionRequest, ChatMessage, MessageRole};
     /// # use futures::StreamExt;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RainyClient::new(
-    ///     AuthConfig::new().with_api_key("user-api-key")
-    /// )?;
+    /// let client = RainyClient::with_api_key("user-api-key")?;
     ///
     /// let messages = vec![
     ///     ChatMessage {
-    ///         role: ChatRole::User,
+    ///         role: MessageRole::User,
     ///         content: "Tell me a story".to_string(),
     ///     }
     /// ];
     ///
-    /// let request = ChatCompletionRequest {
-    ///     model: "llama-3.1-8b-instant".to_string(),
-    ///     messages,
-    ///     max_tokens: Some(500),
-    ///     temperature: Some(0.8),
-    ///     stream: Some(true),
-    /// };
+    /// let request = ChatCompletionRequest::new("llama-3.1-8b-instant", messages)
+    ///     .with_max_tokens(500)
+    ///     .with_temperature(0.8)
+    ///     .with_stream(true);
     ///
     /// let mut stream = client.create_chat_completion_stream(request).await?;
     ///
