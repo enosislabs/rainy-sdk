@@ -215,6 +215,7 @@ pub mod model_constants {
     pub const OPENAI_GPT_OSS_120B: &str = "openai/gpt-oss-120b";
     pub const OPENAI_GPT_OSS_20B: &str = "openai/gpt-oss-20b";
     pub const MOONSHOTAI_KIMI_K2_INSTRUCT: &str = "moonshotai/kimi-k2-instruct";
+    pub const MOONSHOTAI_KIMI_K2_INSTRUCT_0925: &str = "moonshotai/kimi-k2-instruct-0905";
     pub const QWEN_QWEN3_32B: &str = "qwen/qwen3-32b";
 
     // Cerebras models

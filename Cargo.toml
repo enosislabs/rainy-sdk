@@ -1,6 +1,6 @@
 [package]
 name = "rainy-sdk"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Enosis Labs <hello@enosislabs.com>"]
 description = "Official Rust SDK for Rainy API by Enosis Labs v0.2.0 - Enhanced unified interface for multiple AI providers with intelligent retry, metadata tracking, and comprehensive error handling"

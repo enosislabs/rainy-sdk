@@ -33,7 +33,7 @@ impl AuthConfig {
             timeout_seconds: 30,
             max_retries: 3,
             enable_retry: true,
-            user_agent: format!("rainy-sdk-rust/{}", crate::VERSION),
+            user_agent: format!("rainy-sdk/{}", crate::VERSION),
         }
     }
 
