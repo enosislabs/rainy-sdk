@@ -76,7 +76,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n⏱️  Example 3: Rate limit handling");
     for i in 1..=5 {
         match client
-            .simple_chat(models::model_constants::GPT_4O, &format!("Quick question #{}", i))
+            .simple_chat(
+                models::model_constants::GPT_4O,
+                &format!("Quick question #{}", i),
+            )
             .await
         {
             Ok(response) => println!(
