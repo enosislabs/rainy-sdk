@@ -1,8 +1,0 @@
-[package]
-name = "test-readme"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-rainy-sdk = { path = ".." }
-tokio = { version = "1.0", features = ["full"] }
