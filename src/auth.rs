@@ -2,30 +2,52 @@ use crate::error::{RainyError, Result};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT};
 use std::time::Duration;
 
-/// Authentication configuration for the Rainy API
+/// Configuration for authentication and client behavior.
+///
+/// `AuthConfig` holds all the necessary information for authenticating with the Rainy API,
+/// as well as settings for request behavior like timeouts and retries.
+///
+/// # Examples
+///
+/// ```rust
+/// use rainy_sdk::auth::AuthConfig;
+///
+/// let config = AuthConfig::new("your-api-key")
+///     .with_base_url("https://api.example.com")
+///     .with_timeout(60)
+///     .with_max_retries(5);
+///
+/// assert_eq!(config.base_url, "https://api.example.com");
+/// assert_eq!(config.timeout_seconds, 60);
+/// assert_eq!(config.max_retries, 5);
+/// ```
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
-    /// API key for authentication
+    /// The API key used for authenticating with the Rainy API.
     pub api_key: String,
 
-    /// Base URL for the API (defaults to official endpoint)
+    /// The base URL of the Rainy API. Defaults to the official endpoint.
     pub base_url: String,
 
-    /// Request timeout in seconds
+    /// The timeout for HTTP requests, in seconds.
     pub timeout_seconds: u64,
 
-    /// Maximum number of retry attempts
+    /// The maximum number of times to retry a failed request.
     pub max_retries: u32,
 
-    /// Enable automatic retry with exponential backoff
+    /// A flag to enable or disable automatic retries with exponential backoff.
     pub enable_retry: bool,
 
-    /// User agent string for requests
+    /// The user agent string to send with each request.
     pub user_agent: String,
 }
 
 impl AuthConfig {
-    /// Create a new auth config with an API key
+    /// Creates a new `AuthConfig` with the given API key and default settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `api_key` - Your Rainy API key.
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
             api_key: api_key.into(),
@@ -37,37 +59,64 @@ impl AuthConfig {
         }
     }
 
-    /// Set custom base URL
+    /// Sets a custom base URL for the API.
+    ///
+    /// # Arguments
+    ///
+    /// * `base_url` - The new base URL to use.
     pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = base_url.into();
         self
     }
 
-    /// Set request timeout
+    /// Sets a custom timeout for HTTP requests.
+    ///
+    /// # Arguments
+    ///
+    /// * `seconds` - The timeout duration in seconds.
     pub fn with_timeout(mut self, seconds: u64) -> Self {
         self.timeout_seconds = seconds;
         self
     }
 
-    /// Set maximum retry attempts
+    /// Sets the maximum number of retry attempts for failed requests.
+    ///
+    /// # Arguments
+    ///
+    /// * `retries` - The maximum number of retries.
     pub fn with_max_retries(mut self, retries: u32) -> Self {
         self.max_retries = retries;
         self
     }
 
-    /// Enable or disable automatic retries
+    /// Enables or disables automatic retries.
+    ///
+    /// # Arguments
+    ///
+    /// * `enable` - `true` to enable retries, `false` to disable.
     pub fn with_retry(mut self, enable: bool) -> Self {
         self.enable_retry = enable;
         self
     }
 
-    /// Set custom user agent
+    /// Sets a custom user agent string for requests.
+    ///
+    /// # Arguments
+    ///
+    /// * `user_agent` - The new user agent string.
     pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
         self.user_agent = user_agent.into();
         self
     }
 
-    /// Validate the API key format
+    /// Validates the `AuthConfig` settings.
+    ///
+    /// This method checks for common configuration errors, such as an empty API key
+    /// or an invalid base URL.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` that is `Ok(())` if the configuration is valid, or a `RainyError` if it's not.
     pub fn validate(&self) -> Result<()> {
         if self.api_key.is_empty() {
             return Err(RainyError::Authentication {
@@ -98,7 +147,14 @@ impl AuthConfig {
         Ok(())
     }
 
-    /// Build headers for HTTP requests
+    /// Builds the necessary HTTP headers for an API request.
+    ///
+    /// This method constructs a `HeaderMap` containing the `Authorization` and `User-Agent`
+    /// headers based on the `AuthConfig`.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the `HeaderMap` or a `RainyError` if header creation fails.
     pub fn build_headers(&self) -> Result<HeaderMap> {
         let mut headers = HeaderMap::new();
 
@@ -118,7 +174,7 @@ impl AuthConfig {
         Ok(headers)
     }
 
-    /// Get timeout duration
+    /// Returns the request timeout as a `Duration`.
     pub fn timeout(&self) -> Duration {
         Duration::from_secs(self.timeout_seconds)
     }
@@ -134,7 +190,11 @@ impl std::fmt::Display for AuthConfig {
     }
 }
 
-// Legacy rate limiter - kept for backward compatibility but marked deprecated
+/// A simple rate limiter.
+///
+/// This rate limiter is deprecated and should not be used in new code.
+/// The `RainyClient` now uses a more robust, feature-flagged rate limiting mechanism
+/// based on the `governor` crate.
 #[deprecated(note = "Use the governor-based rate limiting in RainyClient instead")]
 #[derive(Debug)]
 pub struct RateLimiter {
@@ -145,6 +205,11 @@ pub struct RateLimiter {
 
 #[allow(deprecated)]
 impl RateLimiter {
+    /// Creates a new `RateLimiter`.
+    ///
+    /// # Arguments
+    ///
+    /// * `requests_per_minute` - The maximum number of requests allowed per minute.
     pub fn new(requests_per_minute: u32) -> Self {
         Self {
             requests_per_minute,
@@ -153,6 +218,10 @@ impl RateLimiter {
         }
     }
 
+    /// Pauses execution if the rate limit has been exceeded.
+    ///
+    /// This method will asynchronously wait until the next request can be sent without
+    /// violating the rate limit.
     pub async fn wait_if_needed(&mut self) -> Result<()> {
         let now = std::time::Instant::now();
         let elapsed = now.duration_since(self.last_request);

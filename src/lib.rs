@@ -48,10 +48,15 @@
 //! ```
 //!
 
+/// Handles authentication and API key management.
 pub mod auth;
+/// The main client for interacting with the Rainy API.
 pub mod client;
+/// Defines error types and result aliases for the SDK.
 pub mod error;
+/// Contains the data models for API requests and responses.
 pub mod models;
+/// Implements retry logic with exponential backoff.
 pub mod retry;
 
 mod endpoints;
@@ -63,11 +68,23 @@ pub use models::*;
 pub use retry::{retry_with_backoff, RetryConfig};
 
 // Re-export commonly used types
+/// Re-export of the `reqwest` crate for convenience.
+///
+/// This allows users of the SDK to use `reqwest` types without adding it
+/// as a direct dependency to their project.
 pub use reqwest;
+/// Re-export of the `serde_json` crate for convenience.
+///
+/// This allows users of the SDK to use `serde_json` types for serialization
+/// and deserialization without adding it as a direct dependency.
 pub use serde_json;
 
-/// Version of the SDK
+/// The current version of the Rainy SDK.
+///
+/// This value is read from the `CARGO_PKG_VERSION` environment variable at compile time.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Default base URL for the Rainy API
+/// The default base URL for the Rainy API.
+///
+/// This constant is used by the `RainyClient` as the default API endpoint.
 pub const DEFAULT_BASE_URL: &str = "https://api.enosislabs.com";

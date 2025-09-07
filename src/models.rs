@@ -2,246 +2,290 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Chat message with role and content
+/// Represents a single message in a chat conversation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChatMessage {
+    /// The role of the message author.
     pub role: MessageRole,
+    /// The content of the message.
     pub content: String,
 }
 
-/// Message roles supported by the API
+/// The role of a message's author.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum MessageRole {
+    /// A message from the system, setting the context or instructions for the assistant.
     System,
+    /// A message from the user.
     User,
+    /// A message from the assistant.
     Assistant,
 }
 
-/// Chat completion request with enhanced options
+/// Represents a request to create a chat completion.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionRequest {
-    /// Model identifier (e.g., "gpt-4o", "claude-sonnet-4")
+    /// The identifier of the model to use for the completion (e.g., "gpt-4o", "claude-sonnet-4").
     pub model: String,
 
-    /// List of messages for the conversation
+    /// A list of messages that form the conversation history.
     pub messages: Vec<ChatMessage>,
 
-    /// Sampling temperature (0.0 to 2.0)
+    /// The sampling temperature to use, between 0.0 and 2.0. Higher values will make the output
+    /// more random, while lower values will make it more focused and deterministic.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
 
-    /// Maximum tokens to generate
+    /// The maximum number of tokens to generate in the completion.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
 
-    /// Nucleus sampling parameter
+    /// The nucleus sampling parameter. The model considers the results of the tokens with `top_p`
+    /// probability mass. So, 0.1 means only the tokens comprising the top 10% probability mass are considered.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f32>,
 
-    /// Frequency penalty (-2.0 to 2.0)
+    /// A penalty applied to new tokens based on their frequency in the text so far.
+    /// It decreases the model's likelihood to repeat the same line verbatim.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frequency_penalty: Option<f32>,
 
-    /// Presence penalty (-2.0 to 2.0)
+    /// A penalty applied to new tokens based on whether they appear in the text so far.
+    /// It increases the model's likelihood to talk about new topics.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub presence_penalty: Option<f32>,
 
-    /// Stop sequences
+    /// A list of sequences that will cause the model to stop generating further tokens.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<Vec<String>>,
 
-    /// User identifier for conversation tracking
+    /// A unique identifier representing your end-user, which can help in monitoring and
+    /// tracking conversations.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
 
-    /// Provider hint for model routing
+    /// A hint to the router about which provider to use for the model.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
 
-    /// Enable streaming response
+    /// If set to `true`, the response will be streamed as a series of events.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
 }
 
-/// Chat completion response
+/// Represents the response from a chat completion request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionResponse {
-    /// Unique identifier for the completion
+    /// A unique identifier for the chat completion.
     pub id: String,
 
-    /// Object type (always "chat.completion")
+    /// The type of object, which is always "chat.completion".
     pub object: String,
 
-    /// Unix timestamp of creation
+    /// The Unix timestamp (in seconds) of when the completion was created.
     pub created: u64,
 
-    /// Model used for the completion
+    /// The model that was used for the completion.
     pub model: String,
 
-    /// List of completion choices
+    /// A list of chat completion choices.
     pub choices: Vec<ChatChoice>,
 
-    /// Token usage information
+    /// Information about the token usage for this completion.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
 
-/// Individual completion choice
+/// Represents a single choice in a chat completion response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatChoice {
-    /// Choice index
+    /// The index of the choice in the list of choices.
     pub index: u32,
 
-    /// Generated message
+    /// The message generated by the model.
     pub message: ChatMessage,
 
-    /// Reason for completion finish
+    /// The reason the model stopped generating tokens.
     pub finish_reason: String,
 }
 
-/// Token usage statistics
+/// Represents the token usage statistics for a chat completion.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Usage {
-    /// Tokens in the prompt
+    /// The number of tokens in the prompt.
     pub prompt_tokens: u32,
 
-    /// Tokens in the completion
+    /// The number of tokens in the generated completion.
     pub completion_tokens: u32,
 
-    /// Total tokens used
+    /// The total number of tokens used in the request (prompt + completion).
     pub total_tokens: u32,
 }
 
-/// API health status
+/// Represents the health status of the Rainy API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthStatus {
-    /// Overall status
+    /// The overall status of the API (e.g., "healthy", "degraded").
     pub status: String,
 
-    /// Timestamp of the check
+    /// The timestamp of when the health check was performed.
     pub timestamp: String,
 
-    /// System uptime in seconds
+    /// The uptime of the system in seconds.
     pub uptime: f64,
 
-    /// Service status details
+    /// The status of individual services.
     pub services: ServiceStatus,
 }
 
-/// Individual service status
+/// Represents the status of individual backend services.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceStatus {
-    /// Database connectivity
+    /// The status of the database connection.
     pub database: bool,
 
-    /// Redis connectivity (optional)
+    /// The status of the Redis connection, if applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub redis: Option<bool>,
 
-    /// AI providers status
+    /// The overall status of the connections to AI providers.
     pub providers: bool,
 }
 
-/// Available models and providers
+/// Represents the available models and providers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AvailableModels {
-    /// Map of provider to their models
+    /// A map where keys are provider names and values are lists of model names.
     pub providers: HashMap<String, Vec<String>>,
 
-    /// Total number of available models
+    /// The total number of available models across all providers.
     pub total_models: usize,
 
-    /// List of active provider names
+    /// A list of provider names that are currently active and available.
     pub active_providers: Vec<String>,
 }
 
-/// Credit usage information
+/// Represents information about credit usage for a request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreditInfo {
-    /// Current available credits
+    /// The number of credits available before the request.
     pub current_credits: f64,
 
-    /// Estimated cost for the request
+    /// The estimated number of credits that the request will cost.
     pub estimated_cost: f64,
 
-    /// Credits remaining after request
+    /// The estimated number of credits remaining after the request.
     pub credits_after_request: f64,
 
-    /// Next credit reset date
+    /// The date when the credit balance is next scheduled to be reset.
     pub reset_date: String,
 }
 
-/// Request metadata from response headers
+/// Represents metadata extracted from the response headers of an API request.
 #[derive(Debug, Clone)]
 pub struct RequestMetadata {
-    /// Response time in milliseconds
+    /// The time taken for the request to complete, in milliseconds.
     pub response_time: Option<u64>,
 
-    /// Provider that handled the request
+    /// The AI provider that handled the request.
     pub provider: Option<String>,
 
-    /// Tokens used in the request
+    /// The number of tokens used in the request.
     pub tokens_used: Option<u32>,
 
-    /// Credits used for the request
+    /// The number of credits used for the request.
     pub credits_used: Option<f64>,
 
-    /// Credits remaining after request
+    /// The number of credits remaining after the request.
     pub credits_remaining: Option<f64>,
 
-    /// Request ID for tracking
+    /// The unique ID of the request, for tracking and debugging.
     pub request_id: Option<String>,
 }
 
-/// Predefined model constants for convenience
+/// A collection of predefined model constants for convenience.
 pub mod model_constants {
     // OpenAI models
+    /// Constant for the GPT-4o model.
     pub const GPT_4O: &str = "gpt-4o";
+    /// Constant for the GPT-5 model.
     pub const GPT_5: &str = "gpt-5";
+    /// Constant for the GPT-5 Pro model.
     pub const GPT_5_PRO: &str = "gpt-5-pro";
+    /// Constant for the o3 model.
     pub const O3: &str = "o3";
+    /// Constant for the o4-mini model.
     pub const O4_MINI: &str = "o4-mini";
 
     // Anthropic models
+    /// Constant for the Claude Opus 4.1 model.
     pub const CLAUDE_OPUS_4_1: &str = "claude-opus-4-1";
+    /// Constant for the Claude Sonnet 4 model.
     pub const CLAUDE_SONNET_4: &str = "claude-sonnet-4";
 
     // Groq models
+    /// Constant for the Llama 3.1 8B Instant model.
     pub const LLAMA_3_1_8B_INSTANT: &str = "llama-3.1-8b-instant";
+    /// Constant for the Llama 3.3 70B Versatile model.
     pub const LLAMA_3_3_70B_VERSATILE: &str = "llama-3.3-70b-versatile";
+    /// Constant for the Deepseek R1 Distill Llama 70B model.
     pub const DEEPSEEK_R1_DISTILL_LLAMA_70B: &str = "deepseek-r1-distill-llama-70b";
+    /// Constant for the Groq Compound model.
     pub const GROQ_COMPOUND: &str = "groq/compound";
+    /// Constant for the OpenAI GPT OSS 120B model.
     pub const OPENAI_GPT_OSS_120B: &str = "openai/gpt-oss-120b";
+    /// Constant for the OpenAI GPT OSS 20B model.
     pub const OPENAI_GPT_OSS_20B: &str = "openai/gpt-oss-20b";
+    /// Constant for the Moonshot AI Kimi K2 Instruct model.
     pub const MOONSHOTAI_KIMI_K2_INSTRUCT: &str = "moonshotai/kimi-k2-instruct";
+    /// Constant for the Moonshot AI Kimi K2 Instruct 0925 model.
     pub const MOONSHOTAI_KIMI_K2_INSTRUCT_0925: &str = "moonshotai/kimi-k2-instruct-0905";
+    /// Constant for the Qwen Qwen3 32B model.
     pub const QWEN_QWEN3_32B: &str = "qwen/qwen3-32b";
 
     // Cerebras models
+    /// Constant for the Cerebras OSS 120B model.
     pub const CEREBRAS_OSS_120B: &str = "cerebras-oss-120b";
+    /// Constant for the Qwen 3 Coder 480B model.
     pub const QWEN_3_CODER_480B: &str = "qwen-3-coder-480b";
+    /// Constant for the Llama3.1 8B model.
     pub const LLAMA3_1_8B: &str = "llama3.1-8b";
+    /// Constant for the Llama 3.3 70B model.
     pub const LLAMA_3_3_70B: &str = "llama-3.3-70b";
+    /// Constant for the Qwen3 Instruct model.
     pub const QWEN3_INSTRUCT: &str = "qwen3-instruct";
 
     // Gemini models
+    /// Constant for the Gemini 2.5 Pro model.
     pub const GEMINI_2_5_PRO: &str = "gemini-2.5-pro";
+    /// Constant for the Gemini 2.5 Flash model.
     pub const GEMINI_2_5_FLASH: &str = "gemini-2.5-flash";
+    /// Constant for the Gemini 2.5 Flash Lite model.
     pub const GEMINI_2_5_FLASH_LITE: &str = "gemini-2.5-flash-lite";
 }
 
-/// Provider names for convenience
+/// A collection of predefined provider name constants for convenience.
 pub mod providers {
+    /// Constant for the OpenAI provider.
     pub const OPENAI: &str = "openai";
+    /// Constant for the Anthropic provider.
     pub const ANTHROPIC: &str = "anthropic";
+    /// Constant for the Groq provider.
     pub const GROQ: &str = "groq";
+    /// Constant for the Cerebras provider.
     pub const CEREBRAS: &str = "cerebras";
+    /// Constant for the Gemini provider.
     pub const GEMINI: &str = "gemini";
 }
 
 impl ChatCompletionRequest {
-    /// Create a new chat completion request with a model and messages
+    /// Creates a new `ChatCompletionRequest` with the given model and messages.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The identifier of the model to use.
+    /// * `messages` - The list of messages for the conversation.
     pub fn new(model: impl Into<String>, messages: Vec<ChatMessage>) -> Self {
         Self {
             model: model.into(),
@@ -258,31 +302,53 @@ impl ChatCompletionRequest {
         }
     }
 
-    /// Set temperature (0.0 to 2.0)
+    /// Sets the temperature for the chat completion.
+    ///
+    /// The temperature is clamped between 0.0 and 2.0.
+    ///
+    /// # Arguments
+    ///
+    /// * `temperature` - The sampling temperature.
     pub fn with_temperature(mut self, temperature: f32) -> Self {
         self.temperature = Some(temperature.clamp(0.0, 2.0));
         self
     }
 
-    /// Set max tokens
+    /// Sets the maximum number of tokens to generate.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_tokens` - The maximum number of tokens.
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
-    /// Set user identifier for conversation tracking
+    /// Sets the user identifier for the chat completion.
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - A unique identifier for the end-user.
     pub fn with_user(mut self, user: impl Into<String>) -> Self {
         self.user = Some(user.into());
         self
     }
 
-    /// Set provider hint
+    /// Sets a provider hint for the request.
+    ///
+    /// # Arguments
+    ///
+    /// * `provider` - The name of the provider to use.
     pub fn with_provider(mut self, provider: impl Into<String>) -> Self {
         self.provider = Some(provider.into());
         self
     }
 
-    /// Enable streaming response
+    /// Enables or disables streaming for the response.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream` - `true` to enable streaming, `false` to disable.
     pub fn with_stream(mut self, stream: bool) -> Self {
         self.stream = Some(stream);
         self
@@ -290,7 +356,11 @@ impl ChatCompletionRequest {
 }
 
 impl ChatMessage {
-    /// Create a new system message
+    /// Creates a new message with the `System` role.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - The content of the system message.
     pub fn system(content: impl Into<String>) -> Self {
         Self {
             role: MessageRole::System,
@@ -298,7 +368,11 @@ impl ChatMessage {
         }
     }
 
-    /// Create a new user message
+    /// Creates a new message with the `User` role.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - The content of the user message.
     pub fn user(content: impl Into<String>) -> Self {
         Self {
             role: MessageRole::User,
@@ -306,7 +380,11 @@ impl ChatMessage {
         }
     }
 
-    /// Create a new assistant message
+    /// Creates a new message with the `Assistant` role.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - The content of the assistant message.
     pub fn assistant(content: impl Into<String>) -> Self {
         Self {
             role: MessageRole::Assistant,
@@ -318,85 +396,140 @@ impl ChatMessage {
 // Legacy compatibility types - keep existing types for backward compatibility
 use uuid::Uuid;
 
+/// Represents a user account (legacy).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
+    /// The unique ID of the user.
     pub id: Uuid,
+    /// The user's identifier string.
     pub user_id: String,
+    /// The name of the user's subscription plan.
     pub plan_name: String,
+    /// The user's current credit balance.
     pub current_credits: f64,
+    /// The amount of credits the user has used in the current month.
     pub credits_used_this_month: f64,
+    /// The date when the user's credits will reset.
     pub credits_reset_date: DateTime<Utc>,
+    /// Indicates if the user account is active.
     pub is_active: bool,
+    /// The timestamp of when the user account was created.
     pub created_at: DateTime<Utc>,
 }
 
+/// Represents an API key (legacy).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKey {
+    /// The unique ID of the API key.
     pub id: Uuid,
+    /// The API key string.
     pub key: String,
+    /// The ID of the user who owns the key.
     pub owner_id: Uuid,
+    /// Indicates if the API key is active.
     pub is_active: bool,
+    /// The timestamp of when the key was created.
     pub created_at: DateTime<Utc>,
+    /// The expiration date of the key, if any.
     pub expires_at: Option<DateTime<Utc>>,
+    /// A description of the key.
     pub description: Option<String>,
+    /// The timestamp of when the key was last used.
     pub last_used_at: Option<DateTime<Utc>>,
 }
 
+/// Represents usage statistics over a period (legacy).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageStats {
+    /// The number of days in the usage period.
     pub period_days: u32,
+    /// A list of daily usage data.
     pub daily_usage: Vec<DailyUsage>,
+    /// A list of recent credit transactions.
     pub recent_transactions: Vec<CreditTransaction>,
+    /// The total number of requests made in the period.
     pub total_requests: u64,
+    /// The total number of tokens used in the period.
     pub total_tokens: u64,
 }
 
+/// Represents usage data for a single day (legacy).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DailyUsage {
+    /// The date for the usage data.
     pub date: String,
+    /// The number of credits used on this day.
     pub credits_used: f64,
+    /// The number of requests made on this day.
     pub requests: u64,
+    /// The number of tokens used on this day.
     pub tokens: u64,
 }
 
+/// Represents a single credit transaction (legacy).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreditTransaction {
+    /// The unique ID of the transaction.
     pub id: Uuid,
+    /// The type of the transaction.
     pub transaction_type: TransactionType,
+    /// The amount of credits involved in the transaction.
     pub credits_amount: f64,
+    /// The credit balance after the transaction.
     pub credits_balance_after: f64,
+    /// The provider associated with the transaction, if any.
     pub provider: Option<String>,
+    /// The model associated with the transaction, if any.
     pub model: Option<String>,
+    /// A description of the transaction.
     pub description: String,
+    /// The timestamp of when the transaction occurred.
     pub created_at: DateTime<Utc>,
 }
 
+/// The type of a credit transaction (legacy).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TransactionType {
+    /// A transaction for API usage.
     Usage,
+    /// A transaction for a credit reset.
     Reset,
+    /// A transaction for a credit purchase.
     Purchase,
+    /// A transaction for a credit refund.
     Refund,
 }
 
 // Legacy aliases for backward compatibility
+/// A legacy type alias for `MessageRole`.
 pub type ChatRole = MessageRole;
+/// A legacy type alias for `Usage`.
 pub type ChatUsage = Usage;
+/// A legacy type alias for `HealthStatus`.
 pub type HealthCheck = HealthStatus;
 
+/// Represents the status of backend services (legacy).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthServices {
+    /// The status of the database connection.
     pub database: bool,
+    /// The status of the Redis connection.
     pub redis: bool,
+    /// The overall status of AI providers.
     pub providers: bool,
 }
 
+/// The health status of the API (legacy).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HealthStatusEnum {
+    /// The API is healthy.
     Healthy,
+    /// The API is in a degraded state.
     Degraded,
+    /// The API is unhealthy.
     Unhealthy,
+    /// The API needs initialization.
     NeedsInit,
 }

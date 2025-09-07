@@ -2,26 +2,40 @@ use crate::{RainyError, Result};
 use std::time::Duration;
 use tokio::time::sleep;
 
-/// Retry configuration with exponential backoff
+/// Configuration for retry logic with exponential backoff.
+///
+/// `RetryConfig` defines the parameters for retrying failed operations,
+/// such as the maximum number of retries and the delay between attempts.
 #[derive(Debug, Clone)]
 pub struct RetryConfig {
-    /// Maximum number of retry attempts
+    /// The maximum number of retry attempts to make.
     pub max_retries: u32,
 
-    /// Base delay between retries in milliseconds
+    /// The base delay between retries, in milliseconds. This is the starting point
+    /// for the exponential backoff calculation.
     pub base_delay_ms: u64,
 
-    /// Maximum delay between retries in milliseconds
+    /// The maximum possible delay between retries, in milliseconds.
     pub max_delay_ms: u64,
 
-    /// Multiplier for exponential backoff
+    /// The multiplier for the exponential backoff. Each subsequent delay is
+    /// multiplied by this factor.
     pub backoff_multiplier: f64,
 
-    /// Whether to add jitter to delays
+    /// A flag indicating whether to add a random jitter to the delay time.
+    /// Jitter helps to prevent a "thundering herd" problem in distributed systems.
     pub jitter: bool,
 }
 
 impl Default for RetryConfig {
+    /// Creates a default `RetryConfig`.
+    ///
+    /// The default settings are:
+    /// - `max_retries`: 3
+    /// - `base_delay_ms`: 1000 (1 second)
+    /// - `max_delay_ms`: 30000 (30 seconds)
+    /// - `backoff_multiplier`: 2.0
+    /// - `jitter`: true
     fn default() -> Self {
         Self {
             max_retries: 3,
@@ -34,7 +48,12 @@ impl Default for RetryConfig {
 }
 
 impl RetryConfig {
-    /// Create a new retry configuration
+    /// Creates a new `RetryConfig` with a specified maximum number of retries
+    /// and default values for other settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_retries` - The maximum number of times to retry an operation.
     pub fn new(max_retries: u32) -> Self {
         Self {
             max_retries,
@@ -42,7 +61,17 @@ impl RetryConfig {
         }
     }
 
-    /// Calculate delay for a specific attempt
+    /// Calculates the delay duration for a specific retry attempt.
+    ///
+    /// The delay is calculated using exponential backoff, and optionally includes jitter.
+    ///
+    /// # Arguments
+    ///
+    /// * `attempt` - The current retry attempt number (starting from 0).
+    ///
+    /// # Returns
+    ///
+    /// A `Duration` to wait before the next attempt.
     pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
         let base_delay = self.base_delay_ms as f64;
         let multiplier = self.backoff_multiplier.powi(attempt as i32);
@@ -63,7 +92,26 @@ impl RetryConfig {
     }
 }
 
-/// Execute a function with retry logic
+/// Executes an asynchronous operation with retry logic based on the provided `RetryConfig`.
+///
+/// This function will repeatedly call the `operation` closure until it succeeds,
+/// or until the maximum number of retries is reached.
+///
+/// # Type Parameters
+///
+/// * `F` - The type of the operation, which must be a closure that returns a future.
+/// * `Fut` - The type of the future returned by the closure.
+/// * `T` - The success type of the `Result` returned by the future.
+///
+/// # Arguments
+///
+/// * `config` - The `RetryConfig` to use for the retry logic.
+/// * `operation` - The asynchronous operation to execute.
+///
+/// # Returns
+///
+/// A `Result` containing the success value `T` if the operation succeeds,
+/// or the last `RainyError` if all retry attempts fail.
 pub async fn retry_with_backoff<F, Fut, T>(config: &RetryConfig, operation: F) -> Result<T>
 where
     F: Fn() -> Fut,
