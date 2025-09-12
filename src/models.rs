@@ -241,7 +241,7 @@ pub mod model_constants {
     //pub const MOONSHOTAI_KIMI_K2_INSTRUCT: &str = "moonshotai/kimi-k2-instruct";
     /// Constant for the Moonshot AI Kimi K2 Instruct 0925 model.
     pub const MOONSHOTAI_KIMI_K2_INSTRUCT_0925: &str = "moonshotai/kimi-k2-instruct-0905";
-    /// Constant for the Qwen Qwen3 32B model. (Deprecated, use "qwen/qwen3-32b" instead)
+    // /// Constant for the Qwen Qwen3 32B model. (Deprecated, use "qwen/qwen3-32b" instead)
     //pub const QWEN_QWEN3_32B: &str = "qwen/qwen3-32b";
 
     // Cerebras models
@@ -253,7 +253,7 @@ pub mod model_constants {
     pub const LLAMA3_1_8B: &str = "llama3.1-8b";
     /// Constant for the Llama 3.3 70B model.
     pub const LLAMA_3_3_70B: &str = "llama-3.3-70b";
-    /// Constant for the Qwen3 Instruct model. (Deprecated, use "qwen3-instruct" instead)
+    // /// Constant for the Qwen3 Instruct model. (Deprecated, use "qwen3-instruct" instead)
     //pub const QWEN3_INSTRUCT: &str = "qwen3-instruct";
 
     // Gemini models
