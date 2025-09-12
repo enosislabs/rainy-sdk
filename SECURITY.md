@@ -84,7 +84,7 @@ use std::env;
 let client = RainyClient::new(
     AuthConfig::new()
         .with_api_key(env::var("RAINY_API_KEY")?)
-        .with_base_url("https://your-secure-api.vercel.app")
+        .with_base_url("https://api.enosislabs.com")
 )?;
 ```
 
@@ -136,6 +136,6 @@ For security-related questions or concerns:
 
 - **Security Issues**: <security@enosislabs.com>
 - **General Support**: <hello@enosislabs.com>
-- **Documentation**: [docs.rs/rainy-sdk](https://docs.rs/rainy-sdk)
+- **Documentation**: [docs.rs/rainy-sdk](https://docs.rs/rainy-sdk/0.2.1/rainy_sdk/)
 
 Thank you for helping keep the Rainy SDK and its users secure! 🔒

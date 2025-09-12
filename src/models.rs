@@ -237,12 +237,12 @@ pub mod model_constants {
     pub const OPENAI_GPT_OSS_120B: &str = "openai/gpt-oss-120b";
     /// Constant for the OpenAI GPT OSS 20B model.
     pub const OPENAI_GPT_OSS_20B: &str = "openai/gpt-oss-20b";
-    /// Constant for the Moonshot AI Kimi K2 Instruct model.
-    pub const MOONSHOTAI_KIMI_K2_INSTRUCT: &str = "moonshotai/kimi-k2-instruct";
+    /// Constant for the Moonshot AI Kimi K2 Instruct model. (Deprecated, use "moonshotai/kimi-k2-instruct" instead)
+    //pub const MOONSHOTAI_KIMI_K2_INSTRUCT: &str = "moonshotai/kimi-k2-instruct";
     /// Constant for the Moonshot AI Kimi K2 Instruct 0925 model.
     pub const MOONSHOTAI_KIMI_K2_INSTRUCT_0925: &str = "moonshotai/kimi-k2-instruct-0905";
-    /// Constant for the Qwen Qwen3 32B model.
-    pub const QWEN_QWEN3_32B: &str = "qwen/qwen3-32b";
+    /// Constant for the Qwen Qwen3 32B model. (Deprecated, use "qwen/qwen3-32b" instead)
+    //pub const QWEN_QWEN3_32B: &str = "qwen/qwen3-32b";
 
     // Cerebras models
     /// Constant for the Cerebras OSS 120B model.
@@ -253,8 +253,8 @@ pub mod model_constants {
     pub const LLAMA3_1_8B: &str = "llama3.1-8b";
     /// Constant for the Llama 3.3 70B model.
     pub const LLAMA_3_3_70B: &str = "llama-3.3-70b";
-    /// Constant for the Qwen3 Instruct model.
-    pub const QWEN3_INSTRUCT: &str = "qwen3-instruct";
+    /// Constant for the Qwen3 Instruct model. (Deprecated, use "qwen3-instruct" instead)
+    //pub const QWEN3_INSTRUCT: &str = "qwen3-instruct";
 
     // Gemini models
     /// Constant for the Gemini 2.5 Pro model.
@@ -263,6 +263,14 @@ pub mod model_constants {
     pub const GEMINI_2_5_FLASH: &str = "gemini-2.5-flash";
     /// Constant for the Gemini 2.5 Flash Lite model.
     pub const GEMINI_2_5_FLASH_LITE: &str = "gemini-2.5-flash-lite";
+
+    // Enosis Labs Models
+    /// Constant for the Enosis Labs Astronomer model.
+    pub const ASTRONOMER: &str = "astronomer-1";
+    /// Constant for the Enosis Labs Astronomer 1 Fast model.
+    pub const ASTRONOMER_1_FAST: &str = "astronomer-1-fast";
+    /// Constant for the Enosis Labs Astronomer 1 Max model.
+    pub const ASTRONOMER_1_MAX: &str = "astronomer-1-max";
 }
 
 /// A collection of predefined provider name constants for convenience.
@@ -277,6 +285,8 @@ pub mod providers {
     pub const CEREBRAS: &str = "cerebras";
     /// Constant for the Gemini provider.
     pub const GEMINI: &str = "gemini";
+    /// Constant for the Enosis Labs provider.
+    pub const ENOSISLABS: &str = "enosislabs";
 }
 
 impl ChatCompletionRequest {
