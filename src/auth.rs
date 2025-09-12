@@ -1,5 +1,6 @@
 use crate::error::{RainyError, Result};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT};
+use secrecy::{ExposeSecret, Secret};
 use std::time::Duration;
 
 /// Configuration for authentication and client behavior.
@@ -24,7 +25,7 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
     /// The API key used for authenticating with the Rainy API.
-    pub api_key: String,
+    pub api_key: Secret<String>,
 
     /// The base URL of the Rainy API. Defaults to the official endpoint.
     pub base_url: String,
@@ -50,7 +51,7 @@ impl AuthConfig {
     /// * `api_key` - Your Rainy API key.
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
-            api_key: api_key.into(),
+            api_key: Secret::new(api_key.into()),
             base_url: crate::DEFAULT_BASE_URL.to_string(),
             timeout_seconds: 30,
             max_retries: 3,
@@ -118,7 +119,7 @@ impl AuthConfig {
     ///
     /// A `Result` that is `Ok(())` if the configuration is valid, or a `RainyError` if it's not.
     pub fn validate(&self) -> Result<()> {
-        if self.api_key.is_empty() {
+        if self.api_key.expose_secret().is_empty() {
             return Err(RainyError::Authentication {
                 code: "EMPTY_API_KEY".to_string(),
                 message: "API key cannot be empty".to_string(),
@@ -127,7 +128,7 @@ impl AuthConfig {
         }
 
         // Basic API key format validation (starts with 'ra-')
-        if !self.api_key.starts_with("ra-") {
+        if !self.api_key.expose_secret().starts_with("ra-") {
             return Err(RainyError::Authentication {
                 code: "INVALID_API_KEY_FORMAT".to_string(),
                 message: "API key must start with 'ra-'".to_string(),
@@ -168,7 +169,7 @@ impl AuthConfig {
         );
 
         // Set authorization header
-        let auth_value = format!("Bearer {}", self.api_key);
+        let auth_value = format!("Bearer {}", self.api_key.expose_secret());
         headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
 
         Ok(headers)

@@ -8,6 +8,7 @@ use reqwest::{
     header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT},
     Client, Response,
 };
+use secrecy::ExposeSecret;
 use std::time::Instant;
 
 #[cfg(feature = "rate-limiting")]
@@ -92,12 +93,14 @@ impl RainyClient {
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", auth_config.api_key)).map_err(|e| {
-                RainyError::Authentication {
-                    code: "INVALID_API_KEY".to_string(),
-                    message: format!("Invalid API key format: {}", e),
-                    retryable: false,
-                }
+            HeaderValue::from_str(&format!(
+                "Bearer {}",
+                auth_config.api_key.expose_secret()
+            ))
+            .map_err(|e| RainyError::Authentication {
+                code: "INVALID_API_KEY".to_string(),
+                message: format!("Invalid API key format: {}", e),
+                retryable: false,
             })?,
         );
         headers.insert(
@@ -110,6 +113,9 @@ impl RainyClient {
         );
 
         let client = Client::builder()
+            .use_rustls_tls()
+            .min_tls_version(reqwest::tls::Version::TLS_1_2)
+            .https_only(true)
             .timeout(auth_config.timeout())
             .default_headers(headers)
             .build()

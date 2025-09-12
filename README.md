@@ -236,6 +236,14 @@ cargo run --example basic_usage
 cargo run --example chat_completion
 ```
 
+## 🛡️ Security Considerations
+
+- **API Key Management**: This SDK utilizes the `secrecy` crate to handle the API key, ensuring it is securely stored in memory and zeroed out upon being dropped. However, it is still crucial to manage the `RainyClient`'s lifecycle carefully within your application to minimize exposure.
+
+- **Rate Limiting**: The optional `rate-limiting` feature is intended as a client-side safeguard to prevent accidental overuse and to act as a "good citizen" towards the API. It **is not a security mechanism** and can be bypassed by a malicious actor. For robust abuse prevention, you **must** implement server-side monitoring, usage quotas, and API key management through your Enosis Labs dashboard.
+
+- **TLS Configuration**: The client is hardened to use modern, secure TLS settings (TLS 1.2+ via the `rustls` backend) and to only allow HTTPS connections, providing strong protection against network interception.
+
 ## 🏗️ Architecture
 
 The SDK is built with a modular architecture:
