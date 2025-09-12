@@ -14,7 +14,9 @@ jobs:
   docs:
     name: Generate Documentation
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write  # Required for pushing to gh-pages branch
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
