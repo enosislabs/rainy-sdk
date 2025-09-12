@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["RainyError"],"struct":["ApiErrorDetails","ApiErrorResponse"],"type":["Result"]};
