@@ -93,15 +93,12 @@ impl RainyClient {
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!(
-                "Bearer {}",
-                auth_config.api_key.expose_secret()
-            ))
-            .map_err(|e| RainyError::Authentication {
-                code: "INVALID_API_KEY".to_string(),
-                message: format!("Invalid API key format: {}", e),
-                retryable: false,
-            })?,
+            HeaderValue::from_str(&format!("Bearer {}", auth_config.api_key.expose_secret()))
+                .map_err(|e| RainyError::Authentication {
+                    code: "INVALID_API_KEY".to_string(),
+                    message: format!("Invalid API key format: {}", e),
+                    retryable: false,
+                })?,
         );
         headers.insert(
             USER_AGENT,
