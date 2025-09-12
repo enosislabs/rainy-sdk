@@ -25,10 +25,7 @@ impl RainyClient {
     /// let client = RainyClient::with_api_key("user-api-key")?;
     ///
     /// let messages = vec![
-    ///     ChatMessage {
-    ///         role: MessageRole::User,
-    ///         content: "Hello, how are you?".to_string(),
-    ///     }
+    ///     ChatMessage::user("Hello, how are you?"),
     /// ];
     ///
     /// let request = ChatCompletionRequest::new("gemini-pro", messages)
@@ -73,10 +70,7 @@ impl RainyClient {
     /// let client = RainyClient::with_api_key("user-api-key")?;
     ///
     /// let messages = vec![
-    ///     ChatMessage {
-    ///         role: MessageRole::User,
-    ///         content: "Tell me a story".to_string(),
-    ///     }
+    ///     ChatMessage::user("Tell me a story"),
     /// ];
     ///
     /// let request = ChatCompletionRequest::new("llama-3.1-8b-instant", messages)
