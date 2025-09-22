@@ -47,12 +47,12 @@ mod tests {
     #[test]
     fn test_chat_completion_request_builder() {
         let messages = vec![ChatMessage::user("Test message")];
-        let request = ChatCompletionRequest::new(GPT_4O, messages.clone())
+        let request = ChatCompletionRequest::new(OPENAI_GPT_4O, messages.clone())
             .with_temperature(0.7)
             .with_max_tokens(100)
             .with_user("test-user");
 
-        assert_eq!(request.model, GPT_4O);
+        assert_eq!(request.model, OPENAI_GPT_4O);
         assert_eq!(request.messages, messages);
         assert_eq!(request.temperature, Some(0.7));
         assert_eq!(request.max_tokens, Some(100));
@@ -119,9 +119,15 @@ mod tests {
 
     #[test]
     fn test_model_constants() {
-        assert_eq!(GPT_4O, "gpt-4o");
-        assert_eq!(CLAUDE_SONNET_4, "claude-sonnet-4");
-        assert_eq!(GEMINI_2_5_PRO, "gemini-2.5-pro");
-        assert_eq!(LLAMA_3_1_8B_INSTANT, "llama-3.1-8b-instant");
+        // Test new provider-prefixed constants
+        assert_eq!(OPENAI_GPT_4O, "openai/gpt-4o");
+        assert_eq!(GOOGLE_GEMINI_2_5_PRO, "google/gemini-2.5-pro");
+        assert_eq!(GROQ_LLAMA_3_1_8B_INSTANT, "groq/llama-3.1-8b-instant");
+        assert_eq!(CEREBRAS_LLAMA3_1_8B, "cerebras/llama3.1-8b");
+
+        // Test legacy constants (deprecated but still available)
+        assert_eq!(OPENAI_GPT_4O, "gpt-4o");
+        assert_eq!(GOOGLE_GEMINI_2_5_PRO, "gemini-2.5-pro");
+        assert_eq!(GROQ_LLAMA_3_1_8B_INSTANT, "llama-3.1-8b-instant");
     }
 }

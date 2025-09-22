@@ -430,6 +430,45 @@ impl RainyClient {
         &self.client
     }
 
+    /// Retrieves the list of available models from the API.
+    ///
+    /// This method returns information about all models that are currently available
+    /// through the Rainy API, including their compatibility status and supported parameters.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `AvailableModels` struct with model information.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use rainy_sdk::RainyClient;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = RainyClient::with_api_key("your-api-key")?;
+    /// let models = client.list_available_models().await?;
+    ///
+    /// println!("Total models: {}", models.total_models);
+    /// for (provider, model_list) in &models.providers {
+    ///     println!("Provider {}: {:?}", provider, model_list);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn list_available_models(&self) -> Result<AvailableModels> {
+        let url = format!("{}/api/v1/models", self.auth_config.base_url);
+
+        let operation = || async {
+            let response = self.client.get(&url).send().await?;
+            self.handle_response(response).await
+        };
+
+        if self.auth_config.enable_retry {
+            retry_with_backoff(&self.retry_config, operation).await
+        } else {
+            operation().await
+        }
+    }
+
     // Legacy methods for backward compatibility
 
     /// Makes a generic HTTP request to the API.

@@ -1,6 +1,6 @@
 use crate::client::RainyClient;
 use crate::error::{RainyError, Result};
-use crate::models::{ChatCompletionRequest, ChatCompletionResponse};
+use crate::models::{ChatCompletionRequest, ChatCompletionResponse, ChatCompletionStreamResponse};
 use futures::Stream;
 use std::pin::Pin;
 
@@ -84,7 +84,9 @@ impl RainyClient {
     ///     match chunk {
     ///         Ok(response) => {
     ///             if let Some(choice) = response.choices.first() {
-    ///                 print!("{}", choice.message.content);
+    ///                 if let Some(content) = &choice.delta.content {
+    ///                     print!("{}", content);
+    ///                 }
     ///             }
     ///         }
     ///         Err(e) => eprintln!("Error: {}", e),
@@ -96,7 +98,7 @@ impl RainyClient {
     pub async fn create_chat_completion_stream(
         &self,
         request: ChatCompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionResponse>> + Send>>> {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionStreamResponse>> + Send>>> {
         use eventsource_stream::Eventsource;
         use futures::StreamExt;
 
@@ -116,7 +118,7 @@ impl RainyClient {
 
         if !response.status().is_success() {
             return Err(self
-                .handle_response::<ChatCompletionResponse>(response)
+                .handle_response::<ChatCompletionStreamResponse>(response)
                 .await
                 .err()
                 .unwrap());
@@ -134,7 +136,7 @@ impl RainyClient {
                         }
 
                         // Parse the JSON data
-                        match serde_json::from_str::<ChatCompletionResponse>(&event.data) {
+                        match serde_json::from_str::<ChatCompletionStreamResponse>(&event.data) {
                             Ok(response) => Some(Ok(response)),
                             Err(e) => Some(Err(RainyError::Serialization {
                                 message: e.to_string(),

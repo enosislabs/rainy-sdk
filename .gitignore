@@ -56,3 +56,7 @@ scripts/local/
 
 # Rust toolchain override
 rust-toolchain.toml
+
+.kilocode
+
+*.md

@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = retry_with_backoff(&retry_config, || async {
         // Simulate a potentially failing operation
         client
-            .simple_chat(models::model_constants::GPT_4O, "Tell me a joke")
+            .simple_chat(models::model_constants::OPENAI_GPT_4O, "Tell me a joke")
             .await
     })
     .await;
@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for i in 1..=5 {
         match client
             .simple_chat(
-                models::model_constants::GPT_4O,
+                models::model_constants::OPENAI_GPT_4O,
                 &format!("Quick question #{}", i),
             )
             .await
@@ -105,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 4: Structured error details
     println!("\n📋 Example 4: Structured error details");
     let request = ChatCompletionRequest::new(
-        models::model_constants::GPT_4O,
+        models::model_constants::OPENAI_GPT_4O,
         vec![ChatMessage::user("Test message")],
     );
     match client.chat_completion(request).await {

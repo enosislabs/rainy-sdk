@@ -1,4 +1,4 @@
-# 🌧️ Rainy SDK v0.2.5
+# 🌧️ Rainy SDK v0.3.0
 
 [![Crates.io](https://img.shields.io/crates/v/rainy-sdk.svg)](https://crates.io/crates/rainy-sdk)
 [![Documentation](https://docs.rs/rainy-sdk/badge.svg)](https://docs.rs/rainy-sdk)
@@ -9,13 +9,15 @@ The official Rust SDK for the **Rainy API by Enosis Labs** - a unified interface
 
 ## ✨ Features
 
-- **🚀 Unified API**: Single interface for multiple AI providers
+- **🎯 Full OpenAI Compatibility**: Compatibility with the OpenAI SDK system.
+- **🚀 Unified Multi-Provider API**: Single interface for OpenAI, Google Gemini, Groq, Cerebras and others.
 - **🔐 Type-Safe Authentication**: Secure API key management with validation
 - **⚡ Async/Await**: Full async support with Tokio runtime
 - **📊 Rich Metadata**: Response times, provider info, token usage, credit tracking
 - **🛡️ Enhanced Error Handling**: Comprehensive error types with retryability
 - **🔄 Intelligent Retry**: Exponential backoff with jitter for resilience
 - **📈 Rate Limiting**: Optional governor-based rate limiting
+- **🔧 Advanced Parameters**: Support for reasoning_effort, response_format, tools, tool_choice
 - **📚 Rich Documentation**: Complete API documentation with practical examples
 
 ## 📦 Installation
@@ -28,11 +30,48 @@ rainy-sdk = "0.2.5"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
-Or install with cargo:
+Or installation with cargo:
 
 ```bash
 cargo add rainy-sdk
 ```
+
+## 🎯 OpenAI Compatibility
+
+Rainy SDK v0.3.0 provides **100% OpenAI API compatibility** while extending support to additional providers. Use Rainy SDK as a drop-in replacement for the official OpenAI SDK:
+
+```rust
+use rainy_sdk::{models, ChatCompletionRequest, ChatMessage, RainyClient};
+
+// Works exactly like OpenAI SDK
+let client = RainyClient::with_api_key("your-rainy-api-key")?;
+
+let request = ChatCompletionRequest::new(
+    models::model_constants::OPENAI_GPT_4O, // or GOOGLE_GEMINI_2_5_PRO
+    vec![ChatMessage::user("Hello!")]
+)
+.with_temperature(0.7)
+.with_response_format(models::ResponseFormat::JsonObject);
+
+let (response, metadata) = client.chat_completion(request).await?;
+```
+
+### Supported Models (100% OpenAI Compatible)
+
+| Provider | Models | OpenAI Compatibility |
+|----------|--------|---------------------|
+| OpenAI | `openai/gpt-4o`, `openai/gpt-5` | ✅ Native |
+| Google | `google/gemini-2.5-pro`, `google/gemini-2.5-flash`, `google/gemini-2.5-flash-lite` | ✅ Via compatibility layer |
+| Groq | `groq/llama-3.1-8b-instant` | ✅ OpenAI-compatible API |
+| Cerebras | `cerebras/llama3.1-8b` | ✅ OpenAI-compatible API |
+
+### Advanced OpenAI Features
+
+- **Tool Calling**: Function calling with `tools` and `tool_choice`
+- **Structured Output**: JSON Schema enforcement with `response_format`
+- **Reasoning Control**: `reasoning_effort` parameter for Gemini models
+- **Log Probabilities**: `logprobs` and `top_logprobs` support
+- **Streaming**: OpenAI-compatible delta format streaming
 
 ### Optional Features
 

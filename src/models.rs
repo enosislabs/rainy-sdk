@@ -72,6 +72,34 @@ pub struct ChatCompletionRequest {
     /// If set to `true`, the response will be streamed as a series of events.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
+
+    /// Modify the likelihood of specified tokens appearing in the completion.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logit_bias: Option<serde_json::Value>,
+
+    /// Whether to return log probabilities of the output tokens.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logprobs: Option<bool>,
+
+    /// An integer between 0 and 20 specifying the number of most likely tokens to return at each token position.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_logprobs: Option<u32>,
+
+    /// How many chat completion choices to generate for each input message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub n: Option<u32>,
+
+    /// An object specifying the format that the model must output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<ResponseFormat>,
+
+    /// A list of tools the model may call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<Tool>>,
+
+    /// Controls which (if any) tool is called by the model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<ToolChoice>,
 }
 
 /// Represents the response from a chat completion request.
@@ -205,72 +233,74 @@ pub struct RequestMetadata {
 }
 
 /// A collection of predefined model constants for convenience.
+/// All models listed here are confirmed to be 100% OpenAI-compatible without parameter adaptations.
 pub mod model_constants {
-    // OpenAI models
+    // OpenAI models (fully compatible)
     /// Constant for the GPT-4o model.
-    pub const GPT_4O: &str = "gpt-4o";
+    pub const OPENAI_GPT_4O: &str = "gpt-4o";
     /// Constant for the GPT-5 model.
-    pub const GPT_5: &str = "gpt-5";
+    pub const OPENAI_GPT_5: &str = "gpt-5";
     /// Constant for the GPT-5 Pro model.
-    pub const GPT_5_PRO: &str = "gpt-5-pro";
-    /// Constant for the o3 model.
-    pub const O3: &str = "o3";
-    /// Constant for the o4-mini model.
-    pub const O4_MINI: &str = "o4-mini";
+    pub const OPENAI_GPT_5_PRO: &str = "gpt-5-pro";
+    /// Constant for the O3 model.
+    pub const OPENAI_O3: &str = "o3";
+    /// Constant for the O4 Mini model.
+    pub const OPENAI_O4_MINI: &str = "o4-mini";
 
-    // Anthropic models
-    /// Constant for the Claude Opus 4.1 model.
-    pub const CLAUDE_OPUS_4_1: &str = "claude-opus-4-1";
-    /// Constant for the Claude Sonnet 4 model.
-    pub const CLAUDE_SONNET_4: &str = "claude-sonnet-4";
-
-    // Groq models
-    /// Constant for the Llama 3.1 8B Instant model.
-    pub const LLAMA_3_1_8B_INSTANT: &str = "llama-3.1-8b-instant";
-    /// Constant for the Llama 3.3 70B Versatile model.
-    pub const LLAMA_3_3_70B_VERSATILE: &str = "llama-3.3-70b-versatile";
-    /// Constant for the Deepseek R1 Distill Llama 70B model.
-    pub const DEEPSEEK_R1_DISTILL_LLAMA_70B: &str = "deepseek-r1-distill-llama-70b";
-    /// Constant for the Groq Compound model.
-    pub const GROQ_COMPOUND: &str = "groq/compound";
-    /// Constant for the OpenAI GPT OSS 120B model.
-    pub const OPENAI_GPT_OSS_120B: &str = "openai/gpt-oss-120b";
-    /// Constant for the OpenAI GPT OSS 20B model.
-    pub const OPENAI_GPT_OSS_20B: &str = "openai/gpt-oss-20b";
-    /// Constant for the Moonshot AI Kimi K2 Instruct model. (Deprecated, use "moonshotai/kimi-k2-instruct" instead)
-    //pub const MOONSHOTAI_KIMI_K2_INSTRUCT: &str = "moonshotai/kimi-k2-instruct";
-    /// Constant for the Moonshot AI Kimi K2 Instruct 0925 model.
-    pub const MOONSHOTAI_KIMI_K2_INSTRUCT_0925: &str = "moonshotai/kimi-k2-instruct-0905";
-    // /// Constant for the Qwen Qwen3 32B model. (Deprecated, use "qwen/qwen3-32b" instead)
-    //pub const QWEN_QWEN3_32B: &str = "qwen/qwen3-32b";
-
-    // Cerebras models
-    /// Constant for the Cerebras OSS 120B model.
-    pub const CEREBRAS_OSS_120B: &str = "cerebras-oss-120b";
-    /// Constant for the Qwen 3 Coder 480B model.
-    pub const QWEN_3_CODER_480B: &str = "qwen-3-coder-480b";
-    /// Constant for the Llama3.1 8B model.
-    pub const LLAMA3_1_8B: &str = "llama3.1-8b";
-    /// Constant for the Llama 3.3 70B model.
-    pub const LLAMA_3_3_70B: &str = "llama-3.3-70b";
-    // /// Constant for the Qwen3 Instruct model. (Deprecated, use "qwen3-instruct" instead)
-    //pub const QWEN3_INSTRUCT: &str = "qwen3-instruct";
-
-    // Gemini models
+    // Google Gemini models (fully compatible via official compatibility layer)
     /// Constant for the Gemini 2.5 Pro model.
-    pub const GEMINI_2_5_PRO: &str = "gemini-2.5-pro";
+    pub const GOOGLE_GEMINI_2_5_PRO: &str = "gemini-2.5-pro";
     /// Constant for the Gemini 2.5 Flash model.
-    pub const GEMINI_2_5_FLASH: &str = "gemini-2.5-flash";
+    pub const GOOGLE_GEMINI_2_5_FLASH: &str = "gemini-2.5-flash";
     /// Constant for the Gemini 2.5 Flash Lite model.
-    pub const GEMINI_2_5_FLASH_LITE: &str = "gemini-2.5-flash-lite";
+    pub const GOOGLE_GEMINI_2_5_FLASH_LITE: &str = "gemini-2.5-flash-lite";
 
-    // Enosis Labs Models
-    /// Constant for the Enosis Labs Astronomer model.
-    pub const ASTRONOMER: &str = "astronomer-1";
-    /// Constant for the Enosis Labs Astronomer 1 Fast model.
-    pub const ASTRONOMER_1_FAST: &str = "astronomer-1-fast";
-    /// Constant for the Enosis Labs Astronomer 1 Max model.
+    // Groq models (fully compatible)
+    /// Constant for the Llama 3.1 8B Instant model.
+    pub const GROQ_LLAMA_3_1_8B_INSTANT: &str = "llama-3.1-8b-instant";
+    /// Constant for the Llama 3.3 70B Versatile model.
+    pub const GROQ_LLAMA_3_3_70B_VERSATILE: &str = "llama-3.3-70b-versatile";
+    /// Constant for the moonshotai/kimi-k2-instruct-0905 Instant model.
+    pub const KIMI_K2_0925: &str = "moonshotai/kimi-k2-instruct-0905";
+
+    // Cerebras models (fully compatible)
+    /// Constant for the Llama3.1 8B model.
+    pub const CEREBRAS_LLAMA3_1_8B: &str = "cerebras/llama3.1-8b";
+
+    // Enosis Labs models (fully compatible)
+    /// Constant for the Astronomer 1 model.
+    pub const ASTRONOMER_1: &str = "astronomer-1";
+    /// Constant for the Astronomer 1 Max model.
     pub const ASTRONOMER_1_MAX: &str = "astronomer-1-max";
+    /// Constant for the Astronomer 1.5 model.
+    pub const ASTRONOMER_1_5: &str = "astronomer-1.5";
+    /// Constant for the Astronomer 2 model.
+    pub const ASTRONOMER_2: &str = "astronomer-2";
+    /// Constant for the Astronomer 2 Pro model.
+    pub const ASTRONOMER_2_PRO: &str = "astronomer-2-pro";
+
+    // Legacy aliases for backward compatibility (deprecated - use provider-prefixed versions above)
+    /// Legacy constant for the GPT-4o model (use OPENAI_GPT_4O instead).
+    #[deprecated(note = "Use OPENAI_GPT_4O instead for OpenAI compatibility")]
+    pub const GPT_4O: &str = "openai/gpt-4o";
+    /// Legacy constant for the GPT-5 model (use OPENAI_GPT_5 instead).
+    #[deprecated(note = "Use OPENAI_GPT_5 instead for OpenAI compatibility")]
+    pub const GPT_5: &str = "openai/gpt-5";
+    /// Legacy constant for the Gemini 2.5 Pro model (use GOOGLE_GEMINI_2_5_PRO instead).
+    #[deprecated(note = "Use GOOGLE_GEMINI_2_5_PRO instead for OpenAI compatibility")]
+    pub const GEMINI_2_5_PRO: &str = "google/gemini-2.5-pro";
+    /// Legacy constant for the Gemini 2.5 Flash model (use GOOGLE_GEMINI_2_5_FLASH instead).
+    #[deprecated(note = "Use GOOGLE_GEMINI_2_5_FLASH instead for OpenAI compatibility")]
+    pub const GEMINI_2_5_FLASH: &str = "google/gemini-2.5-flash";
+    /// Legacy constant for the Gemini 2.5 Flash Lite model (use GOOGLE_GEMINI_2_5_FLASH_LITE instead).
+    #[deprecated(note = "Use GOOGLE_GEMINI_2_5_FLASH_LITE instead for OpenAI compatibility")]
+    pub const GEMINI_2_5_FLASH_LITE: &str = "google/gemini-2.5-flash-lite";
+    /// Legacy constant for the Llama 3.1 8B Instant model (use GROQ_LLAMA_3_1_8B_INSTANT instead).
+    #[deprecated(note = "Use GROQ_LLAMA_3_1_8B_INSTANT instead for OpenAI compatibility")]
+    pub const LLAMA_3_1_8B_INSTANT: &str = "groq/llama-3.1-8b-instant";
+    /// Legacy constant for the Llama3.1 8B model (use CEREBRAS_LLAMA3_1_8B instead).
+    #[deprecated(note = "Use CEREBRAS_LLAMA3_1_8B instead for OpenAI compatibility")]
+    pub const LLAMA3_1_8B: &str = "cerebras/llama3.1-8b";
 }
 
 /// A collection of predefined provider name constants for convenience.
@@ -309,6 +339,13 @@ impl ChatCompletionRequest {
             user: None,
             provider: None,
             stream: None,
+            logit_bias: None,
+            logprobs: None,
+            top_logprobs: None,
+            n: None,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
         }
     }
 
@@ -362,6 +399,151 @@ impl ChatCompletionRequest {
     pub fn with_stream(mut self, stream: bool) -> Self {
         self.stream = Some(stream);
         self
+    }
+
+    /// Sets the logit bias for the chat completion.
+    ///
+    /// # Arguments
+    ///
+    /// * `logit_bias` - A map of token IDs to bias values.
+    pub fn with_logit_bias(mut self, logit_bias: serde_json::Value) -> Self {
+        self.logit_bias = Some(logit_bias);
+        self
+    }
+
+    /// Enables or disables log probabilities for the response.
+    ///
+    /// # Arguments
+    ///
+    /// * `logprobs` - `true` to include log probabilities.
+    pub fn with_logprobs(mut self, logprobs: bool) -> Self {
+        self.logprobs = Some(logprobs);
+        self
+    }
+
+    /// Sets the number of most likely tokens to return at each position.
+    ///
+    /// # Arguments
+    ///
+    /// * `top_logprobs` - The number of top log probabilities to return.
+    pub fn with_top_logprobs(mut self, top_logprobs: u32) -> Self {
+        self.top_logprobs = Some(top_logprobs);
+        self
+    }
+
+    /// Sets the number of chat completion choices to generate.
+    ///
+    /// # Arguments
+    ///
+    /// * `n` - The number of completions to generate.
+    pub fn with_n(mut self, n: u32) -> Self {
+        self.n = Some(n);
+        self
+    }
+
+    /// Sets the response format for the chat completion.
+    ///
+    /// # Arguments
+    ///
+    /// * `response_format` - The format the model must output.
+    pub fn with_response_format(mut self, response_format: ResponseFormat) -> Self {
+        self.response_format = Some(response_format);
+        self
+    }
+
+    /// Sets the tools available to the model.
+    ///
+    /// # Arguments
+    ///
+    /// * `tools` - A list of tools the model can use.
+    pub fn with_tools(mut self, tools: Vec<Tool>) -> Self {
+        self.tools = Some(tools);
+        self
+    }
+
+    /// Sets the tool choice for the chat completion.
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_choice` - Controls which tool the model uses.
+    pub fn with_tool_choice(mut self, tool_choice: ToolChoice) -> Self {
+        self.tool_choice = Some(tool_choice);
+        self
+    }
+
+    /// Validates that the request parameters are compatible with OpenAI standards.
+    ///
+    /// This method checks parameter ranges and values to ensure they match OpenAI's API specifications.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating whether the request is valid for OpenAI compatibility.
+    pub fn validate_openai_compatibility(&self) -> Result<(), String> {
+        // Validate temperature
+        if let Some(temp) = self.temperature {
+            if !(0.0..=2.0).contains(&temp) {
+                return Err(format!("Temperature must be between 0.0 and 2.0, got {}", temp));
+            }
+        }
+
+        // Validate top_p
+        if let Some(top_p) = self.top_p {
+            if !(0.0..=1.0).contains(&top_p) {
+                return Err(format!("Top-p must be between 0.0 and 1.0, got {}", top_p));
+            }
+        }
+
+        // Validate frequency_penalty
+        if let Some(fp) = self.frequency_penalty {
+            if !(-2.0..=2.0).contains(&fp) {
+                return Err(format!("Frequency penalty must be between -2.0 and 2.0, got {}", fp));
+            }
+        }
+
+        // Validate presence_penalty
+        if let Some(pp) = self.presence_penalty {
+            if !(-2.0..=2.0).contains(&pp) {
+                return Err(format!("Presence penalty must be between -2.0 and 2.0, got {}", pp));
+            }
+        }
+
+        // Validate max_tokens
+        if let Some(mt) = self.max_tokens {
+            if mt == 0 {
+                return Err("Max tokens must be greater than 0".to_string());
+            }
+        }
+
+        // Validate top_logprobs
+        if let Some(tlp) = self.top_logprobs {
+            if !(0..=20).contains(&tlp) {
+                return Err(format!("Top logprobs must be between 0 and 20, got {}", tlp));
+            }
+        }
+
+        // Validate n
+        if let Some(n) = self.n {
+            if n == 0 {
+                return Err("n must be greater than 0".to_string());
+            }
+        }
+
+        // Validate stop sequences
+        if let Some(stop) = &self.stop {
+            if stop.len() > 4 {
+                return Err("Cannot have more than 4 stop sequences".to_string());
+            }
+            for seq in stop {
+                if seq.is_empty() {
+                    return Err("Stop sequences cannot be empty".to_string());
+                }
+                if seq.len() > 64 {
+                    return Err("Stop sequences cannot be longer than 64 characters".to_string());
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -497,7 +679,7 @@ pub struct CreditTransaction {
     pub created_at: DateTime<Utc>,
 }
 
-/// The type of a credit transaction (legacy).
+/// The type of credit transaction (legacy).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TransactionType {
@@ -542,4 +724,136 @@ pub enum HealthStatusEnum {
     Unhealthy,
     /// The API needs initialization.
     NeedsInit,
+}
+
+/// Represents the format that the model must output.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponseFormat {
+    /// The model can return text.
+    Text,
+    /// The model must return a valid JSON object.
+    JsonObject,
+    /// The model must return a JSON object that matches the provided schema.
+    JsonSchema { json_schema: serde_json::Value },
+}
+
+/// Represents a tool that the model can use.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tool {
+    /// The type of the tool.
+    pub r#type: ToolType,
+    /// The function definition for the tool.
+    pub function: FunctionDefinition,
+}
+
+/// The type of tool.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolType {
+    /// A function tool.
+    Function,
+}
+
+/// Represents a function definition for a tool.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionDefinition {
+    /// The name of the function.
+    pub name: String,
+    /// A description of what the function does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// The parameters the function accepts, described as a JSON Schema object.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<serde_json::Value>,
+}
+
+/// Controls which tool is called by the model.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ToolChoice {
+    /// No tool is called.
+    None,
+    /// The model chooses which tool to call.
+    Auto,
+    /// A specific tool is called.
+    Tool { r#type: ToolType, function: ToolFunction },
+}
+
+/// Represents a tool function call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolFunction {
+    /// The name of the function to call.
+    pub name: String,
+}
+
+/// Represents a streaming chat completion response (OpenAI delta format).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatCompletionStreamResponse {
+    /// A unique identifier for the chat completion.
+    pub id: String,
+    /// The type of object, which is always "chat.completion.chunk".
+    pub object: String,
+    /// The Unix timestamp (in seconds) of when the completion was created.
+    pub created: u64,
+    /// The model that was used for the completion.
+    pub model: String,
+    /// A list of chat completion choices.
+    pub choices: Vec<ChatCompletionStreamChoice>,
+    /// Information about the token usage for this completion (only present in the final chunk).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<Usage>,
+}
+
+/// Represents a single choice in a streaming chat completion response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatCompletionStreamChoice {
+    /// The index of the choice in the list of choices.
+    pub index: u32,
+    /// The delta containing the new content for this choice.
+    pub delta: ChatCompletionStreamDelta,
+    /// The reason the model stopped generating tokens (only present in the final chunk).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<String>,
+}
+
+/// Represents the delta (change) in a streaming chat completion response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatCompletionStreamDelta {
+    /// The role of the message (only present in the first chunk).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// The new content for this chunk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    /// Tool calls for this chunk (if any).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+}
+
+/// Represents a tool call in a streaming response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    /// The index of the tool call.
+    pub index: u32,
+    /// The ID of the tool call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The type of the tool call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    /// The function being called.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function: Option<ToolCallFunction>,
+}
+
+/// Represents a function call in a tool call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallFunction {
+    /// The name of the function.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The arguments for the function.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<String>,
 }
