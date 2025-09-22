@@ -120,9 +120,9 @@ mod tests {
     #[test]
     fn test_model_constants() {
         // Test new provider-prefixed constants
-        assert_eq!(OPENAI_GPT_4O, "openai/gpt-4o");
-        assert_eq!(GOOGLE_GEMINI_2_5_PRO, "google/gemini-2.5-pro");
-        assert_eq!(GROQ_LLAMA_3_1_8B_INSTANT, "groq/llama-3.1-8b-instant");
+        assert_eq!(OPENAI_GPT_4O, "gpt-4o");
+        assert_eq!(GOOGLE_GEMINI_2_5_PRO, "gemini-2.5-pro");
+        assert_eq!(GROQ_LLAMA_3_1_8B_INSTANT, "llama-3.1-8b-instant");
         assert_eq!(CEREBRAS_LLAMA3_1_8B, "cerebras/llama3.1-8b");
 
         // Test legacy constants (deprecated but still available)
