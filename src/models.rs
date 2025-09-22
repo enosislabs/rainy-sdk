@@ -482,7 +482,10 @@ impl ChatCompletionRequest {
         // Validate temperature
         if let Some(temp) = self.temperature {
             if !(0.0..=2.0).contains(&temp) {
-                return Err(format!("Temperature must be between 0.0 and 2.0, got {}", temp));
+                return Err(format!(
+                    "Temperature must be between 0.0 and 2.0, got {}",
+                    temp
+                ));
             }
         }
 
@@ -496,14 +499,20 @@ impl ChatCompletionRequest {
         // Validate frequency_penalty
         if let Some(fp) = self.frequency_penalty {
             if !(-2.0..=2.0).contains(&fp) {
-                return Err(format!("Frequency penalty must be between -2.0 and 2.0, got {}", fp));
+                return Err(format!(
+                    "Frequency penalty must be between -2.0 and 2.0, got {}",
+                    fp
+                ));
             }
         }
 
         // Validate presence_penalty
         if let Some(pp) = self.presence_penalty {
             if !(-2.0..=2.0).contains(&pp) {
-                return Err(format!("Presence penalty must be between -2.0 and 2.0, got {}", pp));
+                return Err(format!(
+                    "Presence penalty must be between -2.0 and 2.0, got {}",
+                    pp
+                ));
             }
         }
 
@@ -517,7 +526,10 @@ impl ChatCompletionRequest {
         // Validate top_logprobs
         if let Some(tlp) = self.top_logprobs {
             if !(0..=20).contains(&tlp) {
-                return Err(format!("Top logprobs must be between 0 and 20, got {}", tlp));
+                return Err(format!(
+                    "Top logprobs must be between 0 and 20, got {}",
+                    tlp
+                ));
             }
         }
 
@@ -777,7 +789,10 @@ pub enum ToolChoice {
     /// The model chooses which tool to call.
     Auto,
     /// A specific tool is called.
-    Tool { r#type: ToolType, function: ToolFunction },
+    Tool {
+        r#type: ToolType,
+        function: ToolFunction,
+    },
 }
 
 /// Represents a tool function call.
