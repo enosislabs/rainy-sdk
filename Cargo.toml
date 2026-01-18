@@ -11,7 +11,7 @@ documentation = "https://docs.rs/rainy-sdk"
 readme = "README.md"
 keywords = ["ai", "api", "openai", "anthropic", "gemini"]
 categories = ["api-bindings", "asynchronous", "web-programming::http-client"]
-rust-version = "1.75.0"
+rust-version = "1.92.0"
 
 # Package metadata for better crates.io presentation
 [package.metadata.docs.rs]
