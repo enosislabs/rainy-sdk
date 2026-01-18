@@ -31,11 +31,12 @@
 use serde::{Deserialize, Serialize};
 
 /// Subscription tier for Rainy Cowork
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CoworkTier {
     /// Free tier - no API key or invalid/expired key
     /// Users must provide their own Gemini API key
+    #[default]
     Free,
 
     /// Basic tier - valid Rainy API key
@@ -49,12 +50,6 @@ pub enum CoworkTier {
     /// Enterprise tier - custom enterprise agreement
     /// Unlimited access, priority support, custom integrations
     Enterprise,
-}
-
-impl Default for CoworkTier {
-    fn default() -> Self {
-        Self::Free
-    }
 }
 
 impl CoworkTier {

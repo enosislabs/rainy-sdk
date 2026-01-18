@@ -71,6 +71,7 @@ pub use retry::{retry_with_backoff, RetryConfig};
 
 // Re-export Cowork types for convenience
 pub use cowork::{CoworkCapabilities, CoworkFeatures, CoworkLimits, CoworkTier};
+pub use endpoints::cowork::get_offline_capabilities;
 
 // Re-export commonly used types
 /// Re-export of the `reqwest` crate for convenience.
