@@ -1,190 +1,106 @@
 //! Cowork Integration Module
 //!
-//! This module provides types and functionality for Rainy Cowork integration,
-//! including subscription tiers, capabilities, and feature gating.
-//!
-//! # Architecture
-//!
-//! The Cowork module acts as a gatekeeper for premium features:
-//! - Validates API keys and determines subscription tier
-//! - Controls access to models based on tier
-//! - Gates premium features (web research, document export, etc.)
-//!
-//! # Example
-//!
-//! ```rust,no_run
-//! use rainy_sdk::{RainyClient, cowork::CoworkCapabilities};
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let client = RainyClient::with_api_key("your-api-key")?;
-//!     let caps = client.get_cowork_capabilities().await?;
-//!     
-//!     println!("Tier: {:?}", caps.tier);
-//!     println!("Available models: {:?}", caps.models);
-//!     println!("Web research: {}", caps.features.web_research);
-//!     
-//!     Ok(())
-//! }
-//! ```
+//! This module provides types for Rainy Cowork integration.
+//! All business logic (pricing, limits, features) comes from the API.
 
 use serde::{Deserialize, Serialize};
 
-/// Subscription tier for Rainy Cowork
+/// Subscription plan for Rainy Cowork
+///
+/// The actual plan details (pricing, limits) are returned by the API.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CoworkTier {
-    /// Free tier - no API key or invalid/expired key
-    /// Users must provide their own Gemini API key
+#[serde(rename_all = "snake_case")]
+pub enum CoworkPlan {
     #[default]
     Free,
-
-    /// Basic tier - valid Rainy API key
-    /// Access to standard models with usage limits
-    Basic,
-
-    /// Pro tier - paid subscription
-    /// Full access to all models and features
+    GoPlus,
+    Plus,
     Pro,
-
-    /// Enterprise tier - custom enterprise agreement
-    /// Unlimited access, priority support, custom integrations
-    Enterprise,
+    ProPlus,
 }
 
-impl CoworkTier {
-    /// Check if this tier has premium access
-    pub fn is_premium(&self) -> bool {
-        !matches!(self, CoworkTier::Free)
+impl CoworkPlan {
+    /// Check if this plan requires payment
+    pub fn is_paid(&self) -> bool {
+        !matches!(self, CoworkPlan::Free)
     }
 
-    /// Check if this tier has full model access
-    pub fn has_full_model_access(&self) -> bool {
-        matches!(self, CoworkTier::Pro | CoworkTier::Enterprise)
+    /// Get user-friendly display name
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            CoworkPlan::Free => "Free",
+            CoworkPlan::GoPlus => "Go+",
+            CoworkPlan::Plus => "Plus",
+            CoworkPlan::Pro => "Pro",
+            CoworkPlan::ProPlus => "Pro Plus",
+        }
     }
 }
 
-/// Feature flags for Cowork capabilities
+/// Feature flags for Cowork capabilities (returned by API)
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CoworkFeatures {
-    /// Can use web browsing and research features
+    #[serde(default)]
     pub web_research: bool,
-
-    /// Can export documents (PDF, DOCX)
+    #[serde(default)]
     pub document_export: bool,
-
-    /// Can use AI image analysis
+    #[serde(default)]
     pub image_analysis: bool,
-
-    /// Can use advanced automation workflows
-    pub automation: bool,
-
-    /// Can use priority queue for faster processing
-    pub priority_queue: bool,
-
-    /// Can access beta features
-    pub beta_features: bool,
+    #[serde(default)]
+    pub priority_support: bool,
 }
 
-impl CoworkFeatures {
-    /// Create features for free tier
-    pub fn free() -> Self {
-        Self::default()
-    }
-
-    /// Create features for basic tier
-    pub fn basic() -> Self {
-        Self {
-            web_research: false,
-            document_export: false,
-            image_analysis: false,
-            automation: false,
-            priority_queue: false,
-            beta_features: false,
-        }
-    }
-
-    /// Create features for pro tier
-    pub fn pro() -> Self {
-        Self {
-            web_research: true,
-            document_export: true,
-            image_analysis: true,
-            automation: true,
-            priority_queue: true,
-            beta_features: false,
-        }
-    }
-
-    /// Create features for enterprise tier
-    pub fn enterprise() -> Self {
-        Self {
-            web_research: true,
-            document_export: true,
-            image_analysis: true,
-            automation: true,
-            priority_queue: true,
-            beta_features: true,
-        }
-    }
-}
-
-/// Usage limits for the current billing period
+/// Usage tracking for the current billing period (returned by API)
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CoworkLimits {
-    /// Maximum tasks per day (None = unlimited)
-    pub max_tasks_per_day: Option<u32>,
-
-    /// Tasks used today
-    pub tasks_used_today: u32,
-
-    /// Maximum tokens per request (None = unlimited)
-    pub max_tokens_per_request: Option<u32>,
-
-    /// Maximum file size for processing in bytes
-    pub max_file_size_bytes: Option<u64>,
+pub struct CoworkUsage {
+    #[serde(rename = "type", default)]
+    pub usage_type: String,
+    #[serde(default)]
+    pub used: u32,
+    #[serde(default)]
+    pub limit: u32,
+    #[serde(default)]
+    pub credits_used: f32,
+    #[serde(default)]
+    pub credits_ceiling: f32,
+    #[serde(default)]
+    pub resets_at: String,
 }
 
-impl CoworkLimits {
-    /// Check if daily task limit is reached
-    pub fn is_task_limit_reached(&self) -> bool {
-        match self.max_tasks_per_day {
-            Some(max) => self.tasks_used_today >= max,
-            None => false,
-        }
+impl CoworkUsage {
+    /// Check if monthly usage limit is reached
+    pub fn is_limit_reached(&self) -> bool {
+        self.used >= self.limit
     }
 
-    /// Get remaining tasks for today
-    pub fn remaining_tasks(&self) -> Option<u32> {
-        self.max_tasks_per_day
-            .map(|max| max.saturating_sub(self.tasks_used_today))
+    /// Check if credit ceiling is reached
+    pub fn is_over_budget(&self) -> bool {
+        self.credits_ceiling > 0.0 && self.credits_used >= self.credits_ceiling
+    }
+
+    /// Get remaining uses
+    pub fn remaining(&self) -> u32 {
+        self.limit.saturating_sub(self.used)
     }
 }
 
-/// Complete capabilities for a Cowork session
+/// Complete capabilities for a Cowork session (returned by API)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoworkCapabilities {
-    /// The subscription tier
-    pub tier: CoworkTier,
-
-    /// Available AI models for this tier
-    pub models: Vec<String>,
-
-    /// Feature flags
-    pub features: CoworkFeatures,
-
-    /// Usage limits
-    pub limits: CoworkLimits,
-
-    /// Whether the API key is valid
+    #[serde(default)]
+    pub plan: CoworkPlan,
+    #[serde(default)]
+    pub plan_name: String,
+    #[serde(default)]
     pub is_valid: bool,
-
-    /// Expiration date for the subscription (if applicable)
+    #[serde(default)]
+    pub usage: CoworkUsage,
+    #[serde(default)]
+    pub models: Vec<String>,
+    #[serde(default)]
+    pub features: CoworkFeatures,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<String>,
-
-    /// Human-readable tier name
-    pub tier_name: String,
+    pub upgrade_message: Option<String>,
 }
 
 impl Default for CoworkCapabilities {
@@ -194,96 +110,17 @@ impl Default for CoworkCapabilities {
 }
 
 impl CoworkCapabilities {
-    /// Create capabilities for free tier (no API key)
+    /// Create capabilities for free plan (offline/fallback)
     pub fn free() -> Self {
         Self {
-            tier: CoworkTier::Free,
+            plan: CoworkPlan::Free,
+            plan_name: "Free".to_string(),
+            is_valid: true,
+            usage: CoworkUsage::default(),
             models: vec![],
-            features: CoworkFeatures::free(),
-            limits: CoworkLimits {
-                max_tasks_per_day: Some(5),
-                tasks_used_today: 0,
-                max_tokens_per_request: Some(4096),
-                max_file_size_bytes: Some(1024 * 1024), // 1MB
-            },
-            is_valid: false,
-            expires_at: None,
-            tier_name: "Free".to_string(),
+            features: CoworkFeatures::default(),
+            upgrade_message: None,
         }
-    }
-
-    /// Create capabilities for basic tier
-    pub fn basic() -> Self {
-        use crate::models::model_constants;
-
-        Self {
-            tier: CoworkTier::Basic,
-            models: vec![
-                model_constants::OPENAI_GPT_4O.to_string(),
-                model_constants::GOOGLE_GEMINI_2_5_FLASH.to_string(),
-                model_constants::GOOGLE_GEMINI_2_5_FLASH_LITE.to_string(),
-                model_constants::GROQ_LLAMA_3_1_8B_INSTANT.to_string(),
-            ],
-            features: CoworkFeatures::basic(),
-            limits: CoworkLimits {
-                max_tasks_per_day: Some(50),
-                tasks_used_today: 0,
-                max_tokens_per_request: Some(16384),
-                max_file_size_bytes: Some(10 * 1024 * 1024), // 10MB
-            },
-            is_valid: true,
-            expires_at: None,
-            tier_name: "Basic".to_string(),
-        }
-    }
-
-    /// Create capabilities for pro tier
-    pub fn pro() -> Self {
-        use crate::models::model_constants;
-
-        Self {
-            tier: CoworkTier::Pro,
-            models: vec![
-                // OpenAI
-                model_constants::OPENAI_GPT_4O.to_string(),
-                model_constants::OPENAI_GPT_5.to_string(),
-                model_constants::OPENAI_GPT_5_PRO.to_string(),
-                model_constants::OPENAI_O3.to_string(),
-                model_constants::OPENAI_O4_MINI.to_string(),
-                // Google
-                model_constants::GOOGLE_GEMINI_2_5_PRO.to_string(),
-                model_constants::GOOGLE_GEMINI_2_5_FLASH.to_string(),
-                model_constants::GOOGLE_GEMINI_2_5_FLASH_LITE.to_string(),
-                // Groq
-                model_constants::GROQ_LLAMA_3_1_8B_INSTANT.to_string(),
-                model_constants::GROQ_LLAMA_3_3_70B_VERSATILE.to_string(),
-                // Cerebras
-                model_constants::CEREBRAS_LLAMA3_1_8B.to_string(),
-                // Enosis
-                model_constants::ASTRONOMER_2.to_string(),
-                model_constants::ASTRONOMER_2_PRO.to_string(),
-            ],
-            features: CoworkFeatures::pro(),
-            limits: CoworkLimits {
-                max_tasks_per_day: None, // Unlimited
-                tasks_used_today: 0,
-                max_tokens_per_request: None, // Unlimited
-                max_file_size_bytes: Some(100 * 1024 * 1024), // 100MB
-            },
-            is_valid: true,
-            expires_at: None,
-            tier_name: "Pro".to_string(),
-        }
-    }
-
-    /// Create capabilities for enterprise tier
-    pub fn enterprise() -> Self {
-        let mut caps = Self::pro();
-        caps.tier = CoworkTier::Enterprise;
-        caps.features = CoworkFeatures::enterprise();
-        caps.limits.max_file_size_bytes = None; // Unlimited
-        caps.tier_name = "Enterprise".to_string();
-        caps
     }
 
     /// Check if a specific model is available
@@ -297,66 +134,56 @@ impl CoworkCapabilities {
             "web_research" => self.features.web_research,
             "document_export" => self.features.document_export,
             "image_analysis" => self.features.image_analysis,
-            "automation" => self.features.automation,
-            "priority_queue" => self.features.priority_queue,
-            "beta_features" => self.features.beta_features,
+            "priority_support" => self.features.priority_support,
             _ => false,
         }
     }
+
+    /// Check if user can make more requests
+    pub fn can_make_request(&self) -> bool {
+        self.is_valid && !self.usage.is_limit_reached() && !self.usage.is_over_budget()
+    }
 }
 
-/// Response from the Cowork capabilities API
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct CoworkCapabilitiesResponse {
-    pub tier: CoworkTier,
-    pub tier_name: String,
-    pub models: Vec<String>,
-    pub features: CoworkFeatures,
-    pub limits: CoworkLimits,
-    #[serde(default)]
-    pub expires_at: Option<String>,
-}
+/// Backward compatibility alias
+#[deprecated(since = "0.4.2", note = "Use CoworkPlan instead")]
+pub type CoworkTier = CoworkPlan;
+
+/// Backward compatibility alias
+#[deprecated(since = "0.4.2", note = "Use CoworkUsage instead")]
+pub type CoworkLimits = CoworkUsage;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_tier_is_premium() {
-        assert!(!CoworkTier::Free.is_premium());
-        assert!(CoworkTier::Basic.is_premium());
-        assert!(CoworkTier::Pro.is_premium());
-        assert!(CoworkTier::Enterprise.is_premium());
+    fn test_plan_is_paid() {
+        assert!(!CoworkPlan::Free.is_paid());
+        assert!(CoworkPlan::GoPlus.is_paid());
+        assert!(CoworkPlan::Plus.is_paid());
+        assert!(CoworkPlan::Pro.is_paid());
+        assert!(CoworkPlan::ProPlus.is_paid());
     }
 
     #[test]
     fn test_capabilities_free() {
         let caps = CoworkCapabilities::free();
-        assert_eq!(caps.tier, CoworkTier::Free);
+        assert_eq!(caps.plan, CoworkPlan::Free);
         assert!(caps.models.is_empty());
-        assert!(!caps.features.web_research);
     }
 
     #[test]
-    fn test_capabilities_pro() {
-        let caps = CoworkCapabilities::pro();
-        assert_eq!(caps.tier, CoworkTier::Pro);
-        assert!(!caps.models.is_empty());
-        assert!(caps.features.web_research);
-        assert!(caps.features.document_export);
-    }
-
-    #[test]
-    fn test_limits_reached() {
-        let mut limits = CoworkLimits {
-            max_tasks_per_day: Some(5),
-            tasks_used_today: 5,
-            max_tokens_per_request: None,
-            max_file_size_bytes: None,
+    fn test_usage_limits() {
+        let usage = CoworkUsage {
+            usage_type: "monthly".to_string(),
+            used: 30,
+            limit: 30,
+            credits_used: 0.0,
+            credits_ceiling: 0.0,
+            resets_at: String::new(),
         };
-        assert!(limits.is_task_limit_reached());
-
-        limits.tasks_used_today = 4;
-        assert!(!limits.is_task_limit_reached());
+        assert!(usage.is_limit_reached());
+        assert_eq!(usage.remaining(), 0);
     }
 }

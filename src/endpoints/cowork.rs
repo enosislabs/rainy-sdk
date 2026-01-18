@@ -1,22 +1,36 @@
 //! Cowork endpoint for retrieving subscription capabilities
 //!
 //! This endpoint validates the API key and returns the user's
-//! Cowork tier, available models, and feature access.
+//! Cowork plan, available models, and feature access.
 
 use crate::{
-    cowork::{CoworkCapabilities, CoworkCapabilitiesResponse, CoworkTier},
+    cowork::{CoworkCapabilities, CoworkFeatures, CoworkPlan, CoworkUsage},
     error::Result,
     RainyClient,
 };
+use serde::Deserialize;
+
+/// Response from the Cowork capabilities API
+#[derive(Debug, Clone, Deserialize)]
+struct CoworkCapabilitiesResponse {
+    plan: CoworkPlan,
+    plan_name: String,
+    is_valid: bool,
+    usage: CoworkUsage,
+    models: Vec<String>,
+    features: CoworkFeatures,
+    #[serde(default)]
+    upgrade_message: Option<String>,
+}
 
 impl RainyClient {
     /// Retrieve Cowork capabilities for the current API key.
     ///
     /// This method validates the API key and returns information about:
-    /// - Subscription tier (Free, Basic, Pro, Enterprise)
+    /// - Subscription plan (Free, GoPlus, Plus, Pro, ProPlus)
     /// - Available AI models
     /// - Feature access (web research, document export, etc.)
-    /// - Usage limits
+    /// - Usage tracking
     ///
     /// # Returns
     ///
@@ -30,10 +44,10 @@ impl RainyClient {
     /// let client = RainyClient::with_api_key("your-api-key")?;
     /// let caps = client.get_cowork_capabilities().await?;
     ///
-    /// if caps.tier.is_premium() {
-    ///     println!("Premium user with {} models available", caps.models.len());
+    /// if caps.plan.is_paid() {
+    ///     println!("Paid plan with {} models available", caps.models.len());
     /// } else {
-    ///     println!("Free tier - please upgrade for more features");
+    ///     println!("Free plan - upgrade for more features");
     /// }
     /// # Ok(())
     /// # }
@@ -50,46 +64,46 @@ impl RainyClient {
                         self.handle_response(resp).await?;
 
                     Ok(CoworkCapabilities {
-                        tier: caps_response.tier,
-                        tier_name: caps_response.tier_name,
+                        plan: caps_response.plan,
+                        plan_name: caps_response.plan_name,
+                        is_valid: caps_response.is_valid,
+                        usage: caps_response.usage,
                         models: caps_response.models,
                         features: caps_response.features,
-                        limits: caps_response.limits,
-                        is_valid: true,
-                        expires_at: caps_response.expires_at,
+                        upgrade_message: caps_response.upgrade_message,
                     })
                 } else {
-                    // Invalid or expired API key - return free tier
+                    // Invalid or expired API key - return free plan
                     Ok(CoworkCapabilities::free())
                 }
             }
             Err(_) => {
-                // Network error or API unavailable - return free tier
+                // Network error or API unavailable - return free plan
                 Ok(CoworkCapabilities::free())
             }
         }
     }
 
-    /// Check if the current API key grants premium access.
+    /// Check if the current API key grants paid access.
     ///
     /// This is a convenience method that calls `get_cowork_capabilities()`
-    /// and checks if the tier is not Free.
+    /// and checks if the plan is not Free.
     ///
     /// # Returns
     ///
-    /// `true` if the user has premium (Basic, Pro, or Enterprise) access.
-    pub async fn is_premium(&self) -> bool {
+    /// `true` if the user has a paid plan (GoPlus, Plus, Pro, or ProPlus).
+    pub async fn has_paid_plan(&self) -> bool {
         match self.get_cowork_capabilities().await {
-            Ok(caps) => caps.tier.is_premium(),
+            Ok(caps) => caps.plan.is_paid(),
             Err(_) => false,
         }
     }
 
-    /// Get available models for Cowork based on subscription tier.
+    /// Get available models for Cowork based on subscription plan.
     ///
     /// # Returns
     ///
-    /// A vector of model identifiers available for the current tier.
+    /// A vector of model identifiers available for the current plan.
     pub async fn get_cowork_models(&self) -> Result<Vec<String>> {
         let caps = self.get_cowork_capabilities().await?;
         Ok(caps.models)
@@ -103,7 +117,7 @@ impl RainyClient {
     ///
     /// # Returns
     ///
-    /// `true` if the feature is available for the current tier.
+    /// `true` if the feature is available for the current plan.
     pub async fn can_use_feature(&self, feature: &str) -> bool {
         match self.get_cowork_capabilities().await {
             Ok(caps) => caps.can_use_feature(feature),
@@ -111,7 +125,7 @@ impl RainyClient {
         }
     }
 
-    /// Check if a specific model is available for the current tier.
+    /// Check if a specific model is available for the current plan.
     ///
     /// # Arguments
     ///
@@ -119,24 +133,45 @@ impl RainyClient {
     ///
     /// # Returns
     ///
-    /// `true` if the model is available for the current tier.
+    /// `true` if the model is available for the current plan.
     pub async fn can_use_model(&self, model: &str) -> bool {
         match self.get_cowork_capabilities().await {
             Ok(caps) => caps.can_use_model(model),
             Err(_) => false,
         }
     }
+
+    /// Check if user can make another request based on usage limits.
+    pub async fn can_make_request(&self) -> bool {
+        match self.get_cowork_capabilities().await {
+            Ok(caps) => caps.can_make_request(),
+            Err(_) => false,
+        }
+    }
 }
 
-/// Offline tier detection based on cached data.
+/// Offline capabilities based on cached plan data.
 ///
 /// This can be used when network is unavailable to provide
-/// a degraded experience based on previously cached tier info.
-pub fn get_offline_capabilities(cached_tier: Option<CoworkTier>) -> CoworkCapabilities {
-    match cached_tier {
-        Some(CoworkTier::Enterprise) => CoworkCapabilities::enterprise(),
-        Some(CoworkTier::Pro) => CoworkCapabilities::pro(),
-        Some(CoworkTier::Basic) => CoworkCapabilities::basic(),
+/// a degraded experience based on previously cached plan info.
+pub fn get_offline_capabilities(cached_plan: Option<CoworkPlan>) -> CoworkCapabilities {
+    match cached_plan {
+        Some(CoworkPlan::ProPlus)
+        | Some(CoworkPlan::Pro)
+        | Some(CoworkPlan::Plus)
+        | Some(CoworkPlan::GoPlus) => {
+            // For paid plans, we can't know exact capabilities offline
+            // Return a minimal valid state
+            CoworkCapabilities {
+                plan: cached_plan.unwrap(),
+                plan_name: cached_plan.unwrap().display_name().to_string(),
+                is_valid: true,
+                usage: CoworkUsage::default(),
+                models: vec!["gemini-2.5-flash".to_string()],
+                features: CoworkFeatures::default(),
+                upgrade_message: None,
+            }
+        }
         _ => CoworkCapabilities::free(),
     }
 }
