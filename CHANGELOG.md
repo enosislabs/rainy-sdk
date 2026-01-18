@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-01-18
+
+### 🎯 Major Feature: Cowork Integration
+
+Rainy SDK v0.4.0 introduces **Cowork Integration** - a tier-based feature gating system designed for Rainy Cowork and other client applications. The SDK now acts as the gatekeeper for premium features.
+
+#### Added
+
+##### Cowork Module (`src/cowork.rs`)
+
+- **`CoworkTier`**: Subscription tier enum (Free, Basic, Pro, Enterprise)
+- **`CoworkCapabilities`**: Complete capabilities structure including:
+  - Available AI models per tier
+  - Feature flags
+  - Usage limits
+  - Validity status
+- **`CoworkFeatures`**: Feature flag struct for premium features:
+  - `web_research`: Web browsing and research
+  - `document_export`: PDF/DOCX export
+  - `image_analysis`: AI vision capabilities
+  - `automation`: Advanced workflows
+  - `priority_queue`: Faster processing
+  - `beta_features`: Early access
+- **`CoworkLimits`**: Usage limits per tier:
+  - `max_tasks_per_day`
+  - `max_tokens_per_request`
+  - `max_file_size_bytes`
+
+##### New Client Methods
+
+- **`get_cowork_capabilities()`**: Validate API key and retrieve tier info
+- **`is_premium()`**: Quick check for premium access
+- **`can_use_feature(feature)`**: Check specific feature availability
+- **`can_use_model(model)`**: Check model availability for tier
+- **`get_cowork_models()`**: Get models available for current tier
+
+##### Tier-Based Model Access
+
+| Tier | Models |
+|------|--------|
+| Free | None (use own Gemini key) |
+| Basic | GPT-4o, Gemini Flash, Llama 3.1 |
+| Pro | All models including GPT-5, Gemini Pro |
+| Enterprise | Full access + beta models |
+
+#### Changed
+
+- **Feature Flags**: Added `cowork` feature (default enabled)
+- **Re-exports**: `CoworkCapabilities`, `CoworkFeatures`, `CoworkLimits`, `CoworkTier` exported at crate root
+
+#### Technical Details
+
+- New endpoint: `/api/v1/cowork/capabilities`
+- Graceful fallback to Free tier on network errors
+- 4 new unit tests for cowork module
+
+---
+
 ## [0.3.0] - 2025-09-22
 
 ### 🎯 Major Enhancement: Full OpenAI Compatibility

@@ -52,6 +52,8 @@
 pub mod auth;
 /// The main client for interacting with the Rainy API.
 pub mod client;
+/// Cowork integration: tiers, capabilities, and feature gating.
+pub mod cowork;
 /// Defines error types and result aliases for the SDK.
 pub mod error;
 /// Contains the data models for API requests and responses.
@@ -66,6 +68,9 @@ pub use client::RainyClient;
 pub use error::{ApiErrorDetails, ApiErrorResponse, RainyError, Result};
 pub use models::*;
 pub use retry::{retry_with_backoff, RetryConfig};
+
+// Re-export Cowork types for convenience
+pub use cowork::{CoworkCapabilities, CoworkFeatures, CoworkLimits, CoworkTier};
 
 // Re-export commonly used types
 /// Re-export of the `reqwest` crate for convenience.
