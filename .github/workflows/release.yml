@@ -3,7 +3,12 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.5.0)'
+        required: true
 
 env:
   CARGO_TERM_COLOR: always
