@@ -662,13 +662,12 @@ impl ChatCompletionRequest {
                             .to_string(),
                     );
                 }
-            } else if self.model.contains("2.5-flash") {
-                if budget != -1 && !(0..=24576).contains(&budget) {
-                    return Err(
-                        "Gemini 2.5 Flash thinking budget must be -1 (dynamic) or between 0-24576"
-                            .to_string(),
-                    );
-                }
+            } else if self.model.contains("2.5-flash")
+                && budget != -1 && !(0..=24576).contains(&budget) {
+                return Err(
+                    "Gemini 2.5 Flash thinking budget must be -1 (dynamic) or between 0-24576"
+                        .to_string(),
+                );
             }
         }
 
