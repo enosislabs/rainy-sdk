@@ -123,7 +123,7 @@ async fn main() -> Result<(), RainyError> {
     println!("4. Using enhanced message format:");
 
     // Simulate a conversation with thought signatures
-    let enhanced_messages = vec![
+    let enhanced_messages = [
         EnhancedChatMessage::user("What's the best approach to solve climate change?"),
         EnhancedChatMessage::with_parts(
             rainy_sdk::models::MessageRole::Assistant,
