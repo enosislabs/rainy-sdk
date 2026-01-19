@@ -7,6 +7,218 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - 2025-01-19
+
+### 🚀 Major Feature: Gemini 3 Models with Advanced Thinking Capabilities
+
+Rainy SDK v0.5.0 introduces **complete support for Google's Gemini 3 model family** with advanced thinking capabilities, thought signatures, and enhanced reasoning features.
+
+#### Added
+
+##### New Gemini 3 Models
+
+- **`GOOGLE_GEMINI_3_PRO`**: `gemini-3-pro-preview` - Advanced reasoning with thinking capabilities
+- **`GOOGLE_GEMINI_3_FLASH`**: `gemini-3-flash-preview` - Fast, intelligent responses with multimodal support
+- **`GOOGLE_GEMINI_3_PRO_IMAGE`**: `gemini-3-pro-image-preview` - Native image generation with contextual understanding
+
+##### Thinking Capabilities (`ThinkingConfig`)
+
+- **`ThinkingLevel`**: Control reasoning depth (Minimal, Low, Medium, High)
+  - Gemini 3 Pro: Low, High
+  - Gemini 3 Flash: Minimal, Low, Medium, High
+- **`thinking_budget`**: Token budget control for Gemini 2.5 models (-1 for dynamic, 0 to disable)
+- **`include_thoughts`**: Enable/disable thought summaries in responses
+- **Predefined Configurations**:
+  - `ThinkingConfig::high_reasoning()` - Optimized for complex tasks
+  - `ThinkingConfig::fast_response()` - Optimized for speed
+  - `ThinkingConfig::gemini_3()` - Gemini 3 specific configuration
+  - `ThinkingConfig::gemini_2_5()` - Gemini 2.5 specific configuration
+
+##### Thought Signatures Support
+
+- **`ContentPart`**: Enhanced content structure supporting:
+  - Text content
+  - Function calls with arguments
+  - Function responses
+  - Thought signatures (encrypted reasoning context)
+  - Thought markers for reasoning content
+- **`EnhancedChatMessage`**: Multi-part messages with thought signature preservation
+- **Automatic Validation**: Required for Gemini 3 function calling
+
+##### Enhanced Usage Statistics
+
+- **`EnhancedUsage`**: Extended usage tracking including:
+  - `prompt_tokens`: Input token count
+  - `completion_tokens`: Output token count
+  - `total_tokens`: Combined token count
+  - `thoughts_token_count`: Thinking tokens used (Gemini 3 & 2.5)
+
+##### New Request Methods
+
+- **`with_thinking_config()`**: Set complete thinking configuration
+- **`with_thinking_level()`**: Set thinking level directly
+- **`with_thinking_budget()`**: Set thinking budget for Gemini 2.5
+- **`with_include_thoughts()`**: Enable thought summaries
+- **`supports_thinking()`**: Check if model supports thinking
+- **`requires_thought_signatures()`**: Check if model requires signatures
+
+##### Enhanced Validation
+
+- **`validate_thinking_config()`**: Validate thinking parameters for specific models
+- **Gemini 3 Pro Validation**: Ensures only 'low' and 'high' levels are used
+- **Gemini 3 Flash Validation**: Supports all four thinking levels
+- **Budget Range Validation**: Ensures thinking budgets are within model limits
+- **Conflict Detection**: Prevents mixing thinking_level and thinking_budget
+
+##### Content Part Builders
+
+- **`ContentPart::text()`**: Create text content parts
+- **`ContentPart::function_call()`**: Create function call parts
+- **`ContentPart::function_response()`**: Create function response parts
+- **`with_thought_signature()`**: Add encrypted thought signature
+- **`as_thought()`**: Mark content as thought/reasoning
+
+##### Enhanced Message Builders
+
+- **`EnhancedChatMessage::system()`**: Create system messages
+- **`EnhancedChatMessage::user()`**: Create user messages
+- **`EnhancedChatMessage::assistant()`**: Create assistant messages
+- **`EnhancedChatMessage::with_parts()`**: Create multi-part messages
+
+#### Improved
+
+##### Model Pricing Information
+
+- **Gemini 3 Flash**: $0.50 input / $3.00 output per 1M tokens (+67%/+20% vs 2.5)
+- **Gemini 3 Pro**: $2.00 input / $12.00 output per 1M tokens (+60%/+20% vs 2.5)
+- **Gemini 3 Pro Image**: $2.00 input / $12.00 text output / $120.00 image output per 1M tokens
+
+##### Documentation
+
+- **`GEMINI_3_INTEGRATION.md`**: Comprehensive integration guide in Spanish
+- **`examples/gemini_3_thinking.rs`**: Complete working examples demonstrating:
+  - Complex reasoning with high thinking level
+  - Fast responses with low thinking level
+  - Function calling with thought signatures
+  - Enhanced message format usage
+  - Model capability validation
+- **Inline Documentation**: Extensive doc comments for all new types and methods
+
+##### Type Safety
+
+- **`FunctionCall`**: Structured function call representation
+- **`FunctionResponse`**: Structured function response representation
+- **Derive Traits**: Added `PartialEq` to all content-related types for testing
+
+#### Changed
+
+##### Model Constants Organization
+
+- **Gemini 3 Section**: Clearly separated Gemini 3 models with detailed comments
+- **Enhanced Documentation**: Each model constant includes pricing and capability notes
+
+##### Request Structure
+
+- **`ChatCompletionRequest`**: Added `thinking_config` optional field
+- **Constructor**: Updated to initialize `thinking_config` as `None`
+- **Builder Pattern**: Extended with thinking-related methods
+
+#### Technical Details
+
+##### Thinking Token Pricing
+
+- **Gemini 3 Models**: Thinking tokens included in output pricing
+- **Cost Calculation**: `output_cost = (completion_tokens + thinking_tokens) × rate`
+- **Transparency**: `thoughts_token_count` field provides visibility
+
+##### Thought Signature Requirements
+
+- **Gemini 3 Mandatory**: Thought signatures required for function calling
+- **Gemini 2.5 Optional**: Thought signatures recommended but not required
+- **Validation**: Automatic validation prevents missing signatures in Gemini 3
+
+##### Compatibility
+
+- **Backward Compatible**: All existing code continues to work
+- **Optional Features**: Thinking capabilities are opt-in
+- **Graceful Degradation**: Models without thinking support ignore thinking config
+
+#### Examples
+
+##### Basic Thinking Configuration
+
+```rust
+let request = ChatCompletionRequest::new(
+    GOOGLE_GEMINI_3_PRO,
+    vec![ChatMessage::user("Analyze this complex problem...")]
+)
+.with_thinking_level(ThinkingLevel::High)
+.with_include_thoughts(true);
+```
+
+##### Function Calling with Thought Signatures
+
+```rust
+let message = EnhancedChatMessage::with_parts(
+    MessageRole::Assistant,
+    vec![
+        ContentPart::function_call("get_weather", json!({"city": "Paris"}))
+            .with_thought_signature("encrypted_signature_here"),
+    ]
+);
+```
+
+##### Cost Optimization
+
+```rust
+// Fast response for simple queries
+let fast_config = ThinkingConfig::fast_response();
+
+// Deep reasoning for complex tasks
+let deep_config = ThinkingConfig::high_reasoning();
+```
+
+#### Migration Guide
+
+##### For Existing Users
+
+No breaking changes - all existing code continues to work. New thinking capabilities are opt-in:
+
+```rust
+// Existing code (still works)
+let request = ChatCompletionRequest::new(model, messages);
+
+// Enhanced with thinking (optional)
+let request = request.with_thinking_level(ThinkingLevel::High);
+```
+
+##### For Gemini 2.5 Users
+
+Upgrade to Gemini 3 for enhanced reasoning:
+
+```rust
+// Old: Gemini 2.5
+model_constants::GOOGLE_GEMINI_2_5_PRO
+
+// New: Gemini 3 with thinking
+model_constants::GOOGLE_GEMINI_3_PRO
+```
+
+#### Performance Considerations
+
+- **Thinking Tokens**: Gemini 3 models use additional tokens for reasoning
+- **Cost Impact**: ~60-67% higher input costs, ~20% higher output costs
+- **Quality Improvement**: Significantly better reasoning and problem-solving
+- **Optimization**: Use `ThinkingLevel::Low` for simple tasks to reduce costs
+
+#### Acknowledgments
+
+- **Google AI**: For Gemini 3 models and thinking capabilities
+- **Google Documentation**: For comprehensive thinking and thought signature guides
+- **Community**: For feedback on advanced reasoning requirements
+
+---
+
 ## [0.4.0] - 2026-01-18
 
 ### 🎯 Major Feature: Cowork Integration

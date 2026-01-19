@@ -59,6 +59,4 @@ rust-toolchain.toml
 
 .kilocode
 
-*.md
-
 rainy-api-v2
