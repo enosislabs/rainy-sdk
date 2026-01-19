@@ -1,23 +1,28 @@
-# 🌧️ Rainy SDK v0.3.0
+# 🌧️ Rainy SDK v0.5.1
 
 [![Crates.io](https://img.shields.io/crates/v/rainy-sdk.svg)](https://crates.io/crates/rainy-sdk)
 [![Documentation](https://docs.rs/rainy-sdk/badge.svg)](https://docs.rs/rainy-sdk)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/enosislabs/rainy-sdk)
+[![Rust Version](https://img.shields.io/badge/rust-1.92.0%2B-orange.svg)](https://www.rust-lang.org/)
 
-The official Rust SDK for the **Rainy API by Enosis Labs** - a unified interface for multiple AI providers including OpenAI, Anthropic, Google Gemini, and more.
+The official Rust SDK for the **Rainy API by Enosis Labs** - a unified interface for multiple AI providers including OpenAI, Google Gemini, Groq, Cerebras, and Enosis Labs' own Astronomer models. Features advanced thinking capabilities, multimodal support, thought signatures, and full OpenAI compatibility.
 
 ## ✨ Features
 
-- **🎯 Full OpenAI Compatibility**: Compatibility with the OpenAI SDK system.
-- **🚀 Unified Multi-Provider API**: Single interface for OpenAI, Google Gemini, Groq, Cerebras and others.
-- **🔐 Type-Safe Authentication**: Secure API key management with validation
+- **🎯 Full OpenAI Compatibility**: Drop-in replacement for OpenAI SDK with enhanced features
+- **🚀 Unified Multi-Provider API**: Single interface for OpenAI, Google Gemini, Groq, Cerebras, and Enosis Labs Astronomer models
+- **🧠 Advanced Thinking Capabilities**: Gemini 3 and 2.5 series models with configurable reasoning levels and thought signatures
+- **🔐 Type-Safe Authentication**: Secure API key management with the `secrecy` crate
 - **⚡ Async/Await**: Full async support with Tokio runtime
-- **📊 Rich Metadata**: Response times, provider info, token usage, credit tracking
-- **🛡️ Enhanced Error Handling**: Comprehensive error types with retryability
+- **📊 Rich Metadata**: Response times, provider info, token usage, credit tracking, and thinking token counts
+- **🛡️ Enhanced Error Handling**: Comprehensive error types with retryability and detailed diagnostics
 - **🔄 Intelligent Retry**: Exponential backoff with jitter for resilience
 - **📈 Rate Limiting**: Optional governor-based rate limiting
-- **🔧 Advanced Parameters**: Support for reasoning_effort, response_format, tools, tool_choice
+- **🔧 Advanced Parameters**: Support for response_format, tools, tool_choice, reasoning_effort, logprobs, and streaming
+- **🌐 Web Search Integration**: Built-in Tavily-powered web search with content extraction
+- **👥 Cowork Integration**: Tier-based feature gating with Free/GoPlus/Plus/Pro/ProPlus plans
+- **🎨 Multimodal Support**: Image processing and multimodal capabilities (coming soon)
 - **📚 Rich Documentation**: Complete API documentation with practical examples
 
 ## 📦 Installation
@@ -26,8 +31,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rainy-sdk = "0.2.5"
-tokio = { version = "1.0", features = ["full"] }
+rainy-sdk = "0.5.1"
+tokio = { version = "1.47", features = ["full"] }
 ```
 
 Or installation with cargo:
@@ -36,9 +41,29 @@ Or installation with cargo:
 cargo add rainy-sdk
 ```
 
+### Requirements
+
+- **Rust**: 1.92.0 or later
+- **Platform Support**: macOS, Linux, Windows
+
+### Optional Features
+
+Enable additional features as needed:
+
+```toml
+[dependencies]
+rainy-sdk = { version = "0.5.1", features = ["rate-limiting", "tracing", "cowork"] }
+```
+
+Available features:
+
+- `rate-limiting`: Built-in rate limiting with the `governor` crate
+- `tracing`: Request/response logging with the `tracing` crate
+- `cowork`: Cowork integration for tier-based feature gating (enabled by default)
+
 ## 🎯 OpenAI Compatibility
 
-Rainy SDK v0.3.0 provides **100% OpenAI API compatibility** while extending support to additional providers. Use Rainy SDK as a drop-in replacement for the official OpenAI SDK:
+Rainy SDK v0.5.1 provides **100% OpenAI API compatibility** while extending support to additional providers. Use Rainy SDK as a drop-in replacement for the official OpenAI SDK:
 
 ```rust
 use rainy_sdk::{models, ChatCompletionRequest, ChatMessage, RainyClient};
@@ -58,12 +83,14 @@ let (response, metadata) = client.chat_completion(request).await?;
 
 ### Supported Models (100% OpenAI Compatible)
 
-| Provider | Models | OpenAI Compatibility |
-|----------|--------|---------------------|
-| OpenAI | `openai/gpt-4o`, `openai/gpt-5` | ✅ Native |
-| Google | `google/gemini-2.5-pro`, `google/gemini-2.5-flash`, `google/gemini-2.5-flash-lite` | ✅ Via compatibility layer |
-| Groq | `groq/llama-3.1-8b-instant` | ✅ OpenAI-compatible API |
-| Cerebras | `cerebras/llama3.1-8b` | ✅ OpenAI-compatible API |
+| Provider | Models | Features |
+|----------|--------|----------|
+| **OpenAI** | `gpt-4o`, `gpt-5`, `gpt-5-pro`, `o3`, `o4-mini` | ✅ Native OpenAI API |
+| **Google Gemini 3** | `gemini-3-pro-preview`, `gemini-3-flash-preview`, `gemini-3-pro-image-preview` | ✅ Thinking, Thought Signatures, Multimodal |
+| **Google Gemini 2.5** | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` | ✅ Thinking, Dynamic Reasoning |
+| **Groq** | `llama-3.1-8b-instant`, `llama-3.3-70b-versatile` | ✅ OpenAI-compatible API |
+| **Cerebras** | `llama3.1-8b` | ✅ OpenAI-compatible API |
+| **Enosis Labs** | `astronomer-1`, `astronomer-1-max`, `astronomer-1.5`, `astronomer-2`, `astronomer-2-pro` | ✅ Native Rainy API |
 
 ### Advanced OpenAI Features
 
@@ -71,21 +98,115 @@ let (response, metadata) = client.chat_completion(request).await?;
 - **Structured Output**: JSON Schema enforcement with `response_format`
 - **Reasoning Control**: `reasoning_effort` parameter for Gemini models
 - **Log Probabilities**: `logprobs` and `top_logprobs` support
-- **Streaming**: OpenAI-compatible delta format streaming
+- **Streaming**: OpenAI-compatible delta format streaming with tool calls
 
-### Optional Features
+## 🧠 Advanced Thinking Capabilities
 
-Enable additional features as needed:
+Rainy SDK supports advanced thinking capabilities for Google Gemini 3 and 2.5 series models, enabling deeper reasoning and thought preservation across conversations.
 
-```toml
-[dependencies]
-rainy-sdk = { version = "0.2.5", features = ["rate-limiting", "tracing"] }
+### Gemini 3 Thinking Features
+
+```rust
+use rainy_sdk::{models, ChatCompletionRequest, ChatMessage, RainyClient, ThinkingConfig};
+
+let request = ChatCompletionRequest::new(
+    models::model_constants::GOOGLE_GEMINI_3_PRO,
+    vec![ChatMessage::user("Solve this complex optimization problem step by step.")]
+)
+.with_thinking_config(ThinkingConfig::gemini_3(
+    models::ThinkingLevel::High, // High reasoning for complex tasks
+    true // Include thought summaries in response
+));
+
+let (response, metadata) = client.chat_completion(request).await?;
+println!("Response: {}", response.choices[0].message.content);
+// Access thinking token usage
+if let Some(thinking_tokens) = metadata.thoughts_token_count {
+    println!("Thinking tokens used: {}", thinking_tokens);
+}
 ```
 
-Available features:
+### Thought Signatures
 
-- `rate-limiting`: Built-in rate limiting with the `governor` crate.
-- `tracing`: Request/response logging with the `tracing` crate.
+Preserve reasoning context across conversation turns with encrypted thought signatures:
+
+```rust
+use rainy_sdk::{models::*, ChatMessage, EnhancedChatMessage};
+
+let mut conversation = vec![
+// Previous messages with thought signatures...
+];
+
+// New message with preserved reasoning context
+let enhanced_message = EnhancedChatMessage::with_parts(
+    MessageRole::User,
+    vec![
+        ContentPart::text("Now apply this reasoning to the next problem..."),
+        // Include thought signature from previous response
+        ContentPart::with_thought_signature("encrypted_signature_here".to_string())
+    ]
+);
+```
+
+### Gemini 2.5 Dynamic Thinking
+
+```rust
+let config = ThinkingConfig::gemini_2_5(
+    -1, // Dynamic thinking budget
+    true // Include thoughts
+);
+
+let request = ChatCompletionRequest::new(
+    models::model_constants::GOOGLE_GEMINI_2_5_PRO,
+    messages
+)
+.with_thinking_config(config);
+```
+
+## 🌐 Web Search Integration
+
+Built-in web search powered by Tavily for real-time information retrieval:
+
+```rust
+use rainy_sdk::search::{SearchOptions, SearchResponse};
+
+let search_options = SearchOptions {
+    query: "latest developments in Rust programming".to_string(),
+    max_results: Some(10),
+    ..Default::default()
+};
+
+let search_results = client.search_web(search_options).await?;
+for result in search_results.results {
+    println!("{}: {}", result.title, result.url);
+}
+
+// Extract content from specific URLs
+let extracted = client.extract_content(vec!["https://example.com/article".to_string()]).await?;
+println!("Content: {}", extracted.content);
+```
+
+## 👥 Cowork Integration
+
+Tier-based feature gating with Free/GoPlus/Plus/Pro/ProPlus plans:
+
+```rust
+use rainy_sdk::{CoworkStatus, CoworkClient};
+
+let cowork_client = CoworkClient::new(client);
+let status = cowork_client.get_cowork_status().await?;
+
+println!("Plan: {:?}", status.plan);
+println!("Remaining uses: {}", status.usage.remaining_uses);
+
+// Check feature availability
+if status.can_use_web_research() {
+    // Enable web search features
+}
+if status.can_use_document_export() {
+    // Enable document generation
+}
+```
 
 ## 🚀 Quick Start
 
@@ -289,19 +410,25 @@ The SDK is built with a modular architecture:
 
 ```
 src/
+├── auth.rs            # Authentication and API key management
 ├── client.rs          # Main API client with request handling
-├── auth.rs            # Authentication and authorization logic
-├── models.rs          # Data structures and serialization
+├── cowork.rs          # Tier-based feature gating and capabilities
+├── endpoints/         # API endpoint implementations (internal)
 ├── error.rs           # Comprehensive error handling
+├── models.rs          # Data structures and type definitions
 ├── retry.rs           # Retry logic with exponential backoff
-├── endpoints/         # API endpoint implementations
-│   ├── chat.rs        # Chat completion endpoints
-│   ├── health.rs      # Health check and monitoring
-│   ├── keys.rs        # API key operations
-│   ├── usage.rs       # Usage statistics and billing
-│   └── user.rs        # User account management
+├── search.rs          # Web search and content extraction
 └── lib.rs             # Public API and module exports
 ```
+
+### Key Modules
+
+- **`client.rs`**: Core `RainyClient` with async HTTP handling and response processing
+- **`models.rs`**: Complete type system including `ChatCompletionRequest`, `ThinkingConfig`, `EnhancedChatMessage`
+- **`auth.rs`**: Secure authentication with the `secrecy` crate for API key management
+- **`cowork.rs`**: Integration with Enosis Labs' tier system (Free/GoPlus/Plus/Pro/ProPlus)
+- **`search.rs`**: Tavily-powered web search with content extraction capabilities
+- **`endpoints/`**: Internal API endpoint implementations (chat, health, keys, usage, user)
 
 ## 🤝 Contributing
 

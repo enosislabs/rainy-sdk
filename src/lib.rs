@@ -101,4 +101,4 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The default base URL for the Rainy API.
 ///
 /// This constant is used by the `RainyClient` as the default API endpoint.
-pub const DEFAULT_BASE_URL: &str = "https://api.enosislabs.com";
+pub const DEFAULT_BASE_URL: &str = "https://rainy-api-v2-179843975974.us-west1.run.app";
