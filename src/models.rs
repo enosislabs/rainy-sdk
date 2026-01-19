@@ -258,7 +258,7 @@ pub mod model_constants {
     pub const GOOGLE_GEMINI_2_5_FLASH: &str = "gemini-2.5-flash";
     /// Constant for the Gemini 2.5 Flash Lite model.
     pub const GOOGLE_GEMINI_2_5_FLASH_LITE: &str = "gemini-2.5-flash-lite";
-    
+
     // Gemini 3 series - Advanced reasoning models with thinking capabilities
     /// Constant for the Gemini 3 Pro model with advanced reasoning.
     pub const GOOGLE_GEMINI_3_PRO: &str = "gemini-3-pro-preview";
@@ -638,7 +638,10 @@ impl ChatCompletionRequest {
             match level {
                 ThinkingLevel::Minimal | ThinkingLevel::Medium => {
                     if is_gemini_3_pro {
-                        return Err("Gemini 3 Pro only supports 'low' and 'high' thinking levels".to_string());
+                        return Err(
+                            "Gemini 3 Pro only supports 'low' and 'high' thinking levels"
+                                .to_string(),
+                        );
                     }
                 }
                 _ => {}
@@ -654,11 +657,17 @@ impl ChatCompletionRequest {
             // Validate budget ranges based on model
             if self.model.contains("2.5-pro") {
                 if budget != -1 && !(128..=32768).contains(&budget) {
-                    return Err("Gemini 2.5 Pro thinking budget must be -1 (dynamic) or between 128-32768".to_string());
+                    return Err(
+                        "Gemini 2.5 Pro thinking budget must be -1 (dynamic) or between 128-32768"
+                            .to_string(),
+                    );
                 }
             } else if self.model.contains("2.5-flash") {
                 if budget != -1 && !(0..=24576).contains(&budget) {
-                    return Err("Gemini 2.5 Flash thinking budget must be -1 (dynamic) or between 0-24576".to_string());
+                    return Err(
+                        "Gemini 2.5 Flash thinking budget must be -1 (dynamic) or between 0-24576"
+                            .to_string(),
+                    );
                 }
             }
         }
