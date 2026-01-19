@@ -60,6 +60,8 @@ pub mod error;
 pub mod models;
 /// Implements retry logic with exponential backoff.
 pub mod retry;
+/// Web search types and options for Tavily-powered search.
+pub mod search;
 
 mod endpoints;
 
@@ -75,6 +77,9 @@ pub use cowork::{CoworkCapabilities, CoworkFeatures, CoworkPlan, CoworkUsage};
 #[allow(deprecated)]
 pub use cowork::{CoworkLimits, CoworkTier};
 pub use endpoints::cowork::get_offline_capabilities;
+
+// Re-export Search types for convenience
+pub use search::{ExtractResponse, ExtractedContent, SearchOptions, SearchResponse, SearchResult};
 
 // Re-export commonly used types
 /// Re-export of the `reqwest` crate for convenience.

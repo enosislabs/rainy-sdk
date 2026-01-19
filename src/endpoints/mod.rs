@@ -11,6 +11,8 @@ pub mod cowork;
 pub mod health;
 /// Endpoint for managing API keys.
 pub mod keys;
+/// Endpoint for web search via Tavily.
+pub mod search;
 /// Endpoint for retrieving usage statistics.
 pub mod usage;
 /// Endpoint for managing user information.

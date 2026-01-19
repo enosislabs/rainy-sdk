@@ -113,6 +113,23 @@ pub enum RainyError {
         /// The underlying error message, if available.
         source_error: Option<String>,
     },
+
+    /// An error indicating that a feature is not available for the current plan.
+    #[error("Feature not available: {feature} - {message}")]
+    FeatureNotAvailable {
+        /// The feature that is not available.
+        feature: String,
+        /// A message explaining why the feature is not available.
+        message: String,
+    },
+
+    /// A generic network error.
+    #[error("Network error: {0}")]
+    NetworkError(String),
+
+    /// A validation error for invalid input.
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 impl RainyError {
