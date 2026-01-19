@@ -100,6 +100,10 @@ pub struct ChatCompletionRequest {
     /// Controls which (if any) tool is called by the model.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
+
+    /// Configuration for thinking capabilities (Gemini 3 and 2.5 series).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_config: Option<ThinkingConfig>,
 }
 
 /// Represents the response from a chat completion request.
@@ -254,6 +258,14 @@ pub mod model_constants {
     pub const GOOGLE_GEMINI_2_5_FLASH: &str = "gemini-2.5-flash";
     /// Constant for the Gemini 2.5 Flash Lite model.
     pub const GOOGLE_GEMINI_2_5_FLASH_LITE: &str = "gemini-2.5-flash-lite";
+    
+    // Gemini 3 series - Advanced reasoning models with thinking capabilities
+    /// Constant for the Gemini 3 Pro model with advanced reasoning.
+    pub const GOOGLE_GEMINI_3_PRO: &str = "gemini-3-pro-preview";
+    /// Constant for the Gemini 3 Flash model with thinking capabilities.
+    pub const GOOGLE_GEMINI_3_FLASH: &str = "gemini-3-flash-preview";
+    /// Constant for the Gemini 3 Pro Image model with multimodal reasoning.
+    pub const GOOGLE_GEMINI_3_PRO_IMAGE: &str = "gemini-3-pro-image-preview";
 
     // Groq models (fully compatible)
     /// Constant for the Llama 3.1 8B Instant model.
@@ -346,6 +358,7 @@ impl ChatCompletionRequest {
             response_format: None,
             tools: None,
             tool_choice: None,
+            thinking_config: None,
         }
     }
 
@@ -471,9 +484,56 @@ impl ChatCompletionRequest {
         self
     }
 
+    /// Sets the thinking configuration for Gemini 3 and 2.5 series models.
+    ///
+    /// # Arguments
+    ///
+    /// * `thinking_config` - Configuration for thinking capabilities.
+    pub fn with_thinking_config(mut self, thinking_config: ThinkingConfig) -> Self {
+        self.thinking_config = Some(thinking_config);
+        self
+    }
+
+    /// Enables thought summaries in the response (Gemini 3 and 2.5 series).
+    ///
+    /// # Arguments
+    ///
+    /// * `include_thoughts` - Whether to include thought summaries.
+    pub fn with_include_thoughts(mut self, include_thoughts: bool) -> Self {
+        let mut config = self.thinking_config.unwrap_or_default();
+        config.include_thoughts = Some(include_thoughts);
+        self.thinking_config = Some(config);
+        self
+    }
+
+    /// Sets the thinking level for Gemini 3 models.
+    ///
+    /// # Arguments
+    ///
+    /// * `thinking_level` - The thinking level (minimal, low, medium, high).
+    pub fn with_thinking_level(mut self, thinking_level: ThinkingLevel) -> Self {
+        let mut config = self.thinking_config.unwrap_or_default();
+        config.thinking_level = Some(thinking_level);
+        self.thinking_config = Some(config);
+        self
+    }
+
+    /// Sets the thinking budget for Gemini 2.5 models.
+    ///
+    /// # Arguments
+    ///
+    /// * `thinking_budget` - Number of thinking tokens (-1 for dynamic, 0 to disable).
+    pub fn with_thinking_budget(mut self, thinking_budget: i32) -> Self {
+        let mut config = self.thinking_config.unwrap_or_default();
+        config.thinking_budget = Some(thinking_budget);
+        self.thinking_config = Some(config);
+        self
+    }
+
     /// Validates that the request parameters are compatible with OpenAI standards.
     ///
     /// This method checks parameter ranges and values to ensure they match OpenAI's API specifications.
+    /// Also validates Gemini 3 specific parameters like thinking configuration.
     ///
     /// # Returns
     ///
@@ -555,7 +615,70 @@ impl ChatCompletionRequest {
             }
         }
 
+        // Validate thinking configuration for Gemini models
+        if let Some(thinking_config) = &self.thinking_config {
+            self.validate_thinking_config(thinking_config)?;
+        }
+
         Ok(())
+    }
+
+    /// Validates thinking configuration parameters for Gemini models.
+    fn validate_thinking_config(&self, config: &ThinkingConfig) -> Result<(), String> {
+        let is_gemini_3 = self.model.contains("gemini-3");
+        let is_gemini_2_5 = self.model.contains("gemini-2.5");
+        let is_gemini_3_pro = self.model.contains("gemini-3-pro");
+
+        // Validate thinking level (Gemini 3 only)
+        if let Some(level) = &config.thinking_level {
+            if !is_gemini_3 {
+                return Err("thinking_level is only supported for Gemini 3 models".to_string());
+            }
+
+            match level {
+                ThinkingLevel::Minimal | ThinkingLevel::Medium => {
+                    if is_gemini_3_pro {
+                        return Err("Gemini 3 Pro only supports 'low' and 'high' thinking levels".to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Validate thinking budget (Gemini 2.5 only)
+        if let Some(budget) = config.thinking_budget {
+            if !is_gemini_2_5 {
+                return Err("thinking_budget is only supported for Gemini 2.5 models".to_string());
+            }
+
+            // Validate budget ranges based on model
+            if self.model.contains("2.5-pro") {
+                if budget != -1 && !(128..=32768).contains(&budget) {
+                    return Err("Gemini 2.5 Pro thinking budget must be -1 (dynamic) or between 128-32768".to_string());
+                }
+            } else if self.model.contains("2.5-flash") {
+                if budget != -1 && !(0..=24576).contains(&budget) {
+                    return Err("Gemini 2.5 Flash thinking budget must be -1 (dynamic) or between 0-24576".to_string());
+                }
+            }
+        }
+
+        // Warn about conflicting parameters
+        if config.thinking_level.is_some() && config.thinking_budget.is_some() {
+            return Err("Cannot specify both thinking_level (Gemini 3) and thinking_budget (Gemini 2.5) in the same request".to_string());
+        }
+
+        Ok(())
+    }
+
+    /// Checks if the model supports thinking capabilities.
+    pub fn supports_thinking(&self) -> bool {
+        self.model.contains("gemini-3") || self.model.contains("gemini-2.5")
+    }
+
+    /// Checks if the model requires thought signatures for function calling.
+    pub fn requires_thought_signatures(&self) -> bool {
+        self.model.contains("gemini-3")
     }
 }
 
@@ -800,6 +923,238 @@ pub enum ToolChoice {
 pub struct ToolFunction {
     /// The name of the function to call.
     pub name: String,
+}
+
+/// Configuration for thinking capabilities in Gemini 3 and 2.5 series models.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ThinkingConfig {
+    /// Whether to include thought summaries in the response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_thoughts: Option<bool>,
+
+    /// The thinking level for Gemini 3 models (low, high for Pro; minimal, low, medium, high for Flash).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_level: Option<ThinkingLevel>,
+
+    /// The thinking budget for Gemini 2.5 models (number of thinking tokens).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_budget: Option<i32>,
+}
+
+/// Thinking levels for Gemini 3 models.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThinkingLevel {
+    /// Minimal thinking (Gemini 3 Flash only) - model likely won't think.
+    Minimal,
+    /// Low thinking level - faster responses with basic reasoning.
+    Low,
+    /// Medium thinking level (Gemini 3 Flash only) - balanced reasoning and speed.
+    Medium,
+    /// High thinking level - deep reasoning for complex tasks (default).
+    High,
+}
+
+/// Represents a content part that may include thought signatures.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ContentPart {
+    /// The text content of the part.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+
+    /// Function call information if this part contains a function call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function_call: Option<FunctionCall>,
+
+    /// Function response information if this part contains a function response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function_response: Option<FunctionResponse>,
+
+    /// Indicates if this part contains thought content.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thought: Option<bool>,
+
+    /// Encrypted thought signature for preserving reasoning context across turns.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thought_signature: Option<String>,
+}
+
+/// Represents a function call in the content.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FunctionCall {
+    /// The name of the function being called.
+    pub name: String,
+    /// The arguments for the function call as a JSON object.
+    pub args: serde_json::Value,
+}
+
+/// Represents a function response in the content.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FunctionResponse {
+    /// The name of the function that was called.
+    pub name: String,
+    /// The response from the function call.
+    pub response: serde_json::Value,
+}
+
+/// Enhanced chat message that supports Gemini 3 thinking capabilities.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EnhancedChatMessage {
+    /// The role of the message author.
+    pub role: MessageRole,
+    /// The content parts of the message (supports text, function calls, and thought signatures).
+    pub parts: Vec<ContentPart>,
+}
+
+/// Enhanced usage statistics that include thinking tokens.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnhancedUsage {
+    /// The number of tokens in the prompt.
+    pub prompt_tokens: u32,
+    /// The number of tokens in the generated completion.
+    pub completion_tokens: u32,
+    /// The total number of tokens used in the request (prompt + completion).
+    pub total_tokens: u32,
+    /// The number of thinking tokens used (Gemini 3 and 2.5 series).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thoughts_token_count: Option<u32>,
+}
+
+impl ThinkingConfig {
+    /// Creates a new thinking configuration with default values.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Creates a configuration for Gemini 3 models with specified thinking level.
+    ///
+    /// # Arguments
+    ///
+    /// * `level` - The thinking level to use.
+    /// * `include_thoughts` - Whether to include thought summaries.
+    pub fn gemini_3(level: ThinkingLevel, include_thoughts: bool) -> Self {
+        Self {
+            thinking_level: Some(level),
+            include_thoughts: Some(include_thoughts),
+            thinking_budget: None,
+        }
+    }
+
+    /// Creates a configuration for Gemini 2.5 models with specified thinking budget.
+    ///
+    /// # Arguments
+    ///
+    /// * `budget` - The thinking budget (-1 for dynamic, 0 to disable, or specific token count).
+    /// * `include_thoughts` - Whether to include thought summaries.
+    pub fn gemini_2_5(budget: i32, include_thoughts: bool) -> Self {
+        Self {
+            thinking_budget: Some(budget),
+            include_thoughts: Some(include_thoughts),
+            thinking_level: None,
+        }
+    }
+
+    /// Creates a configuration optimized for complex reasoning tasks.
+    pub fn high_reasoning() -> Self {
+        Self {
+            thinking_level: Some(ThinkingLevel::High),
+            include_thoughts: Some(true),
+            thinking_budget: Some(-1), // Dynamic for 2.5 models
+        }
+    }
+
+    /// Creates a configuration optimized for fast responses.
+    pub fn fast_response() -> Self {
+        Self {
+            thinking_level: Some(ThinkingLevel::Low),
+            include_thoughts: Some(false),
+            thinking_budget: Some(512), // Low budget for 2.5 models
+        }
+    }
+}
+
+impl ContentPart {
+    /// Creates a new text content part.
+    pub fn text(content: impl Into<String>) -> Self {
+        Self {
+            text: Some(content.into()),
+            function_call: None,
+            function_response: None,
+            thought: None,
+            thought_signature: None,
+        }
+    }
+
+    /// Creates a new function call content part.
+    pub fn function_call(name: impl Into<String>, args: serde_json::Value) -> Self {
+        Self {
+            text: None,
+            function_call: Some(FunctionCall {
+                name: name.into(),
+                args,
+            }),
+            function_response: None,
+            thought: None,
+            thought_signature: None,
+        }
+    }
+
+    /// Creates a new function response content part.
+    pub fn function_response(name: impl Into<String>, response: serde_json::Value) -> Self {
+        Self {
+            text: None,
+            function_call: None,
+            function_response: Some(FunctionResponse {
+                name: name.into(),
+                response,
+            }),
+            thought: None,
+            thought_signature: None,
+        }
+    }
+
+    /// Adds a thought signature to this content part.
+    pub fn with_thought_signature(mut self, signature: impl Into<String>) -> Self {
+        self.thought_signature = Some(signature.into());
+        self
+    }
+
+    /// Marks this content part as containing thought content.
+    pub fn as_thought(mut self) -> Self {
+        self.thought = Some(true);
+        self
+    }
+}
+
+impl EnhancedChatMessage {
+    /// Creates a new enhanced message with the `System` role.
+    pub fn system(content: impl Into<String>) -> Self {
+        Self {
+            role: MessageRole::System,
+            parts: vec![ContentPart::text(content)],
+        }
+    }
+
+    /// Creates a new enhanced message with the `User` role.
+    pub fn user(content: impl Into<String>) -> Self {
+        Self {
+            role: MessageRole::User,
+            parts: vec![ContentPart::text(content)],
+        }
+    }
+
+    /// Creates a new enhanced message with the `Assistant` role.
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self {
+            role: MessageRole::Assistant,
+            parts: vec![ContentPart::text(content)],
+        }
+    }
+
+    /// Creates a new enhanced message with multiple content parts.
+    pub fn with_parts(role: MessageRole, parts: Vec<ContentPart>) -> Self {
+        Self { role, parts }
+    }
 }
 
 /// Represents a streaming chat completion response (OpenAI delta format).
