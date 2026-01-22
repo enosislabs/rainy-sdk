@@ -11,11 +11,16 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CoworkPlan {
+    /// Free tier - no payment required, limited access
     #[default]
     Free,
+    /// Go Plus tier - entry-level paid subscription
     GoPlus,
+    /// Plus tier - mid-level subscription with more features
     Plus,
+    /// Pro tier - professional subscription with premium features
     Pro,
+    /// Pro Plus tier - highest tier with all features
     ProPlus,
 }
 
@@ -40,12 +45,16 @@ impl CoworkPlan {
 /// Feature flags for Cowork capabilities (returned by API)
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CoworkFeatures {
+    /// Web research feature - allows AI to browse and search the web
     #[serde(default)]
     pub web_research: bool,
+    /// Document export feature - allows exporting to PDF/DOCX
     #[serde(default)]
     pub document_export: bool,
+    /// Image analysis feature - allows AI vision capabilities
     #[serde(default)]
     pub image_analysis: bool,
+    /// Priority support feature - faster response times
     #[serde(default)]
     pub priority_support: bool,
 }
@@ -53,16 +62,22 @@ pub struct CoworkFeatures {
 /// Usage tracking for the current billing period (returned by API)
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CoworkUsage {
+    /// The type of usage tracking (e.g., "monthly", "daily")
     #[serde(rename = "type", default)]
     pub usage_type: String,
+    /// Number of requests/operations used in current period
     #[serde(default)]
     pub used: u32,
+    /// Maximum number of requests/operations allowed in current period
     #[serde(default)]
     pub limit: u32,
+    /// Credits consumed in current billing period
     #[serde(default)]
     pub credits_used: f32,
+    /// Maximum credits allowed before rate limiting
     #[serde(default)]
     pub credits_ceiling: f32,
+    /// ISO 8601 timestamp when usage counters reset
     #[serde(default)]
     pub resets_at: String,
 }
@@ -87,18 +102,25 @@ impl CoworkUsage {
 /// Complete capabilities for a Cowork session (returned by API)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoworkCapabilities {
+    /// The current subscription plan
     #[serde(default)]
     pub plan: CoworkPlan,
+    /// Human-readable plan name
     #[serde(default)]
     pub plan_name: String,
+    /// Whether the subscription is valid and active
     #[serde(default)]
     pub is_valid: bool,
+    /// Current usage statistics for the billing period
     #[serde(default)]
     pub usage: CoworkUsage,
+    /// List of AI model identifiers available for this plan
     #[serde(default)]
     pub models: Vec<String>,
+    /// Feature flags indicating available capabilities
     #[serde(default)]
     pub features: CoworkFeatures,
+    /// Optional message suggesting plan upgrade
     #[serde(skip_serializing_if = "Option::is_none")]
     pub upgrade_message: Option<String>,
 }

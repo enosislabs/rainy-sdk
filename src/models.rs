@@ -880,15 +880,18 @@ pub enum ResponseFormat {
     /// The model must return a valid JSON object.
     JsonObject,
     /// The model must return a JSON object that matches the provided schema.
-    JsonSchema { json_schema: serde_json::Value },
+    JsonSchema {
+        /// The JSON Schema that the model's output must conform to.
+        json_schema: serde_json::Value,
+    },
 }
 
 /// Represents a tool that the model can use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
-    /// The type of the tool.
+    /// The type of the tool (currently only "function" is supported).
     pub r#type: ToolType,
-    /// The function definition for the tool.
+    /// The function definition describing the tool's capabilities.
     pub function: FunctionDefinition,
 }
 
@@ -923,7 +926,9 @@ pub enum ToolChoice {
     Auto,
     /// A specific tool is called.
     Tool {
+        /// The type of the tool being called.
         r#type: ToolType,
+        /// The function to call within the tool.
         function: ToolFunction,
     },
 }

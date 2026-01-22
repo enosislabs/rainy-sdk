@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.3] - 2026-01-22
+
+### 📚 Documentation Fixes
+
+This release fixes missing documentation that caused CI failures with `cargo doc -D missing-docs`.
+
+#### Fixed
+
+##### Missing Documentation in `cowork.rs`
+
+- Added doc comments to `CoworkPlan` enum variants (`Free`, `GoPlus`, `Plus`, `Pro`, `ProPlus`)
+- Added doc comments to `CoworkFeatures` struct fields
+- Added doc comments to `CoworkUsage` struct fields  
+- Added doc comments to `CoworkCapabilities` struct fields
+
+##### Missing Documentation in `models.rs`
+
+- Added doc comment to `ResponseFormat::JsonSchema` variant's `json_schema` field
+- Added doc comments to `ToolChoice::Tool` variant's `r#type` and `function` fields
+
+---
+
 ## [0.5.2] - 2026-01-22
 
 ### 🔑 Cowork API Key Validation

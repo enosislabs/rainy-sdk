@@ -1,4 +1,4 @@
-# 🌧️ Rainy SDK v0.5.1
+# 🌧️ Rainy SDK v0.5.3
 
 [![Crates.io](https://img.shields.io/crates/v/rainy-sdk.svg)](https://crates.io/crates/rainy-sdk)
 [![Documentation](https://docs.rs/rainy-sdk/badge.svg)](https://docs.rs/rainy-sdk)
@@ -31,7 +31,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rainy-sdk = "0.5.1"
+rainy-sdk = "0.5.3"
 tokio = { version = "1.47", features = ["full"] }
 ```
 
