@@ -6,7 +6,9 @@ mod integration_tests {
     use super::*;
 
     fn get_test_client() -> RainyClient {
-        let api_key = env::var("RAINY_TEST_API_KEY").unwrap_or_else(|_| "ra-test-key".to_string());
+        // Use env var or generate a valid 51-char test key (ra- + 48 hex)
+        let api_key =
+            env::var("RAINY_TEST_API_KEY").unwrap_or_else(|_| format!("ra-{}", "0".repeat(48)));
         let base_url =
             env::var("RAINY_TEST_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
 

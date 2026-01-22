@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.2] - 2026-01-22
+
+### 🔑 Cowork API Key Validation
+
+Rainy SDK v0.5.2 introduces **support for Cowork-specific API keys** (`ra-cowork{48 hex}`) used by the Rainy Cowork desktop application.
+
+#### Added
+
+##### New Validation Methods
+
+- **`is_cowork_key()`**: Check if an API key is a Cowork-specific key
+  - Returns `true` for keys starting with `ra-cowork`
+  - Returns `false` for standard keys starting with `ra-`
+
+##### Enhanced Key Format Validation
+
+- **Standard Keys**: `ra-{48 hex characters}` = 51 characters total
+- **Cowork Keys**: `ra-cowork{48 hex characters}` = 57 characters total
+
+#### Changed
+
+##### `AuthConfig::validate()` Improvements
+
+- **Stricter Length Validation**: Now enforces exact key lengths
+- **Cowork Detection**: Automatically detects and validates Cowork key format
+- **Better Error Messages**: Specific error codes for each key type:
+  - `INVALID_API_KEY_FORMAT` for standard key issues
+  - `INVALID_COWORK_API_KEY_FORMAT` for Cowork key issues
+
+#### Example
+
+```rust
+use rainy_sdk::AuthConfig;
+
+// Standard key (51 chars)
+let standard = AuthConfig::new("ra-abc123..."); // 51 chars total
+assert!(!standard.is_cowork_key());
+assert!(standard.validate().is_ok());
+
+// Cowork key (57 chars)
+let cowork = AuthConfig::new("ra-coworkabc123..."); // 57 chars total
+assert!(cowork.is_cowork_key());
+assert!(cowork.validate().is_ok());
+```
+
+#### Technical Details
+
+- **Backward Compatible**: Existing code using valid 51-char keys continues to work
+- **Test Coverage**: 37 tests passing (unit, integration, and doc tests)
+- **No New Dependencies**: Uses existing validation infrastructure
+
+---
+
 ## [0.5.0] - 2025-01-19
 
 ### 🚀 Major Feature: Gemini 3 Models with Advanced Thinking Capabilities

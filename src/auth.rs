@@ -115,6 +115,10 @@ impl AuthConfig {
     /// This method checks for common configuration errors, such as an empty API key
     /// or an invalid base URL.
     ///
+    /// Supports two API key formats:
+    /// - Standard: `ra-{48 hex}` = 51 characters
+    /// - Cowork: `ra-cowork{48 hex}` = 57 characters
+    ///
     /// # Returns
     ///
     /// A `Result` that is `Ok(())` if the configuration is valid, or a `RainyError` if it's not.
@@ -127,11 +131,32 @@ impl AuthConfig {
             });
         }
 
-        // Basic API key format validation (starts with 'ra-')
-        if !self.api_key.expose_secret().starts_with("ra-") {
+        let key = self.api_key.expose_secret();
+
+        // Validate API key format based on type
+        if key.starts_with("ra-cowork") {
+            // Cowork key: ra-cowork (9 chars) + 48 hex = 57 chars
+            if key.len() != 57 {
+                return Err(RainyError::Authentication {
+                    code: "INVALID_COWORK_API_KEY_FORMAT".to_string(),
+                    message: "Cowork API key must be 57 characters (ra-cowork + 48 hex)"
+                        .to_string(),
+                    retryable: false,
+                });
+            }
+        } else if key.starts_with("ra-") {
+            // Standard key: ra- (3 chars) + 48 hex = 51 chars
+            if key.len() != 51 {
+                return Err(RainyError::Authentication {
+                    code: "INVALID_API_KEY_FORMAT".to_string(),
+                    message: "Standard API key must be 51 characters (ra- + 48 hex)".to_string(),
+                    retryable: false,
+                });
+            }
+        } else {
             return Err(RainyError::Authentication {
                 code: "INVALID_API_KEY_FORMAT".to_string(),
-                message: "API key must start with 'ra-'".to_string(),
+                message: "API key must start with 'ra-' or 'ra-cowork'".to_string(),
                 retryable: false,
             });
         }
@@ -146,6 +171,17 @@ impl AuthConfig {
         }
 
         Ok(())
+    }
+
+    /// Check if this is a Cowork-specific API key.
+    ///
+    /// Cowork keys use the format `ra-cowork{48 hex}` and are meant for
+    /// the Rainy Cowork desktop application with subscription-based billing.
+    ///
+    /// # Returns
+    /// `true` if the key starts with `ra-cowork`, `false` otherwise.
+    pub fn is_cowork_key(&self) -> bool {
+        self.api_key.expose_secret().starts_with("ra-cowork")
     }
 
     /// Builds the necessary HTTP headers for an API request.
