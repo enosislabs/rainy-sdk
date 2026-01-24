@@ -469,6 +469,28 @@ impl RainyClient {
         }
     }
 
+    /// Retrieves the Cowork profile for the current user.
+    ///
+    /// This includes subscription plan details, usage statistics, and feature flags.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `CoworkProfile` struct on success, or a `RainyError` on failure.
+    pub async fn get_cowork_profile(&self) -> Result<crate::cowork::CoworkProfile> {
+        let url = format!("{}/cowork/profile", self.auth_config.base_url);
+
+        let operation = || async {
+            let response = self.client.get(&url).send().await?;
+            self.handle_response(response).await
+        };
+
+        if self.auth_config.enable_retry {
+            retry_with_backoff(&self.retry_config, operation).await
+        } else {
+            operation().await
+        }
+    }
+
     // Legacy methods for backward compatibility
 
     /// Makes a generic HTTP request to the API.

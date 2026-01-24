@@ -5,81 +5,68 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Subscription plan for Rainy Cowork
-///
-/// The actual plan details (pricing, limits) are returned by the API.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CoworkPlan {
-    /// Free tier - no payment required, limited access
-    #[default]
-    Free,
-    /// Go Plus tier - entry-level paid subscription
-    GoPlus,
-    /// Plus tier - mid-level subscription with more features
-    Plus,
-    /// Pro tier - professional subscription with premium features
-    Pro,
-    /// Pro Plus tier - highest tier with all features
-    ProPlus,
+/// Subscription plan details from the API
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoworkPlan {
+    /// Plan identifier (e.g., "plus", "pro")
+    pub id: String,
+    /// Human-readable name (e.g., "Plus", "Pro")
+    pub name: String,
+    /// Requests per minute limit
+    #[serde(rename = "requestsPerMinute")]
+    pub requests_per_minute: u32,
+    /// Monthly usage limit
+    #[serde(rename = "monthlyLimit")]
+    pub monthly_limit: u32,
+}
+
+impl Default for CoworkPlan {
+    fn default() -> Self {
+        Self {
+            id: "free".to_string(),
+            name: "Free".to_string(),
+            requests_per_minute: 5,
+            monthly_limit: 30,
+        }
+    }
 }
 
 impl CoworkPlan {
     /// Check if this plan requires payment
     pub fn is_paid(&self) -> bool {
-        !matches!(self, CoworkPlan::Free)
-    }
-
-    /// Get user-friendly display name
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            CoworkPlan::Free => "Free",
-            CoworkPlan::GoPlus => "Go+",
-            CoworkPlan::Plus => "Plus",
-            CoworkPlan::Pro => "Pro",
-            CoworkPlan::ProPlus => "Pro Plus",
-        }
+        self.id != "free"
     }
 }
 
-/// Feature flags for Cowork capabilities (returned by API)
+/// Feature flags for Cowork capabilities
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CoworkFeatures {
-    /// Web research feature - allows AI to browse and search the web
-    #[serde(default)]
+    /// Web research feature
+    #[serde(default, rename = "web_research")]
     pub web_research: bool,
-    /// Document export feature - allows exporting to PDF/DOCX
-    #[serde(default)]
+    /// Document export feature
+    #[serde(default, rename = "document_export")]
     pub document_export: bool,
-    /// Image analysis feature - allows AI vision capabilities
-    #[serde(default)]
+    /// Image analysis feature
+    #[serde(default, rename = "image_analysis")]
     pub image_analysis: bool,
-    /// Priority support feature - faster response times
-    #[serde(default)]
+    /// Priority support feature
+    #[serde(default, rename = "priority_support")]
     pub priority_support: bool,
 }
 
-/// Usage tracking for the current billing period (returned by API)
+/// Usage tracking for the current billing period
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CoworkUsage {
-    /// The type of usage tracking (e.g., "monthly", "daily")
-    #[serde(rename = "type", default)]
-    pub usage_type: String,
-    /// Number of requests/operations used in current period
+    /// Requests used in current period
     #[serde(default)]
     pub used: u32,
-    /// Maximum number of requests/operations allowed in current period
+    /// Maximum requests allowed
     #[serde(default)]
     pub limit: u32,
-    /// Credits consumed in current billing period
-    #[serde(default)]
+    /// Credits consumed
+    #[serde(default, rename = "creditsUsed")]
     pub credits_used: f32,
-    /// Maximum credits allowed before rate limiting
-    #[serde(default)]
-    pub credits_ceiling: f32,
-    /// ISO 8601 timestamp when usage counters reset
-    #[serde(default)]
-    pub resets_at: String,
 }
 
 impl CoworkUsage {
@@ -88,61 +75,56 @@ impl CoworkUsage {
         self.used >= self.limit
     }
 
-    /// Check if credit ceiling is reached
-    pub fn is_over_budget(&self) -> bool {
-        self.credits_ceiling > 0.0 && self.credits_used >= self.credits_ceiling
-    }
-
     /// Get remaining uses
     pub fn remaining(&self) -> u32 {
         self.limit.saturating_sub(self.used)
     }
 }
 
-/// Complete capabilities for a Cowork session (returned by API)
+/// Profile response from /cowork/profile
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoworkProfile {
+    /// User display name
+    pub name: String,
+    /// User email
+    pub email: String,
+    /// Subscription plan details
+    pub plan: CoworkPlan,
+    /// Current usage statistics
+    pub usage: CoworkUsage,
+}
+
+/// Complete capabilities including features (constructed client-side or extended API)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoworkCapabilities {
-    /// The current subscription plan
-    #[serde(default)]
-    pub plan: CoworkPlan,
-    /// Human-readable plan name
-    #[serde(default)]
-    pub plan_name: String,
-    /// Whether the subscription is valid and active
-    #[serde(default)]
-    pub is_valid: bool,
-    /// Current usage statistics for the billing period
-    #[serde(default)]
-    pub usage: CoworkUsage,
-    /// List of AI model identifiers available for this plan
-    #[serde(default)]
-    pub models: Vec<String>,
-    /// Feature flags indicating available capabilities
-    #[serde(default)]
+    pub profile: CoworkProfile,
     pub features: CoworkFeatures,
-    /// Optional message suggesting plan upgrade
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_valid: bool,
+    pub models: Vec<String>,
     pub upgrade_message: Option<String>,
 }
 
 impl Default for CoworkCapabilities {
     fn default() -> Self {
-        Self::free()
+        Self {
+            profile: CoworkProfile {
+                name: String::new(),
+                email: String::new(),
+                plan: CoworkPlan::default(),
+                usage: CoworkUsage::default(),
+            },
+            features: CoworkFeatures::default(),
+            is_valid: true,
+            models: vec![],
+            upgrade_message: None,
+        }
     }
 }
 
 impl CoworkCapabilities {
     /// Create capabilities for free plan (offline/fallback)
     pub fn free() -> Self {
-        Self {
-            plan: CoworkPlan::Free,
-            plan_name: "Free".to_string(),
-            is_valid: true,
-            usage: CoworkUsage::default(),
-            models: vec![],
-            features: CoworkFeatures::default(),
-            upgrade_message: None,
-        }
+        Self::default()
     }
 
     /// Check if a specific model is available
@@ -163,49 +145,37 @@ impl CoworkCapabilities {
 
     /// Check if user can make more requests
     pub fn can_make_request(&self) -> bool {
-        self.is_valid && !self.usage.is_limit_reached() && !self.usage.is_over_budget()
+        self.is_valid && !self.profile.usage.is_limit_reached()
     }
 }
-
-/// Backward compatibility alias
-#[deprecated(since = "0.4.2", note = "Use CoworkPlan instead")]
-pub type CoworkTier = CoworkPlan;
-
-/// Backward compatibility alias
-#[deprecated(since = "0.4.2", note = "Use CoworkUsage instead")]
-pub type CoworkLimits = CoworkUsage;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
-    fn test_plan_is_paid() {
-        assert!(!CoworkPlan::Free.is_paid());
-        assert!(CoworkPlan::GoPlus.is_paid());
-        assert!(CoworkPlan::Plus.is_paid());
-        assert!(CoworkPlan::Pro.is_paid());
-        assert!(CoworkPlan::ProPlus.is_paid());
-    }
+    fn test_deserialize_profile() {
+        let json = json!({
+            "name": "Test User",
+            "email": "test@example.com",
+            "plan": {
+                "id": "plus",
+                "name": "Plus",
+                "requestsPerMinute": 20,
+                "monthlyLimit": 100
+            },
+            "usage": {
+                "used": 15,
+                "limit": 100,
+                "creditsUsed": 2.5
+            }
+        });
 
-    #[test]
-    fn test_capabilities_free() {
-        let caps = CoworkCapabilities::free();
-        assert_eq!(caps.plan, CoworkPlan::Free);
-        assert!(caps.models.is_empty());
-    }
-
-    #[test]
-    fn test_usage_limits() {
-        let usage = CoworkUsage {
-            usage_type: "monthly".to_string(),
-            used: 30,
-            limit: 30,
-            credits_used: 0.0,
-            credits_ceiling: 0.0,
-            resets_at: String::new(),
-        };
-        assert!(usage.is_limit_reached());
-        assert_eq!(usage.remaining(), 0);
+        let profile: CoworkProfile = serde_json::from_value(json).unwrap();
+        assert_eq!(profile.name, "Test User");
+        assert_eq!(profile.plan.id, "plus");
+        assert_eq!(profile.plan.requests_per_minute, 20);
+        assert_eq!(profile.usage.credits_used, 2.5);
     }
 }

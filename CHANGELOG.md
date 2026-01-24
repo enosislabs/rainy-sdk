@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-01-23
+
+### 🛡️ Cowork API Integration
+
+Rainy SDK v0.6.0 implements the full **Rainy Cowork API** specifications, including dynamic plan structures, usage tracking, and profile management.
+
+#### Breaking Changes
+
+- **`CoworkPlan` Structure**: Changed from an `enum` to a `struct` to support dynamic plan details returned by the API (id, name, limits).
+- **`CoworkCapabilities`**: Refactored to include a nested `CoworkProfile` containing plan and usage info.
+- **`CoworkUsage`**: Updated fields to match API response (camelCase mapping).
+
+#### Added
+
+- **`get_cowork_profile()`**: New method to retrieve comprehensive user profile and subscription status.
+- **`CoworkProfile`**: New struct mapping the `/cowork/profile` endpoint response.
+
+---
+
 ## [0.5.3] - 2026-01-22
 
 ### 📚 Documentation Fixes
@@ -19,7 +38,7 @@ This release fixes missing documentation that caused CI failures with `cargo doc
 
 - Added doc comments to `CoworkPlan` enum variants (`Free`, `GoPlus`, `Plus`, `Pro`, `ProPlus`)
 - Added doc comments to `CoworkFeatures` struct fields
-- Added doc comments to `CoworkUsage` struct fields  
+- Added doc comments to `CoworkUsage` struct fields
 - Added doc comments to `CoworkCapabilities` struct fields
 
 ##### Missing Documentation in `models.rs`
@@ -332,12 +351,12 @@ Rainy SDK v0.4.0 introduces **Cowork Integration** - a tier-based feature gating
 
 ##### Tier-Based Model Access
 
-| Tier | Models |
-|------|--------|
-| Free | None (use own Gemini key) |
-| Basic | GPT-4o, Gemini Flash, Llama 3.1 |
-| Pro | All models including GPT-5, Gemini Pro |
-| Enterprise | Full access + beta models |
+| Tier       | Models                                 |
+| ---------- | -------------------------------------- |
+| Free       | None (use own Gemini key)              |
+| Basic      | GPT-4o, Gemini Flash, Llama 3.1        |
+| Pro        | All models including GPT-5, Gemini Pro |
+| Enterprise | Full access + beta models              |
 
 #### Changed
 
@@ -793,7 +812,7 @@ Replace `async-openai` with `rainy-sdk` for identical API usage plus multi-provi
 
 - **REMOVED**: All administrative operations for security reasons:
   - `create_user_account()` - Admin-only operation removed
-  - `list_all_users()` - Potential security exposure removed  
+  - `list_all_users()` - Potential security exposure removed
   - `get_system_metrics()` - Infrastructure details removed
   - `update_user_plan()` - Admin operation removed
   - Admin key authentication completely removed

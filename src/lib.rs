@@ -74,8 +74,8 @@ pub use retry::{retry_with_backoff, RetryConfig};
 // Re-export Cowork types for convenience
 pub use cowork::{CoworkCapabilities, CoworkFeatures, CoworkPlan, CoworkUsage};
 // Backward compatibility aliases
-#[allow(deprecated)]
-pub use cowork::{CoworkLimits, CoworkTier};
+// #[allow(deprecated)]
+// pub use cowork::{CoworkLimits, CoworkTier};
 pub use endpoints::cowork::get_offline_capabilities;
 
 // Re-export Search types for convenience
