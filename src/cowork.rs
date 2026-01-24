@@ -94,6 +94,21 @@ pub struct CoworkProfile {
     pub usage: CoworkUsage,
 }
 
+/// Response from /cowork/models endpoint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoworkModelsResponse {
+    /// Plan identifier
+    pub plan: String,
+    /// Human-readable plan name
+    pub plan_name: String,
+    /// Access level (e.g. "basic", "standard", "high")
+    pub model_access_level: String,
+    /// List of available model IDs
+    pub models: Vec<String>,
+    /// Total number of available models
+    pub total_models: u32,
+}
+
 /// Complete capabilities including features (constructed client-side or extended API)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoworkCapabilities {

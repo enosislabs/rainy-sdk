@@ -4,12 +4,23 @@
 //! Cowork plan, available models, and feature access.
 
 use crate::{
-    cowork::{CoworkCapabilities, CoworkFeatures, CoworkPlan, CoworkProfile, CoworkUsage},
+    cowork::{
+        CoworkCapabilities, CoworkFeatures, CoworkModelsResponse, CoworkPlan, CoworkProfile,
+        CoworkUsage,
+    },
     error::Result,
     RainyClient,
 };
 
 impl RainyClient {
+    /// Retrieve available models for the current Cowork plan directly from the API.
+    ///
+    /// This is more efficient than fetching full capabilities if only models are needed.
+    pub async fn get_cowork_models(&self) -> Result<CoworkModelsResponse> {
+        self.make_request(reqwest::Method::GET, "/cowork/models", None)
+            .await
+    }
+
     /// Retrieve Cowork capabilities for the current API key.
     ///
     /// This method validates the API key and returns information about:
@@ -78,12 +89,6 @@ impl RainyClient {
             Ok(caps) => caps.profile.plan.is_paid(),
             Err(_) => false,
         }
-    }
-
-    /// Get available models for Cowork based on subscription plan.
-    pub async fn get_cowork_models(&self) -> Result<Vec<String>> {
-        let caps = self.get_cowork_capabilities().await?;
-        Ok(caps.models)
     }
 
     /// Check if a specific feature is available.

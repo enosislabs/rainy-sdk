@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.1] - 2026-01-24
+
+### 🚀 Performance Improvements
+
+Added a dedicated endpoint for fetching available models, reducing the payload size compared to fetching full capabilities.
+
+#### Added
+
+- **`get_cowork_models()`**: New method to efficiently retrieve available models for the current plan.
+- **`CoworkModelsResponse`**: New struct for the models endpoint response.
+
+---
+
 ## [0.6.0] - 2026-01-23
 
 ### 🛡️ Cowork API Integration
