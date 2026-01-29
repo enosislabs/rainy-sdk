@@ -16,7 +16,9 @@ async fn test_research_configuration() {
 #[tokio::test]
 async fn test_research_client_api() {
     // This test just verifies API surface exists, doesn't make network calls
-    let client = RainyClient::with_api_key("test-key").unwrap();
+    // Use a valid format key: ra- + 48 hex characters
+    let client =
+        RainyClient::with_api_key("ra-0123456789abcdef0123456789abcdef0123456789abcdef").unwrap();
 
     // Check if method exists
     // Check if method exists and compiles - don't execute as it needs valid key
