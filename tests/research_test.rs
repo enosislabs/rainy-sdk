@@ -19,5 +19,6 @@ async fn test_research_client_api() {
     let client = RainyClient::with_api_key("test-key").unwrap();
 
     // Check if method exists
-    let _ = client.research("test topic", None);
+    // Check if method exists and compiles - don't execute as it needs valid key
+    let _ = client.research("test topic", None).await;
 }
