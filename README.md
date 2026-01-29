@@ -1,4 +1,4 @@
-# 🌧️ Rainy SDK v0.5.3
+# 🌧️ Rainy SDK v0.6.2
 
 [![Crates.io](https://img.shields.io/crates/v/rainy-sdk.svg)](https://crates.io/crates/rainy-sdk)
 [![Documentation](https://docs.rs/rainy-sdk/badge.svg)](https://docs.rs/rainy-sdk)
@@ -31,7 +31,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rainy-sdk = "0.5.3"
+rainy-sdk = "0.6.2"
 tokio = { version = "1.47", features = ["full"] }
 ```
 
@@ -52,7 +52,7 @@ Enable additional features as needed:
 
 ```toml
 [dependencies]
-rainy-sdk = { version = "0.5.1", features = ["rate-limiting", "tracing", "cowork"] }
+rainy-sdk = { version = "0.6.2", features = ["rate-limiting", "tracing", "cowork"] }
 ```
 
 Available features:
@@ -63,7 +63,7 @@ Available features:
 
 ## 🎯 OpenAI Compatibility
 
-Rainy SDK v0.5.1 provides **100% OpenAI API compatibility** while extending support to additional providers. Use Rainy SDK as a drop-in replacement for the official OpenAI SDK:
+Rainy SDK v0.6.2 provides **100% OpenAI API compatibility** while extending support to additional providers. Use Rainy SDK as a drop-in replacement for the official OpenAI SDK:
 
 ```rust
 use rainy_sdk::{models, ChatCompletionRequest, ChatMessage, RainyClient};
@@ -83,14 +83,14 @@ let (response, metadata) = client.chat_completion(request).await?;
 
 ### Supported Models (100% OpenAI Compatible)
 
-| Provider | Models | Features |
-|----------|--------|----------|
-| **OpenAI** | `gpt-4o`, `gpt-5`, `gpt-5-pro`, `o3`, `o4-mini` | ✅ Native OpenAI API |
-| **Google Gemini 3** | `gemini-3-pro-preview`, `gemini-3-flash-preview`, `gemini-3-pro-image-preview` | ✅ Thinking, Thought Signatures, Multimodal |
-| **Google Gemini 2.5** | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` | ✅ Thinking, Dynamic Reasoning |
-| **Groq** | `llama-3.1-8b-instant`, `llama-3.3-70b-versatile` | ✅ OpenAI-compatible API |
-| **Cerebras** | `llama3.1-8b` | ✅ OpenAI-compatible API |
-| **Enosis Labs** | `astronomer-1`, `astronomer-1-max`, `astronomer-1.5`, `astronomer-2`, `astronomer-2-pro` | ✅ Native Rainy API |
+| Provider              | Models                                                                                   | Features                                    |
+| --------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------- |
+| **OpenAI**            | `gpt-4o`, `gpt-5`, `gpt-5-pro`, `o3`, `o4-mini`                                          | ✅ Native OpenAI API                        |
+| **Google Gemini 3**   | `gemini-3-pro-preview`, `gemini-3-flash-preview`, `gemini-3-pro-image-preview`           | ✅ Thinking, Thought Signatures, Multimodal |
+| **Google Gemini 2.5** | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`                            | ✅ Thinking, Dynamic Reasoning              |
+| **Groq**              | `llama-3.1-8b-instant`, `llama-3.3-70b-versatile`                                        | ✅ OpenAI-compatible API                    |
+| **Cerebras**          | `llama3.1-8b`                                                                            | ✅ OpenAI-compatible API                    |
+| **Enosis Labs**       | `astronomer-1`, `astronomer-1-max`, `astronomer-1.5`, `astronomer-2`, `astronomer-2-pro` | ✅ Native Rainy API                         |
 
 ### Advanced OpenAI Features
 

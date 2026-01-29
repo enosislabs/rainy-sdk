@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.2] - 2026-01-29
+
+### 🌐 Web Research Integration
+
+Rainy SDK v0.6.2 enables the new **Web Research API**, adding support for deep research capabilities using multiple providers (Exa and Tavily).
+
+#### Added
+
+- **`ResearchProvider` Enum**: Support for `Exa` (Deep Search) and `Tavily` (Fast Search).
+- **`ResearchDepth` Enum**: configuration for `Basic` (fast) vs `Advanced` (thorough) research.
+- **`ResearchConfig`**: Builder-pattern configuration struct for research requests.
+- **`RainyClient::research()`**: Unified method for performing web research.
+- **Async Support**: `async_mode` flag for long-running research tasks.
+
+#### Example
+
+```rust
+use rainy_sdk::{RainyClient, search::ResearchConfig, models::{ResearchProvider, ResearchDepth}};
+
+let client = RainyClient::with_api_key("your-key")?;
+let config = ResearchConfig::new()
+    .with_provider(ResearchProvider::Exa)
+    .with_depth(ResearchDepth::Advanced);
+
+let response = client.research("Latest Rust ecosystem updates", Some(config)).await?;
+```
+
+---
+
 ## [0.6.1] - 2026-01-24
 
 ### 🚀 Performance Improvements

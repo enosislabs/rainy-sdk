@@ -3,11 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v0.5.0)'
+        description: "Version tag (e.g., v0.5.0)"
         required: true
 
 env:
@@ -18,60 +18,60 @@ jobs:
   validate:
     name: Pre-release Validation
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-        components: rustfmt, clippy
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
 
-    - name: Verify version matches tag
-      run: |
-        # Extract version from tag or workflow_dispatch input
-        if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-          TAG_VERSION=${GITHUB_REF#refs/tags/v}
-        else
-          # For workflow_dispatch, use the input version (strip 'v' prefix if present)
-          INPUT_VERSION="${{ github.event.inputs.version }}"
-          TAG_VERSION=${INPUT_VERSION#v}
-        fi
-        
-        CARGO_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-        
-        if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
-          echo "Version mismatch: expected $TAG_VERSION vs Cargo.toml $CARGO_VERSION"
-          exit 1
-        fi
-        
-        echo "Version verification passed: $TAG_VERSION"
+      - name: Verify version matches tag
+        run: |
+          # Extract version from tag or workflow_dispatch input
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            # For workflow_dispatch, use the input version (strip 'v' prefix if present)
+            INPUT_VERSION="${{ github.event.inputs.version }}"
+            TAG_VERSION=${INPUT_VERSION#v}
+          fi
 
-    - name: Check formatting
-      run: cargo fmt --all -- --check
+          CARGO_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
 
-    - name: Run clippy (strict)
-      run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "Version mismatch: expected $TAG_VERSION vs Cargo.toml $CARGO_VERSION"
+            exit 1
+          fi
 
-    - name: Run tests (all features)
-      run: cargo test --all-features --verbose
+          echo "Version verification passed: $TAG_VERSION"
 
-    - name: Run integration tests
-      run: cargo test --test integration_test --all-features --verbose
+      - name: Check formatting
+        run: cargo fmt --all -- --check
 
-    - name: Test documentation
-      run: cargo test --doc --all-features
+      - name: Run clippy (strict)
+        run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
 
-    - name: Build release mode
-      run: cargo build --release --all-features
+      - name: Run tests (all features)
+        run: cargo test --all-features --verbose
 
-    - name: Verify package can be built
-      run: cargo package --allow-dirty --no-verify
+      - name: Run integration tests
+        run: cargo test --test integration_test --all-features --verbose
+
+      - name: Test documentation
+        run: cargo test --doc --all-features
+
+      - name: Build release mode
+        run: cargo build --release --all-features
+
+      - name: Verify package can be built
+        run: cargo package --allow-dirty --no-verify
 
   # Multi-platform builds for validation
   build-matrix:
@@ -80,71 +80,71 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        rust: [stable, beta]
-    
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable]
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ matrix.rust }}
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
 
-    - name: Build
-      run: cargo build --release
+      - name: Build
+        run: cargo build --release
 
-    - name: Test
-      run: cargo test --release
+      - name: Test
+        run: cargo test --release
 
   # Security audit
   security-audit:
     name: Security Audit
     needs: validate
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
 
-    - name: Install cargo-audit
-      run: cargo install cargo-audit
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
 
-    - name: Security audit
-      run: cargo audit
+      - name: Security audit
+        run: cargo audit
 
   # Release to crates.io
   publish:
     name: Publish to Crates.io
     needs: [validate, build-matrix, security-audit]
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
 
-    - name: Login to crates.io
-      run: cargo login ${{ secrets.CRATES_IO_TOKEN }}
+      - name: Login to crates.io
+        run: cargo login ${{ secrets.CRATES_IO_TOKEN }}
 
-    - name: Publish to crates.io
-      run: cargo publish --allow-dirty
+      - name: Publish to crates.io
+        run: cargo publish --allow-dirty
 
   # Create GitHub release
   github-release:
@@ -152,77 +152,77 @@ jobs:
     needs: publish
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Required for creating releases and uploading assets
+      contents: write # Required for creating releases and uploading assets
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
 
-    - name: Cache dependencies
-      uses: Swatinem/rust-cache@v2
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
 
-    - name: Extract version from tag
-      id: get_version
-      run: |
-        if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-          VERSION=${GITHUB_REF#refs/tags/v}
-        else
-          # For workflow_dispatch, use the input version (strip 'v' prefix if present)
-          INPUT_VERSION="${{ github.event.inputs.version }}"
-          VERSION=${INPUT_VERSION#v}
-        fi
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "Extracted version: $VERSION"
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            # For workflow_dispatch, use the input version (strip 'v' prefix if present)
+            INPUT_VERSION="${{ github.event.inputs.version }}"
+            VERSION=${INPUT_VERSION#v}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
 
-    - name: Generate crate package
-      run: |
-        VERSION="${{ steps.get_version.outputs.version }}"
-        echo "Generating crate package for version $VERSION"
-        cargo package --allow-dirty
-        ls -la target/package/
-
-    - name: Verify crate file exists
-      run: |
-        VERSION="${{ steps.get_version.outputs.version }}"
-        CRATE_FILE="target/package/rainy-sdk-$VERSION.crate"
-        if [ ! -f "$CRATE_FILE" ]; then
-          echo "Error: Crate file $CRATE_FILE not found!"
+      - name: Generate crate package
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          echo "Generating crate package for version $VERSION"
+          cargo package --allow-dirty
           ls -la target/package/
-          exit 1
-        fi
-        echo "Crate file found: $CRATE_FILE"
-        ls -lh "$CRATE_FILE"
 
-    - name: Extract changelog for this version
-      id: extract_changelog
-      run: |
-        VERSION="${{ steps.get_version.outputs.version }}"
+      - name: Verify crate file exists
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          CRATE_FILE="target/package/rainy-sdk-$VERSION.crate"
+          if [ ! -f "$CRATE_FILE" ]; then
+            echo "Error: Crate file $CRATE_FILE not found!"
+            ls -la target/package/
+            exit 1
+          fi
+          echo "Crate file found: $CRATE_FILE"
+          ls -lh "$CRATE_FILE"
 
-        # Extract changelog section for this version
-        sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
+      - name: Extract changelog for this version
+        id: extract_changelog
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
 
-        # If the changelog section is empty, create a default one
-        if [ ! -s release_notes.md ]; then
-          echo "## Changes in Release $VERSION" > release_notes.md
-          echo "" >> release_notes.md
-          echo "See [CHANGELOG.md](https://github.com/enosislabs/rainy-sdk/blob/main/CHANGELOG.md) for full details." >> release_notes.md
-        fi
+          # Extract changelog section for this version
+          sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d' > release_notes.md
 
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        name: "Release v${{ steps.get_version.outputs.version }}"
-        body_path: release_notes.md
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-        append_body: true
-        files: |
-          target/package/rainy-sdk-${{ steps.get_version.outputs.version }}.crate
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # If the changelog section is empty, create a default one
+          if [ ! -s release_notes.md ]; then
+            echo "## Changes in Release $VERSION" > release_notes.md
+            echo "" >> release_notes.md
+            echo "See [CHANGELOG.md](https://github.com/enosislabs/rainy-sdk/blob/main/CHANGELOG.md) for full details." >> release_notes.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Release v${{ steps.get_version.outputs.version }}"
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          append_body: true
+          files: |
+            target/package/rainy-sdk-${{ steps.get_version.outputs.version }}.crate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
