@@ -54,8 +54,8 @@ impl RainyClient {
         let cfg = config.unwrap_or_default();
         let request = ResearchRequest::new(topic.into(), &cfg);
 
-        // Note: The endpoint is /agents/research based on previous analysis
-        let url = format!("{}/agents/research", self.auth_config().base_url);
+        // Note: The endpoint is /api/v1/agents/research
+        let url = format!("{}/api/v1/agents/research", self.auth_config().base_url);
 
         let response = self
             .http_client()

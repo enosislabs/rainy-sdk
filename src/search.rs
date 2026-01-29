@@ -24,6 +24,9 @@ pub struct ResearchConfig {
     /// Process the request asynchronously
     #[serde(default)]
     pub async_mode: bool,
+    /// The specific AI model to use for analysis (e.g. "gemini-2.0-flash-exp")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 fn default_max_sources() -> u32 {
@@ -38,6 +41,7 @@ impl Default for ResearchConfig {
             max_sources: 10,
             include_images: false,
             async_mode: false,
+            model: None,
         }
     }
 }
@@ -66,9 +70,14 @@ impl ResearchConfig {
         self
     }
 
-    /// Enable async mode
     pub fn with_async(mut self, async_mode: bool) -> Self {
         self.async_mode = async_mode;
+        self
+    }
+
+    /// Set the specific AI model
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
         self
     }
 }
@@ -83,6 +92,8 @@ pub(crate) struct ResearchRequest {
     pub max_sources: u32,
     #[serde(rename = "async")]
     pub async_mode: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 impl ResearchRequest {
@@ -93,6 +104,7 @@ impl ResearchRequest {
             depth: config.depth.clone(),
             max_sources: config.max_sources,
             async_mode: config.async_mode,
+            model: config.model.clone(),
         }
     }
 }
