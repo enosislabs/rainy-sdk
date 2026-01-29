@@ -23,6 +23,40 @@ pub enum MessageRole {
     Assistant,
 }
 
+/// The search provider to use for web research.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ResearchProvider {
+    /// Use Exa (formerly Metaphor) for high-quality semantic search.
+    Exa,
+    /// Use Tavily for comprehensive web search and content extraction.
+    Tavily,
+    /// Automatically select the best provider based on the query.
+    Auto,
+}
+
+impl Default for ResearchProvider {
+    fn default() -> Self {
+        Self::Exa
+    }
+}
+
+/// The depth of the research operation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ResearchDepth {
+    /// Basic search (faster, lower cost).
+    Basic,
+    /// Deep search (more thorough, higher cost, includes more context).
+    Advanced,
+}
+
+impl Default for ResearchDepth {
+    fn default() -> Self {
+        Self::Basic
+    }
+}
+
 /// Represents a request to create a chat completion.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionRequest {

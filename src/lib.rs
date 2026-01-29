@@ -78,8 +78,11 @@ pub use cowork::{CoworkCapabilities, CoworkFeatures, CoworkPlan, CoworkUsage};
 // pub use cowork::{CoworkLimits, CoworkTier};
 pub use endpoints::cowork::get_offline_capabilities;
 
-// Re-export Search types for convenience
-pub use search::{ExtractResponse, ExtractedContent, SearchOptions, SearchResponse, SearchResult};
+// Re-export Research types for convenience
+pub use search::{
+    DeepResearchResponse, ResearchApiResponse, ResearchConfig, ResearchResponse, ResearchResult,
+    ResearchSource,
+};
 
 // Re-export commonly used types
 /// Re-export of the `reqwest` crate for convenience.
