@@ -4,11 +4,14 @@ use crate::{
     models::*,
     retry::{retry_with_backoff, RetryConfig},
 };
+use eventsource_stream::Eventsource;
+use futures::{Stream, StreamExt};
 use reqwest::{
     header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT},
     Client, Response,
 };
 use secrecy::ExposeSecret;
+use std::pin::Pin;
 use std::time::Instant;
 
 #[cfg(feature = "rate-limiting")]
@@ -212,6 +215,53 @@ impl RainyClient {
         }
     }
 
+    /// Creates a streaming chat completion based on the provided request.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - A `ChatCompletionRequest` containing the model, messages, and other parameters.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a stream of `ChatCompletionChunk`s on success, or a `RainyError` on failure.
+    pub async fn chat_completion_stream(
+        &self,
+        mut request: ChatCompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionChunk>> + Send>>> {
+        // Ensure stream is set to true
+        request.stream = Some(true);
+
+        #[cfg(feature = "rate-limiting")]
+        if let Some(ref limiter) = self.rate_limiter {
+            limiter.until_ready().await;
+        }
+
+        let url = format!("{}/api/v1/chat/completions", self.auth_config.base_url);
+
+        // Note: Retries are more complex with streams, so we only retry the initial connection
+        let operation = || async {
+            let response = self
+                .client
+                .post(&url)
+                .json(&request)
+                .send()
+                .await
+                .map_err(|e| RainyError::Network {
+                    message: format!("Failed to send request: {}", e),
+                    retryable: true,
+                    source_error: Some(e.to_string()),
+                })?;
+
+            self.handle_stream_response(response).await
+        };
+
+        if self.auth_config.enable_retry {
+            retry_with_backoff(&self.retry_config, operation).await
+        } else {
+            operation().await
+        }
+    }
+
     /// Creates a simple chat completion with a single user prompt.
     ///
     /// This is a convenience method for simple use cases where you only need to send a single
@@ -272,6 +322,69 @@ impl RainyClient {
                 self.map_api_error(error, status.as_u16(), request_id)
             } else {
                 // Fallback to generic error
+                Err(RainyError::Api {
+                    code: status.canonical_reason().unwrap_or("UNKNOWN").to_string(),
+                    message: if text.is_empty() {
+                        format!("HTTP {}", status.as_u16())
+                    } else {
+                        text
+                    },
+                    status_code: status.as_u16(),
+                    retryable: status.is_server_error(),
+                    request_id,
+                })
+            }
+        }
+    }
+
+    /// Handles the HTTP response for streaming requests.
+    pub(crate) async fn handle_stream_response(
+        &self,
+        response: Response,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionChunk>> + Send>>> {
+        let status = response.status();
+        let request_id = response
+            .headers()
+            .get("x-request-id")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+
+        if status.is_success() {
+            let stream = response
+                .bytes_stream()
+                .eventsource()
+                .map(move |event| match event {
+                    Ok(event) => {
+                        if event.data == "[DONE]" {
+                            return None;
+                        }
+
+                        match serde_json::from_str::<ChatCompletionChunk>(&event.data) {
+                            Ok(chunk) => Some(Ok(chunk)),
+                            Err(e) => Some(Err(RainyError::Serialization {
+                                message: format!("Failed to parse stream chunk: {}", e),
+                                source_error: Some(e.to_string()),
+                            })),
+                        }
+                    }
+                    Err(e) => Some(Err(RainyError::Network {
+                        message: format!("Stream error: {}", e),
+                        retryable: true,
+                        source_error: Some(e.to_string()),
+                    })),
+                })
+                .take_while(|x| futures::future::ready(x.is_some()))
+                .map(|x| x.unwrap());
+
+            Ok(Box::pin(stream))
+        } else {
+            let text = response.text().await.unwrap_or_default();
+
+            // Try to parse structured error response
+            if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&text) {
+                let error = error_response.error;
+                self.map_api_error(error, status.as_u16(), request_id)
+            } else {
                 Err(RainyError::Api {
                     code: status.canonical_reason().unwrap_or("UNKNOWN").to_string(),
                     message: if text.is_empty() {

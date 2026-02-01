@@ -153,6 +153,55 @@ pub struct ChatCompletionResponse {
     pub usage: Option<Usage>,
 }
 
+/// Represents a chunk of a streaming chat completion response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatCompletionChunk {
+    /// A unique identifier for the chat completion.
+    pub id: String,
+
+    /// The type of object, which is always "chat.completion.chunk".
+    pub object: String,
+
+    /// The Unix timestamp (in seconds) of when the completion was created.
+    pub created: u64,
+
+    /// The model that was used for the completion.
+    pub model: String,
+
+    /// A list of chat completion choices.
+    pub choices: Vec<ChatCompletionChunkChoice>,
+}
+
+/// Represents a single choice in a streaming chat completion response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatCompletionChunkChoice {
+    /// The index of the choice in the list of choices.
+    pub index: u32,
+
+    /// A delta payload with the content that has changed since the last chunk.
+    pub delta: ChatCompletionChunkDelta,
+
+    /// The reason the model stopped generating tokens.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<String>,
+}
+
+/// Represents the delta payload of a streaming chat completion chunk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatCompletionChunkDelta {
+    /// The role of the message author.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<MessageRole>,
+
+    /// The content of the message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+
+    /// The thinking content (for Gemini 3 models).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thought: Option<String>,
+}
+
 /// Represents a single choice in a chat completion response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatChoice {
@@ -210,15 +259,18 @@ pub struct ServiceStatus {
 }
 
 /// Represents the available models and providers.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AvailableModels {
     /// A map where keys are provider names and values are lists of model names.
+    #[serde(default)]
     pub providers: HashMap<String, Vec<String>>,
 
     /// The total number of available models across all providers.
+    #[serde(default)]
     pub total_models: usize,
 
     /// A list of provider names that are currently active and available.
+    #[serde(default)]
     pub active_providers: Vec<String>,
 }
 
@@ -1235,6 +1287,9 @@ pub struct ChatCompletionStreamDelta {
     /// The new content for this chunk.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    /// The thinking/reasoning content for this chunk (if any).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thought: Option<String>,
     /// Tool calls for this chunk (if any).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,

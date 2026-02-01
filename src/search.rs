@@ -6,6 +6,16 @@
 use crate::models::{ResearchDepth, ResearchProvider};
 use serde::{Deserialize, Serialize};
 
+/// Thinking level for Gemini 3 models
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ThinkingLevel {
+    Minimal,
+    Low,
+    Medium,
+    High,
+}
+
 /// Options for configuring a web research request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResearchConfig {
@@ -27,6 +37,13 @@ pub struct ResearchConfig {
     /// The specific AI model to use for analysis (e.g. "gemini-2.0-flash-exp")
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// The thinking level for Gemini 3 models
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "thinkingLevel"
+    )]
+    pub thinking_level: Option<ThinkingLevel>,
 }
 
 fn default_max_sources() -> u32 {
@@ -42,6 +59,7 @@ impl Default for ResearchConfig {
             include_images: false,
             async_mode: false,
             model: None,
+            thinking_level: None,
         }
     }
 }
@@ -80,6 +98,12 @@ impl ResearchConfig {
         self.model = Some(model.into());
         self
     }
+
+    /// Set the thinking level (Gemini 3 only)
+    pub fn with_thinking_level(mut self, level: ThinkingLevel) -> Self {
+        self.thinking_level = Some(level);
+        self
+    }
 }
 
 /// Request body for web research
@@ -94,6 +118,8 @@ pub(crate) struct ResearchRequest {
     pub async_mode: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "thinkingLevel")]
+    pub thinking_level: Option<ThinkingLevel>,
 }
 
 impl ResearchRequest {
@@ -105,6 +131,7 @@ impl ResearchRequest {
             max_sources: config.max_sources,
             async_mode: config.async_mode,
             model: config.model.clone(),
+            thinking_level: config.thinking_level.clone(),
         }
     }
 }
@@ -173,7 +200,7 @@ pub enum ResearchResponse {
 pub struct DeepResearchResponse {
     pub success: bool,
     pub mode: String,
-    pub result: Option<String>, // For sync
+    pub result: Option<serde_json::Value>, // For sync, handle both string and object
     #[serde(rename = "taskId")]
     pub task_id: Option<String>, // For async
     #[serde(rename = "generatedAt")]
