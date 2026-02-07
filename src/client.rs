@@ -590,7 +590,7 @@ impl RainyClient {
     ///
     /// A `Result` containing a `CoworkProfile` struct on success, or a `RainyError` on failure.
     pub async fn get_cowork_profile(&self) -> Result<crate::cowork::CoworkProfile> {
-        let url = format!("{}/cowork/profile", self.auth_config.base_url);
+        let url = format!("{}/api/v1/cowork/profile", self.auth_config.base_url);
 
         let operation = || async {
             let response = self.client.get(&url).send().await?;
