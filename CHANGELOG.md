@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.4] - 2026-02-09
+
+### 🛡️ Security Fixes
+
+- **Dependency Update**: Upgraded `bytes` crate to v1.11.1 to resolve RUSTSEC-2026-0007 (Integer overflow in `BytesMut::reserve`).
+
+---
+
 ## [0.6.3] - 2026-02-09
 
 ### 🔧 Bug Fixes & Improvements

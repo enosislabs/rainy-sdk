@@ -1,5 +1,9 @@
 //! Cowork Integration Module
 //!
+//! # Deprecated
+//! This module is legacy and will be removed in a future version.
+//! The Cowork endpoints have been removed from the API.
+//!
 //! This module provides types for Rainy Cowork integration.
 //! All business logic (pricing, limits, features) comes from the API.
 
@@ -110,12 +114,19 @@ pub struct CoworkModelsResponse {
 }
 
 /// Complete capabilities including features (constructed client-side or extended API)
+///
+/// @deprecated This struct is part of the legacy cowork system.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoworkCapabilities {
+    /// The user's profile details
     pub profile: CoworkProfile,
+    /// Enabled features for the current plan
     pub features: CoworkFeatures,
+    /// Whether the subscription/key is valid
     pub is_valid: bool,
+    /// List of available models
     pub models: Vec<String>,
+    /// Optional message for plan upgrades
     pub upgrade_message: Option<String>,
 }
 

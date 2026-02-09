@@ -1,4 +1,4 @@
-# 🌧️ Rainy SDK v0.6.2
+# 🌧️ Rainy SDK v0.6.4
 
 [![Crates.io](https://img.shields.io/crates/v/rainy-sdk.svg)](https://crates.io/crates/rainy-sdk)
 [![Documentation](https://docs.rs/rainy-sdk/badge.svg)](https://docs.rs/rainy-sdk)
