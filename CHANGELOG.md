@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.3] - 2026-02-09
+
+### 🔧 Bug Fixes & Improvements
+
+- **Enhanced Error Handling**: Improved API error response parsing with better error context
+- **Research API Stability**: Fixed async mode handling for long-running research operations
+- **Serialization Improvements**: Better JSON serialization for research responses
+
+### 📦 Dependencies
+
+- Updated `reqwest` to 0.12 for improved HTTP client performance
+- Updated `tokio` to 1.47 with full async features
+- Updated `anyhow` to 1.0.99 for better error handling
+
+### 📚 Documentation
+
+- Improved inline documentation for research module types
+- Added more examples for `ResearchConfig` builder patterns
+- Enhanced API reference documentation
+
+### ⚙️ Internal Improvements
+
+- **SSE Streaming Reliability**: Enhanced Server-Sent Events parsing with better error recovery
+- **Request Metadata**: Improved response header extraction for better telemetry
+- **Type Safety**: Enhanced type definitions for better compile-time guarantees
+
+---
+
 ## [0.6.2] - 2026-01-29
 
 ### 🌐 Web Research Integration
