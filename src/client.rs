@@ -11,6 +11,7 @@ use reqwest::{
     Client, Response,
 };
 use secrecy::ExposeSecret;
+use serde::Deserialize;
 use std::pin::Pin;
 use std::time::Instant;
 
@@ -60,6 +61,28 @@ pub struct RainyClient {
 }
 
 impl RainyClient {
+    pub(crate) fn root_url(&self, path: &str) -> String {
+        let normalized = if path.starts_with('/') {
+            path.to_string()
+        } else {
+            format!("/{path}")
+        };
+        format!("{}{}", self.auth_config.base_url.trim_end_matches('/'), normalized)
+    }
+
+    pub(crate) fn api_v1_url(&self, path: &str) -> String {
+        let normalized = if path.starts_with('/') {
+            path.to_string()
+        } else {
+            format!("/{path}")
+        };
+        format!(
+            "{}/api/v1{}",
+            self.auth_config.base_url.trim_end_matches('/'),
+            normalized
+        )
+    }
+
     /// Creates a new `RainyClient` with the given API key.
     ///
     /// This is the simplest way to create a client. It uses default settings for the base URL,
@@ -163,11 +186,44 @@ impl RainyClient {
     ///
     /// A `Result` containing an `AvailableModels` struct on success, or a `RainyError` on failure.
     pub async fn get_available_models(&self) -> Result<AvailableModels> {
-        let url = format!("{}/api/v1/models", self.auth_config.base_url);
+        #[derive(Deserialize)]
+        struct ModelListItem {
+            id: String,
+        }
+        #[derive(Deserialize)]
+        struct ModelsData {
+            data: Vec<ModelListItem>,
+        }
+        #[derive(Deserialize)]
+        struct Envelope {
+            data: ModelsData,
+        }
+
+        let url = self.api_v1_url("/models");
 
         let operation = || async {
             let response = self.client.get(&url).send().await?;
-            self.handle_response(response).await
+            let envelope: Envelope = self.handle_response(response).await?;
+
+            let mut providers = std::collections::HashMap::<String, Vec<String>>::new();
+            for item in envelope.data.data {
+                let provider = item
+                    .id
+                    .split_once('/')
+                    .map(|(p, _)| p.to_string())
+                    .unwrap_or_else(|| "rainy".to_string());
+                providers.entry(provider).or_default().push(item.id);
+            }
+
+            let total_models = providers.values().map(std::vec::Vec::len).sum();
+            let mut active_providers = providers.keys().cloned().collect::<Vec<_>>();
+            active_providers.sort();
+
+            Ok(AvailableModels {
+                providers,
+                total_models,
+                active_providers,
+            })
         };
 
         if self.auth_config.enable_retry {
@@ -196,7 +252,7 @@ impl RainyClient {
             limiter.until_ready().await;
         }
 
-        let url = format!("{}/api/v1/chat/completions", self.auth_config.base_url);
+        let url = self.api_v1_url("/chat/completions");
         let start_time = Instant::now();
 
         let operation = || async {
@@ -236,7 +292,7 @@ impl RainyClient {
             limiter.until_ready().await;
         }
 
-        let url = format!("{}/api/v1/chat/completions", self.auth_config.base_url);
+        let url = self.api_v1_url("/chat/completions");
 
         // Note: Retries are more complex with streams, so we only retry the initial connection
         let operation = || async {
@@ -568,18 +624,7 @@ impl RainyClient {
     /// # }
     /// ```
     pub async fn list_available_models(&self) -> Result<AvailableModels> {
-        let url = format!("{}/api/v1/models", self.auth_config.base_url);
-
-        let operation = || async {
-            let response = self.client.get(&url).send().await?;
-            self.handle_response(response).await
-        };
-
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
+        self.get_available_models().await
     }
 
     /// Retrieves the Cowork profile for the current user.
@@ -589,8 +634,9 @@ impl RainyClient {
     /// # Returns
     ///
     /// A `Result` containing a `CoworkProfile` struct on success, or a `RainyError` on failure.
+    #[deprecated(note = "Cowork endpoints are legacy and not supported by Rainy API v3. Migrate to v3 session/org endpoints.")]
     pub async fn get_cowork_profile(&self) -> Result<crate::cowork::CoworkProfile> {
-        let url = format!("{}/api/v1/cowork/profile", self.auth_config.base_url);
+        let url = self.api_v1_url("/cowork/profile");
 
         let operation = || async {
             let response = self.client.get(&url).send().await?;
@@ -620,7 +666,7 @@ impl RainyClient {
             limiter.until_ready().await;
         }
 
-        let url = format!("{}/api/v1{}", self.auth_config.base_url, endpoint);
+        let url = self.api_v1_url(endpoint);
         let headers = self.auth_config.build_headers()?;
 
         let mut request = self.client.request(method, &url).headers(headers);

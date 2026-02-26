@@ -1,7 +1,7 @@
 //! Web Research Module
 //!
-//! This module provides types and functionality for web research via Rainy API v2.
-//! Supports multiple providers (Exa, Tavily) and configurable search depth.
+//! This module provides types and functionality for web research via Rainy API v3.
+//! The current SDK implementation maps the legacy deep-research API onto v3 `/api/v1/search`.
 
 use crate::models::{ResearchDepth, ResearchProvider};
 use serde::{Deserialize, Serialize};

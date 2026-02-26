@@ -3,7 +3,7 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Initialize the client - base URL automatically set to api.enosislabs.com
+    // Initialize the API-key client for Rainy API v3 (models/chat/search endpoints)
     let client = RainyClient::with_config(AuthConfig::new("your-api-key-here").with_timeout(30))?;
 
     println!("🌟 Rainy API SDK Example");
@@ -26,17 +26,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Get user account information
-    println!("\n2. Getting user account info...");
-    match client.get_user_account().await {
-        Ok(user) => {
-            println!("👤 User ID: {}", user.user_id);
-            println!("📊 Plan: {}", user.plan_name);
-            println!("💰 Current Credits: {:.2}", user.current_credits);
-            println!("📈 Used This Month: {:.2}", user.credits_used_this_month);
+    // List models (v3 canonical models endpoint)
+    println!("\n2. Listing available models...");
+    match client.get_available_models().await {
+        Ok(models) => {
+            println!("🧠 Total Models: {}", models.total_models);
+            println!("🏷️  Active Providers: {:?}", models.active_providers);
         }
         Err(e) => {
-            println!("❌ Failed to get user account: {e}");
+            println!("❌ Failed to list models: {e}");
         }
     }
 
@@ -63,44 +61,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Get usage statistics
-    println!("\n4. Getting usage statistics...");
-    match client.get_usage_stats(Some(7)).await {
-        Ok(usage) => {
-            println!("📈 Total Requests: {}", usage.total_requests);
-            println!("🎫 Total Tokens: {}", usage.total_tokens);
-            println!("📅 Daily Usage (last {} days):", usage.daily_usage.len());
-
-            for daily in usage.daily_usage.iter().take(3) {
-                println!(
-                    "   {}: {:.2} credits, {} requests",
-                    daily.date, daily.credits_used, daily.requests
-                );
-            }
-        }
-        Err(e) => {
-            println!("❌ Failed to get usage stats: {e}");
-        }
-    }
-
-    // List API keys
-    println!("\n5. Listing API keys...");
-    match client.list_api_keys().await {
-        Ok(keys) => {
-            println!("🔑 Found {} API keys:", keys.len());
-            for key in keys.iter().take(3) {
-                println!(
-                    "   - {}: {} (Active: {})",
-                    key.key.chars().take(20).collect::<String>() + "...",
-                    key.description.as_deref().unwrap_or("No description"),
-                    key.is_active
-                );
-            }
-        }
-        Err(e) => {
-            println!("❌ Failed to list API keys: {e}");
-        }
-    }
+    println!("\n4. Tip: JWT/session endpoints (auth, keys, usage, orgs) now live on RainySessionClient.");
+    println!("   See examples/session_auth.rs for v3 session usage.");
 
     println!("\n🎉 Example completed!");
     Ok(())

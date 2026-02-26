@@ -23,6 +23,7 @@ impl RainyClient {
     /// # Ok(())
     /// # }
     /// ```
+    #[deprecated(note = "Legacy v2 user account endpoint. Rainy API v3 uses JWT session endpoints such as /api/v1/auth/me and /api/v1/orgs/me.")]
     pub async fn get_user_account(&self) -> Result<User> {
         self.make_request(reqwest::Method::GET, "/users/account", None)
             .await

@@ -1,6 +1,6 @@
 //! # Rainy SDK
 //!
-//! The official Rust SDK for the Rainy API by Enosis Labs.
+//! The official Rust SDK for the Rainy API by Enosis Labs (v3 service).
 //!
 //! This SDK provides a clean, idiomatic Rust interface for interacting with
 //! the Rainy API, which unifies multiple AI providers under a single API.
@@ -20,7 +20,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Create client with API key - automatically connects to api.enosislabs.com
+//!     // Create client with API key - automatically connects to the Rainy API v3 service
 //!     let client = RainyClient::with_api_key("your-api-key")?;
 //!
 //!     // Check API health
@@ -62,6 +62,8 @@ pub mod models;
 pub mod retry;
 /// Web search types and options for Tavily-powered search.
 pub mod search;
+/// JWT/session client for Rainy API v3 dashboard endpoints.
+pub mod session;
 
 mod endpoints;
 
@@ -70,12 +72,18 @@ pub use client::RainyClient;
 pub use error::{ApiErrorDetails, ApiErrorResponse, RainyError, Result};
 pub use models::*;
 pub use retry::{retry_with_backoff, RetryConfig};
+pub use session::{
+    CreatedApiKey, LoginResponse, OrgProfile, RainySessionClient, RefreshResponse, SessionApiKeyListItem,
+    SessionConfig, SessionTokens, SessionUser, UsageCreditsResponse, UsageStatsResponse,
+};
 
 // Re-export Cowork types for convenience
+#[deprecated(note = "Cowork types are legacy and retained only for v2 compatibility.")]
 pub use cowork::{CoworkCapabilities, CoworkFeatures, CoworkPlan, CoworkUsage};
 // Backward compatibility aliases
 // #[allow(deprecated)]
 // pub use cowork::{CoworkLimits, CoworkTier};
+#[deprecated(note = "Cowork helpers are legacy and retained only for v2 compatibility.")]
 pub use endpoints::cowork::get_offline_capabilities;
 
 // Re-export Research types for convenience
@@ -101,7 +109,7 @@ pub use serde_json;
 /// This value is read from the `CARGO_PKG_VERSION` environment variable at compile time.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// The default base URL for the Rainy API.
+/// The default base URL for the Rainy API v3 service.
 ///
-/// This constant is used by the `RainyClient` as the default API endpoint.
-pub const DEFAULT_BASE_URL: &str = "https://rainy-api-v2-179843975974.us-west1.run.app";
+/// Note: the v3 service currently exposes its canonical HTTP API under `/api/v1/*`.
+pub const DEFAULT_BASE_URL: &str = "https://api.enosislabs.com";

@@ -28,6 +28,7 @@ impl RainyClient {
     /// # Ok(())
     /// # }
     /// ```
+    #[deprecated(note = "Legacy v2-style usage helper. Rainy API v3 usage endpoints require JWT/session auth and return different shapes.")]
     pub async fn get_credit_stats(&self, days: Option<u32>) -> Result<CreditInfo> {
         let endpoint = if let Some(days) = days {
             format!("/usage/credits?days={days}")
@@ -76,6 +77,7 @@ impl RainyClient {
     /// # Ok(())
     /// # }
     /// ```
+    #[deprecated(note = "Legacy v2-style usage helper. Rainy API v3 usage endpoints require JWT/session auth and return different shapes.")]
     pub async fn get_usage_stats(&self, days: Option<u32>) -> Result<UsageStats> {
         let endpoint = if let Some(days) = days {
             format!("/usage/stats?days={days}")

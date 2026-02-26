@@ -1,6 +1,7 @@
 use crate::client::RainyClient;
 use crate::error::Result;
-use crate::models::HealthCheck;
+use crate::models::{HealthCheck, ServiceStatus};
+use serde::Deserialize;
 
 impl RainyClient {
     /// Performs a basic health check on the Rainy API.
@@ -23,8 +24,29 @@ impl RainyClient {
     /// # }
     /// ```
     pub async fn health_check(&self) -> Result<HealthCheck> {
-        self.make_request(reqwest::Method::GET, "/health", None)
-            .await
+        #[derive(Deserialize)]
+        struct RootHealthResponse {
+            status: String,
+            timestamp: String,
+        }
+
+        let response = self
+            .http_client()
+            .get(self.root_url("/health"))
+            .send()
+            .await?;
+        let payload: RootHealthResponse = self.handle_response(response).await?;
+
+        Ok(HealthCheck {
+            status: payload.status,
+            timestamp: payload.timestamp,
+            uptime: 0.0,
+            services: ServiceStatus {
+                database: false,
+                redis: None,
+                providers: false,
+            },
+        })
     }
 
     /// Performs a detailed health check on the Rainy API and its underlying services.
@@ -49,7 +71,39 @@ impl RainyClient {
     /// # }
     /// ```
     pub async fn detailed_health_check(&self) -> Result<HealthCheck> {
-        self.make_request(reqwest::Method::GET, "/health?detailed=true", None)
-            .await
+        #[derive(Deserialize)]
+        struct DependencyFlags {
+            database: bool,
+            redis: bool,
+            #[serde(rename = "openrouterConfigured")]
+            openrouter_configured: bool,
+            #[serde(rename = "polarConfigured")]
+            polar_configured: bool,
+        }
+        #[derive(Deserialize)]
+        struct DependenciesHealthResponse {
+            status: String,
+            timestamp: String,
+            dependencies: DependencyFlags,
+        }
+
+        let response = self
+            .http_client()
+            .get(self.root_url("/health/dependencies"))
+            .send()
+            .await?;
+        let payload: DependenciesHealthResponse = self.handle_response(response).await?;
+
+        Ok(HealthCheck {
+            status: payload.status,
+            timestamp: payload.timestamp,
+            uptime: 0.0,
+            services: ServiceStatus {
+                database: payload.dependencies.database,
+                redis: Some(payload.dependencies.redis),
+                providers: payload.dependencies.openrouter_configured
+                    && payload.dependencies.polar_configured,
+            },
+        })
     }
 }

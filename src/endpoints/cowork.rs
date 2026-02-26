@@ -16,6 +16,7 @@ impl RainyClient {
     /// Retrieve available models for the current Cowork plan directly from the API.
     ///
     /// This is more efficient than fetching full capabilities if only models are needed.
+    #[deprecated(note = "Legacy Cowork endpoint removed in Rainy API v3.")]
     pub async fn get_cowork_models(&self) -> Result<CoworkModelsResponse> {
         self.make_request(reqwest::Method::GET, "/cowork/models", None)
             .await
@@ -32,6 +33,7 @@ impl RainyClient {
     /// # Returns
     ///
     /// A `Result` containing `CoworkCapabilities` on success, or a `RainyError` on failure.
+    #[deprecated(note = "Legacy Cowork endpoint removed in Rainy API v3.")]
     pub async fn get_cowork_capabilities(&self) -> Result<CoworkCapabilities> {
         match self.get_cowork_profile().await {
             Ok(profile) => {
@@ -84,6 +86,7 @@ impl RainyClient {
     }
 
     /// Check if the current API key grants paid access.
+    #[deprecated(note = "Legacy Cowork capability helper removed in Rainy API v3.")]
     pub async fn has_paid_plan(&self) -> bool {
         match self.get_cowork_capabilities().await {
             Ok(caps) => caps.profile.plan.is_paid(),
@@ -92,6 +95,7 @@ impl RainyClient {
     }
 
     /// Check if a specific feature is available.
+    #[deprecated(note = "Legacy Cowork capability helper removed in Rainy API v3.")]
     pub async fn can_use_feature(&self, feature: &str) -> bool {
         match self.get_cowork_capabilities().await {
             Ok(caps) => caps.can_use_feature(feature),
@@ -100,6 +104,7 @@ impl RainyClient {
     }
 
     /// Check if a specific model is available for the current plan.
+    #[deprecated(note = "Legacy Cowork capability helper removed in Rainy API v3.")]
     pub async fn can_use_model(&self, model: &str) -> bool {
         match self.get_cowork_capabilities().await {
             Ok(caps) => caps.can_use_model(model),
@@ -108,6 +113,7 @@ impl RainyClient {
     }
 
     /// Check if user can make another request based on usage limits.
+    #[deprecated(note = "Legacy Cowork capability helper removed in Rainy API v3.")]
     pub async fn can_make_request(&self) -> bool {
         match self.get_cowork_capabilities().await {
             Ok(caps) => caps.can_make_request(),

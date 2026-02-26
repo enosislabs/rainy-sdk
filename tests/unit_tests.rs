@@ -1,6 +1,7 @@
 use rainy_sdk::models::model_constants::*;
 use rainy_sdk::{
-    AuthConfig, ChatCompletionRequest, ChatMessage, MessageRole, RainyError, RetryConfig,
+    AuthConfig, ChatCompletionRequest, ChatMessage, MessageRole, RainyError, RainySessionClient,
+    RetryConfig, SessionConfig,
 };
 
 #[cfg(test)]
@@ -15,7 +16,7 @@ mod tests {
         assert!(config.validate().is_ok());
         assert!(!config.is_cowork_key());
 
-        // Test valid Cowork API key (57 chars: ra-cowork + 48 hex)
+        // Test valid legacy Cowork API key (57 chars: ra-cowork + 48 hex)
         let cowork_key = format!("ra-cowork{}", "b".repeat(48));
         let config = AuthConfig::new(&cowork_key);
         assert!(config.validate().is_ok());
@@ -45,6 +46,19 @@ mod tests {
         assert_eq!(config.timeout_seconds, 60);
         assert_eq!(config.max_retries, 5);
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_session_client_builder() {
+        let client = RainySessionClient::with_config(
+            SessionConfig::new()
+                .with_base_url("http://localhost:3000")
+                .with_timeout(15),
+        )
+        .expect("session client should build");
+
+        assert_eq!(client.base_url(), "http://localhost:3000");
+        assert!(client.access_token().is_none());
     }
 
     #[test]

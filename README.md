@@ -21,7 +21,7 @@ The official Rust SDK for the **Rainy API by Enosis Labs** - a unified interface
 - **📈 Rate Limiting**: Optional governor-based rate limiting
 - **🔧 Advanced Parameters**: Support for response_format, tools, tool_choice, reasoning_effort, logprobs, and streaming
 - **🌐 Web Search Integration**: Built-in Tavily-powered web search with content extraction
-- **👥 Cowork Integration**: Tier-based feature gating with Free/GoPlus/Plus/Pro/ProPlus plans
+- **👥 Legacy Cowork Compatibility**: Deprecated v2 Cowork helpers kept temporarily for migration only
 - **🎨 Multimodal Support**: Image processing and multimodal capabilities (coming soon)
 - **📚 Rich Documentation**: Complete API documentation with practical examples
 
@@ -60,6 +60,7 @@ Available features:
 - `rate-limiting`: Built-in rate limiting with the `governor` crate
 - `tracing`: Request/response logging with the `tracing` crate
 - `cowork`: Cowork integration for tier-based feature gating (enabled by default)
+  - Legacy only in v0.6.4+ (Rainy API v3 migration period)
 
 ## 🎯 OpenAI Compatibility
 

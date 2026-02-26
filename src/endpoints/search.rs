@@ -1,13 +1,14 @@
 //! Web Research endpoint
 //!
-//! This endpoint provides deep web research capabilities via Exa/Tavily.
-//! Requires a Cowork plan with web_research feature enabled.
+//! This endpoint provides web research capabilities via the Rainy API v3 search API.
 
 use crate::{
     error::{RainyError, Result},
-    search::{DeepResearchResponse, ResearchConfig, ResearchRequest},
+    search::{DeepResearchResponse, ResearchConfig},
     RainyClient,
 };
+use serde::Deserialize;
+use serde_json::json;
 
 impl RainyClient {
     /// Perform deep web research on a topic.
@@ -51,11 +52,35 @@ impl RainyClient {
         topic: impl Into<String>,
         config: Option<ResearchConfig>,
     ) -> Result<DeepResearchResponse> {
-        let cfg = config.unwrap_or_default();
-        let request = ResearchRequest::new(topic.into(), &cfg);
+        #[derive(Deserialize)]
+        struct SearchResultItem {
+            title: Option<String>,
+            url: Option<String>,
+            content: Option<String>,
+            snippet: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct SearchData {
+            results: Vec<SearchResultItem>,
+        }
+        #[derive(Deserialize)]
+        struct SearchEnvelope {
+            success: bool,
+            data: SearchData,
+        }
 
-        // Note: The endpoint is /api/v1/agents/research
-        let url = format!("{}/api/v1/agents/research", self.auth_config().base_url);
+        let cfg = config.unwrap_or_default();
+        let topic = topic.into();
+        let url = self.api_v1_url("/search");
+        let search_depth = match cfg.depth {
+            crate::models::ResearchDepth::Advanced => "advanced",
+            _ => "basic",
+        };
+        let request = json!({
+            "query": topic,
+            "searchDepth": search_depth,
+            "maxResults": cfg.max_sources.min(20),
+        });
 
         let response = self
             .http_client()
@@ -69,14 +94,50 @@ impl RainyClient {
                 source_error: Some(e.to_string()),
             })?;
 
-        if response.status().as_u16() == 403 {
-            return Err(RainyError::Authentication {
-                code: "FEATURE_NOT_AVAILABLE".to_string(),
-                message: "Research feature requires a valid subscription".to_string(),
-                retryable: false,
-            });
-        }
+        let envelope: SearchEnvelope = self.handle_response(response).await?;
 
-        self.handle_response(response).await
+        let results_json = envelope
+            .data
+            .results
+            .iter()
+            .map(|item| {
+                json!({
+                    "title": item.title,
+                    "url": item.url,
+                    "snippet": item.snippet.as_ref().or(item.content.as_ref()),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let synthesized_content = envelope
+            .data
+            .results
+            .iter()
+            .enumerate()
+            .map(|(idx, item)| {
+                let title = item.title.as_deref().unwrap_or("Untitled");
+                let url = item.url.as_deref().unwrap_or("");
+                let snippet = item
+                    .snippet
+                    .as_deref()
+                    .or(item.content.as_deref())
+                    .unwrap_or("");
+                format!("{}. {}\n{}\n{}", idx + 1, title, url, snippet)
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        Ok(DeepResearchResponse {
+            success: envelope.success,
+            mode: "sync".to_string(),
+            result: Some(json!({
+                "content": synthesized_content,
+                "results": results_json,
+            })),
+            task_id: None,
+            generated_at: None,
+            provider: Some("tavily".to_string()),
+            message: None,
+        })
     }
 }
