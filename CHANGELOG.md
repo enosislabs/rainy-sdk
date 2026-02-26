@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.7] - 2026-02-26
+
+### 🔧 Release Validation Fixes
+
+- **Clippy Pre-Release Fix**: Allowed deprecated usage only inside the legacy Cowork endpoint module so `clippy -D warnings` passes under `--all-features`.
+- **Dead Code Cleanup**: Removed unused legacy `ResearchRequest` type after the v3 search endpoint migration.
+
+---
+
 ## [0.6.6] - 2026-02-26
 
 ### 🚀 Rainy API v3 Migration (Production Readiness)

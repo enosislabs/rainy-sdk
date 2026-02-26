@@ -111,36 +111,6 @@ impl ResearchConfig {
     }
 }
 
-/// Request body for web research
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct ResearchRequest {
-    pub topic: String,
-    pub provider: ResearchProvider,
-    pub depth: ResearchDepth,
-    #[serde(rename = "maxSources")]
-    pub max_sources: u32,
-    #[serde(rename = "async")]
-    pub async_mode: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "thinkingLevel")]
-    pub thinking_level: Option<ThinkingLevel>,
-}
-
-impl ResearchRequest {
-    pub fn new(topic: impl Into<String>, config: &ResearchConfig) -> Self {
-        Self {
-            topic: topic.into(),
-            provider: config.provider.clone(),
-            depth: config.depth.clone(),
-            max_sources: config.max_sources,
-            async_mode: config.async_mode,
-            model: config.model.clone(),
-            thinking_level: config.thinking_level.clone(),
-        }
-    }
-}
-
 /// Result from a research operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResearchResult {

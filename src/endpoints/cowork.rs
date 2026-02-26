@@ -2,6 +2,7 @@
 //!
 //! This endpoint validates the API key and returns the user's
 //! Cowork plan, available models, and feature access.
+#![allow(deprecated)]
 
 use crate::{
     cowork::{
