@@ -32,7 +32,9 @@ impl RainyClient {
     /// # Ok(())
     /// # }
     /// ```
-    #[deprecated(note = "Rainy API v3 key management requires JWT/session auth. Use a session client against /api/v1/auth and /api/v1/keys.")]
+    #[deprecated(
+        note = "Rainy API v3 key management requires JWT/session auth. Use a session client against /api/v1/auth and /api/v1/keys."
+    )]
     pub async fn create_api_key(
         &self,
         description: &str,
@@ -72,7 +74,9 @@ impl RainyClient {
     /// # Ok(())
     /// # }
     /// ```
-    #[deprecated(note = "Rainy API v3 key management requires JWT/session auth. Use a session client against /api/v1/keys.")]
+    #[deprecated(
+        note = "Rainy API v3 key management requires JWT/session auth. Use a session client against /api/v1/keys."
+    )]
     pub async fn list_api_keys(&self) -> Result<Vec<ApiKey>> {
         #[derive(serde::Deserialize)]
         struct ApiKeysResponse {
@@ -119,7 +123,9 @@ impl RainyClient {
     /// # Ok(())
     /// # }
     /// ```
-    #[deprecated(note = "Rainy API v3 key management requires JWT/session auth. Use a session client against /api/v1/keys.")]
+    #[deprecated(
+        note = "Rainy API v3 key management requires JWT/session auth. Use a session client against /api/v1/keys."
+    )]
     pub async fn update_api_key(&self, key_id: &str, updates: serde_json::Value) -> Result<ApiKey> {
         self.make_request(
             reqwest::Method::PATCH,
@@ -149,7 +155,9 @@ impl RainyClient {
     /// # Ok(())
     /// # }
     /// ```
-    #[deprecated(note = "Rainy API v3 key management requires JWT/session auth. Use a session client against /api/v1/keys.")]
+    #[deprecated(
+        note = "Rainy API v3 key management requires JWT/session auth. Use a session client against /api/v1/keys."
+    )]
     pub async fn delete_api_key(&self, key_id: &str) -> Result<()> {
         self.make_request(reqwest::Method::DELETE, &format!("/keys/{key_id}"), None)
             .await

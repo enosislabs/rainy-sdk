@@ -67,7 +67,11 @@ impl RainyClient {
         } else {
             format!("/{path}")
         };
-        format!("{}{}", self.auth_config.base_url.trim_end_matches('/'), normalized)
+        format!(
+            "{}{}",
+            self.auth_config.base_url.trim_end_matches('/'),
+            normalized
+        )
     }
 
     pub(crate) fn api_v1_url(&self, path: &str) -> String {
@@ -635,7 +639,9 @@ impl RainyClient {
     ///
     /// A `Result` containing a `CoworkProfile` struct on success, or a `RainyError` on failure.
     #[cfg(feature = "cowork")]
-    #[deprecated(note = "Cowork endpoints are legacy and not supported by Rainy API v3. Migrate to v3 session/org endpoints.")]
+    #[deprecated(
+        note = "Cowork endpoints are legacy and not supported by Rainy API v3. Migrate to v3 session/org endpoints."
+    )]
     pub async fn get_cowork_profile(&self) -> Result<crate::cowork::CoworkProfile> {
         let url = self.api_v1_url("/cowork/profile");
 

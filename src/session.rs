@@ -382,20 +382,34 @@ impl RainySessionClient {
 
     pub async fn org_me(&self) -> Result<OrgProfile> {
         let response: OrgProfile = self
-            .request_json(Method::GET, "/orgs/me", Option::<&serde_json::Value>::None, true)
+            .request_json(
+                Method::GET,
+                "/orgs/me",
+                Option::<&serde_json::Value>::None,
+                true,
+            )
             .await?;
         Ok(response)
     }
 
     pub async fn list_api_keys(&self) -> Result<Vec<SessionApiKeyListItem>> {
         let response: ListKeysEnvelope = self
-            .request_json(Method::GET, "/keys", Option::<&serde_json::Value>::None, true)
+            .request_json(
+                Method::GET,
+                "/keys",
+                Option::<&serde_json::Value>::None,
+                true,
+            )
             .await?;
         let _ = response.success;
         Ok(response.keys)
     }
 
-    pub async fn create_api_key(&self, name: &str, key_type: Option<&str>) -> Result<CreatedApiKey> {
+    pub async fn create_api_key(
+        &self,
+        name: &str,
+        key_type: Option<&str>,
+    ) -> Result<CreatedApiKey> {
         #[derive(Serialize)]
         struct CreateKeyRequest<'a> {
             name: &'a str,
@@ -454,7 +468,10 @@ mod tests {
     fn session_client_uses_v3_base_url() {
         let client = RainySessionClient::new().expect("session client");
         assert!(client.base_url().starts_with("https://"));
-        assert_eq!(client.api_v1_url("/auth/login"), format!("{}/api/v1/auth/login", client.base_url()));
+        assert_eq!(
+            client.api_v1_url("/auth/login"),
+            format!("{}/api/v1/auth/login", client.base_url())
+        );
     }
 
     #[test]

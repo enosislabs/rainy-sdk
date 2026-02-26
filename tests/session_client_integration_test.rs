@@ -37,7 +37,9 @@ async fn session_login_sets_access_token_from_v3_alias_response() {
         .create();
 
     let mut client = RainySessionClient::with_config(
-        SessionConfig::new().with_base_url(server.url()).with_timeout(5),
+        SessionConfig::new()
+            .with_base_url(server.url())
+            .with_timeout(5),
     )
     .expect("client");
 
@@ -99,7 +101,9 @@ async fn session_org_and_usage_calls_send_bearer_token() {
         .create();
 
     let mut client = RainySessionClient::with_config(
-        SessionConfig::new().with_base_url(server.url()).with_timeout(5),
+        SessionConfig::new()
+            .with_base_url(server.url())
+            .with_timeout(5),
     )
     .expect("client");
     client.set_access_token("acc_123");
@@ -140,7 +144,9 @@ async fn session_usage_stats_parses_v3_alias_fields() {
         .create();
 
     let mut client = RainySessionClient::with_config(
-        SessionConfig::new().with_base_url(server.url()).with_timeout(5),
+        SessionConfig::new()
+            .with_base_url(server.url())
+            .with_timeout(5),
     )
     .expect("client");
     client.set_access_token("acc_123");

@@ -17,7 +17,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("🪪 Role: {}", login.user.role);
 
             match session.org_me().await {
-                Ok(org) => println!("🏢 Org: {} (plan={}, region={})", org.name, org.plan_id, org.region),
+                Ok(org) => println!(
+                    "🏢 Org: {} (plan={}, region={})",
+                    org.name, org.plan_id, org.region
+                ),
                 Err(e) => println!("⚠️ Could not fetch org profile: {e}"),
             }
 
@@ -33,7 +36,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         Err(e) => {
             println!("❌ Login failed: {e}");
-            println!("Set RAINY_EMAIL and RAINY_PASSWORD to run this example against Rainy API v3.");
+            println!(
+                "Set RAINY_EMAIL and RAINY_PASSWORD to run this example against Rainy API v3."
+            );
         }
     }
 

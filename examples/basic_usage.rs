@@ -61,7 +61,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    println!("\n4. Tip: JWT/session endpoints (auth, keys, usage, orgs) now live on RainySessionClient.");
+    println!(
+        "\n4. Tip: JWT/session endpoints (auth, keys, usage, orgs) now live on RainySessionClient."
+    );
     println!("   See examples/session_auth.rs for v3 session usage.");
 
     println!("\n🎉 Example completed!");

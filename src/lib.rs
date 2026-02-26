@@ -74,8 +74,9 @@ pub use error::{ApiErrorDetails, ApiErrorResponse, RainyError, Result};
 pub use models::*;
 pub use retry::{retry_with_backoff, RetryConfig};
 pub use session::{
-    CreatedApiKey, LoginResponse, OrgProfile, RainySessionClient, RefreshResponse, SessionApiKeyListItem,
-    SessionConfig, SessionTokens, SessionUser, UsageCreditsResponse, UsageStatsResponse,
+    CreatedApiKey, LoginResponse, OrgProfile, RainySessionClient, RefreshResponse,
+    SessionApiKeyListItem, SessionConfig, SessionTokens, SessionUser, UsageCreditsResponse,
+    UsageStatsResponse,
 };
 
 // Re-export Cowork types for convenience
