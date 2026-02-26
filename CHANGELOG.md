@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### 🚀 Rainy API v3 Migration (Production Readiness)
+
+- **Default Base URL Updated**: SDK now defaults to the Rainy API v3 service host (`https://api.enosislabs.com`).
+- **Route Safety Fix**: Internal URL building now separates root routes (`/health`) from API routes (`/api/v1/*`) to avoid prefixing mistakes.
+- **Health Endpoint Alignment**: `health_check()` and `detailed_health_check()` now call v3 root health endpoints correctly.
+- **Search Migration**: `RainyClient::research()` now maps to Rainy API v3 `/api/v1/search` and returns a legacy-compatible synthesized result payload.
+- **Session Client Added**: Introduced `RainySessionClient` for JWT/session endpoints (auth, keys, usage, orgs) to keep API-key and session flows separated.
+- **Legacy Method Deprecations**: Marked v2-style `RainyClient` account/keys/usage helpers as deprecated in favor of `RainySessionClient`.
+- **Cowork Hardening**: Legacy Cowork compatibility is now **opt-in** via the `cowork` feature and no longer enabled by default.
+- **Migration Documentation**: Added `MIGRATION.md` with v2 -> v3 method mapping and rollout checklist.
+
+### 🛡️ Security / Surface Area
+
+- Reduced default SDK surface by disabling legacy Cowork compatibility in default features.
+- Clarified security guidance and trust-boundary split (`RainyClient` vs `RainySessionClient`) in documentation.
+
+---
+
 ## [0.6.4] - 2026-02-09
 
 ### 🛡️ Security Fixes

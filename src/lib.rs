@@ -52,7 +52,8 @@
 pub mod auth;
 /// The main client for interacting with the Rainy API.
 pub mod client;
-/// Cowork integration: tiers, capabilities, and feature gating.
+/// Cowork integration (legacy compatibility, opt-in feature).
+#[cfg(feature = "cowork")]
 pub mod cowork;
 /// Defines error types and result aliases for the SDK.
 pub mod error;
@@ -78,11 +79,13 @@ pub use session::{
 };
 
 // Re-export Cowork types for convenience
+#[cfg(feature = "cowork")]
 #[deprecated(note = "Cowork types are legacy and retained only for v2 compatibility.")]
 pub use cowork::{CoworkCapabilities, CoworkFeatures, CoworkPlan, CoworkUsage};
 // Backward compatibility aliases
 // #[allow(deprecated)]
 // pub use cowork::{CoworkLimits, CoworkTier};
+#[cfg(feature = "cowork")]
 #[deprecated(note = "Cowork helpers are legacy and retained only for v2 compatibility.")]
 pub use endpoints::cowork::get_offline_capabilities;
 
@@ -112,4 +115,4 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The default base URL for the Rainy API v3 service.
 ///
 /// Note: the v3 service currently exposes its canonical HTTP API under `/api/v1/*`.
-pub const DEFAULT_BASE_URL: &str = "https://api.enosislabs.com";
+pub const DEFAULT_BASE_URL: &str = "https://rainy-api-v3-us-179843975974.us-east4.run.app";

@@ -59,11 +59,11 @@ rand = "0.8"
 eventsource-stream = "0.2"
 
 [features]
-default = ["rate-limiting", "tracing", "cowork"]
+default = ["rate-limiting", "tracing"]
 rate-limiting = ["governor"]
 tracing = ["dep:tracing"]
 cache = []
-cowork = []  # Cowork integration for tier-based feature gating
+cowork = []  # Legacy Cowork compatibility only (opt-in)
 
 # Development dependencies
 [dev-dependencies]

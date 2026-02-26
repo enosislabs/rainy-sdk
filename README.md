@@ -8,6 +8,8 @@
 
 The official Rust SDK for the **Rainy API by Enosis Labs** - a unified interface for multiple AI providers including OpenAI, Google Gemini, Groq, Cerebras, and Enosis Labs' own Astronomer models. Features advanced thinking capabilities, multimodal support, thought signatures, and full OpenAI compatibility.
 
+Migration guide: see [`MIGRATION.md`](./MIGRATION.md) for v2 -> v3 method mapping and production rollout checklist.
+
 ## ✨ Features
 
 - **🎯 Full OpenAI Compatibility**: Drop-in replacement for OpenAI SDK with enhanced features
@@ -31,7 +33,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rainy-sdk = "0.6.2"
+rainy-sdk = "0.6.4"
 tokio = { version = "1.47", features = ["full"] }
 ```
 
@@ -52,15 +54,46 @@ Enable additional features as needed:
 
 ```toml
 [dependencies]
-rainy-sdk = { version = "0.6.2", features = ["rate-limiting", "tracing", "cowork"] }
+rainy-sdk = { version = "0.6.4", features = ["rate-limiting", "tracing"] }
 ```
 
 Available features:
 
 - `rate-limiting`: Built-in rate limiting with the `governor` crate
 - `tracing`: Request/response logging with the `tracing` crate
-- `cowork`: Cowork integration for tier-based feature gating (enabled by default)
-  - Legacy only in v0.6.4+ (Rainy API v3 migration period)
+- `cowork`: Legacy Cowork compatibility only (opt-in, disabled by default)
+  - Retained temporarily for v2 migration compatibility traces
+
+## 🔀 v2 to v3 Migration (Minimal Surface)
+
+Rainy API v3 keeps the service name/version but the canonical HTTP namespace is currently `/api/v1/*`.
+
+Use the SDK in two separate modes:
+
+- `RainyClient` (API key / Bearer `ra-*`): models, chat completions, responses, search
+- `RainySessionClient` (JWT session): auth, keys, usage, orgs, users
+
+Why split clients?
+
+- Reduces accidental misuse of JWT-only endpoints with API keys
+- Keeps the API-key SDK surface smaller and safer by default
+- Makes legacy v2/Cowork traces easier to isolate and remove later
+
+### Quick Mapping
+
+- v2-style account/usage/key helpers on `RainyClient` are deprecated
+- Use `RainySessionClient` for:
+  - `POST /api/v1/auth/login`
+  - `GET /api/v1/orgs/me`
+  - `GET /api/v1/usage/credits`
+  - `GET /api/v1/usage/stats`
+  - `GET/POST/DELETE /api/v1/keys`
+
+### Security Notes
+
+- The SDK intentionally does **not** expose internal billing logic or server-side trust paths.
+- Keep admin/session tokens server-side or in trusted desktop apps only.
+- Prefer the smallest client surface needed for your use case (`RainyClient` vs `RainySessionClient`).
 
 ## 🎯 OpenAI Compatibility
 
@@ -377,6 +410,9 @@ client.delete_api_key(&new_key.id.to_string()).await?;
 ```
 
 ## 🧪 Examples
+
+- `examples/basic_usage.rs`: v3 API-key flow (health, models, chat)
+- `examples/session_auth.rs`: v3 JWT/session flow (login, org, usage, keys)
 
 Explore the `examples/` directory for comprehensive usage examples:
 
