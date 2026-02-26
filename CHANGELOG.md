@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.8] - 2026-02-26
+
+### 📚 Documentation / Release Validation
+
+- **Missing Docs Fix**: Added Rustdoc comments across `src/session.rs` public types and methods so release pre-validation (`-D missing-docs`) passes.
+
+---
+
 ## [0.6.7] - 2026-02-26
 
 ### 🔧 Release Validation Fixes

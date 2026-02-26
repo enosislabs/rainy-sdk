@@ -1,4 +1,4 @@
-# 🌧️ Rainy SDK v0.6.7
+# 🌧️ Rainy SDK v0.6.8
 
 [![Crates.io](https://img.shields.io/crates/v/rainy-sdk.svg)](https://crates.io/crates/rainy-sdk)
 [![Documentation](https://docs.rs/rainy-sdk/badge.svg)](https://docs.rs/rainy-sdk)
@@ -33,7 +33,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rainy-sdk = "0.6.7"
+rainy-sdk = "0.6.8"
 tokio = { version = "1.47", features = ["full"] }
 ```
 
@@ -54,7 +54,7 @@ Enable additional features as needed:
 
 ```toml
 [dependencies]
-rainy-sdk = { version = "0.6.7", features = ["rate-limiting", "tracing"] }
+rainy-sdk = { version = "0.6.8", features = ["rate-limiting", "tracing"] }
 ```
 
 Available features:
