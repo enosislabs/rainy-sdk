@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.9] - 2026-02-26
+
+### 📚 Documentation CI Reliability
+
+- **Docs Workflow Fix**: `docs.yml` now keeps `cargo-deadlinks` enabled while filtering known Rustdoc-generated `.../dispatcher` false positives that were breaking the "Generate Documentation" job.
+
+---
+
 ## [0.6.8] - 2026-02-26
 
 ### 📚 Documentation / Release Validation
