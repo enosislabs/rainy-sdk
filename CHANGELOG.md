@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.10] - 2026-02-27
+
+### 🚀 Rainy API v3 Compatibility (Responses + Tool Calling)
+
+- Added Responses API support on `RainyClient`:
+  - `create_response`
+  - `create_response_envelope`
+  - `create_response_stream`
+  - `get_models_catalog`
+- Added new models for v3 Responses compatibility:
+  - `ResponsesRequest`
+  - `ResponsesApiResponse`
+  - `ResponsesUsage`
+  - `RainyEnvelope<T>` and envelope metadata (`CompatWarning`, `FeaturesUsed`, `ReasoningMeta`)
+  - catalog capability models (`ModelCatalogItem`, `RainyCapabilities`, `CapabilityFlag`)
+- Added `ResponsesRequest` builders for reasoning and Responses-style function tools.
+- Extended `RequestMetadata` with Rainy v3 headers:
+  - `compat_warnings`
+  - `response_mode`
+  - `billing_plan`
+  - `rainy_credits_charged`
+  - `rainy_markup_percent`
+  - `rainy_daily_credits_remaining`
+- Added `tests/responses_api_test.rs` to cover:
+  - reasoning/tool request serialization
+  - catalog capability deserialization
+  - Responses API surface availability
+
+---
+
 ## [0.6.9] - 2026-02-26
 
 ### 📚 Documentation CI Reliability

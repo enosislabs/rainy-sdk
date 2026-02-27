@@ -322,6 +322,167 @@ impl RainyClient {
         }
     }
 
+    /// Creates a Responses API completion (`POST /api/v1/responses`) in raw mode.
+    pub async fn create_response(
+        &self,
+        request: ResponsesRequest,
+    ) -> Result<(ResponsesApiResponse, RequestMetadata)> {
+        #[cfg(feature = "rate-limiting")]
+        if let Some(ref limiter) = self.rate_limiter {
+            limiter.until_ready().await;
+        }
+
+        let url = self.api_v1_url("/responses");
+        let start_time = Instant::now();
+
+        let operation = || async {
+            let response = self.client.post(&url).json(&request).send().await?;
+            let metadata = self.extract_metadata(&response, start_time);
+            let api_response: ResponsesApiResponse = self.handle_response(response).await?;
+            Ok((api_response, metadata))
+        };
+
+        if self.auth_config.enable_retry {
+            retry_with_backoff(&self.retry_config, operation).await
+        } else {
+            operation().await
+        }
+    }
+
+    /// Creates a Responses API completion in envelope mode (`X-Rainy-Response-Mode: envelope`).
+    pub async fn create_response_envelope(
+        &self,
+        request: ResponsesRequest,
+    ) -> Result<(RainyEnvelope<ResponsesApiResponse>, RequestMetadata)> {
+        #[cfg(feature = "rate-limiting")]
+        if let Some(ref limiter) = self.rate_limiter {
+            limiter.until_ready().await;
+        }
+
+        let url = self.api_v1_url("/responses");
+        let start_time = Instant::now();
+
+        let operation = || async {
+            let response = self
+                .client
+                .post(&url)
+                .header("X-Rainy-Response-Mode", "envelope")
+                .json(&request)
+                .send()
+                .await?;
+            let metadata = self.extract_metadata(&response, start_time);
+            let api_response: RainyEnvelope<ResponsesApiResponse> =
+                self.handle_response(response).await?;
+            Ok((api_response, metadata))
+        };
+
+        if self.auth_config.enable_retry {
+            retry_with_backoff(&self.retry_config, operation).await
+        } else {
+            operation().await
+        }
+    }
+
+    /// Creates a streaming Responses API completion and returns SSE events.
+    pub async fn create_response_stream(
+        &self,
+        mut request: ResponsesRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ResponsesStreamEvent>> + Send>>> {
+        request.stream = Some(true);
+
+        #[cfg(feature = "rate-limiting")]
+        if let Some(ref limiter) = self.rate_limiter {
+            limiter.until_ready().await;
+        }
+
+        let url = self.api_v1_url("/responses");
+
+        let operation = || async {
+            let response = self
+                .client
+                .post(&url)
+                .json(&request)
+                .send()
+                .await
+                .map_err(|e| RainyError::Network {
+                    message: format!("Failed to send request: {}", e),
+                    retryable: true,
+                    source_error: Some(e.to_string()),
+                })?;
+
+            let status = response.status();
+            if !status.is_success() {
+                return Err(self
+                    .handle_response::<ResponsesApiResponse>(response)
+                    .await
+                    .err()
+                    .unwrap());
+            }
+
+            let stream = response
+                .bytes_stream()
+                .eventsource()
+                .filter_map(|event| async move {
+                    match event {
+                        Ok(event) => {
+                            if event.data.trim() == "[DONE]" {
+                                return None;
+                            }
+
+                            match serde_json::from_str::<ResponsesStreamEvent>(&event.data) {
+                                Ok(payload) => Some(Ok(payload)),
+                                Err(e) => Some(Err(RainyError::Serialization {
+                                    message: e.to_string(),
+                                    source_error: Some(e.to_string()),
+                                })),
+                            }
+                        }
+                        Err(e) => Some(Err(RainyError::Network {
+                            message: format!("SSE parsing error: {e}"),
+                            retryable: true,
+                            source_error: Some(e.to_string()),
+                        })),
+                    }
+                });
+
+            Ok(Box::pin(stream)
+                as Pin<
+                    Box<dyn Stream<Item = Result<ResponsesStreamEvent>> + Send>,
+                >)
+        };
+
+        if self.auth_config.enable_retry {
+            retry_with_backoff(&self.retry_config, operation).await
+        } else {
+            operation().await
+        }
+    }
+
+    /// Retrieves `/api/v1/models/catalog` entries including `rainy_capabilities` metadata.
+    pub async fn get_models_catalog(&self) -> Result<Vec<ModelCatalogItem>> {
+        #[derive(Deserialize)]
+        struct ModelsCatalogData {
+            data: Vec<ModelCatalogItem>,
+        }
+        #[derive(Deserialize)]
+        struct Envelope {
+            data: ModelsCatalogData,
+        }
+
+        let url = self.api_v1_url("/models/catalog");
+        let operation = || async {
+            let response = self.client.get(&url).send().await?;
+            let envelope: Envelope = self.handle_response(response).await?;
+            Ok(envelope.data.data)
+        };
+
+        if self.auth_config.enable_retry {
+            retry_with_backoff(&self.retry_config, operation).await
+        } else {
+            operation().await
+        }
+    }
+
     /// Creates a simple chat completion with a single user prompt.
     ///
     /// This is a convenience method for simple use cases where you only need to send a single
@@ -486,6 +647,30 @@ impl RainyClient {
                 .and_then(|s| s.parse().ok()),
             request_id: headers
                 .get("x-request-id")
+                .and_then(|v| v.to_str().ok())
+                .map(String::from),
+            compat_warnings: headers
+                .get("x-rainy-compat-warnings")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse().ok()),
+            response_mode: headers
+                .get("x-rainy-response-mode")
+                .and_then(|v| v.to_str().ok())
+                .map(String::from),
+            billing_plan: headers
+                .get("x-rainy-billing-plan")
+                .and_then(|v| v.to_str().ok())
+                .map(String::from),
+            rainy_credits_charged: headers
+                .get("x-rainy-credits-charged")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse().ok()),
+            rainy_markup_percent: headers
+                .get("x-rainy-markup-percent")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse().ok()),
+            rainy_daily_credits_remaining: headers
+                .get("x-rainy-daily-credits-remaining")
                 .and_then(|v| v.to_str().ok())
                 .map(String::from),
         }

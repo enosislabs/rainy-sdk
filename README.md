@@ -366,6 +366,61 @@ while let Some(chunk) = stream.next().await {
 # }
 ```
 
+#### Responses API (Reasoning, Multimodal, Tools)
+
+Use `POST /api/v1/responses` compatible methods with support for:
+- `reasoning` payloads
+- multimodal `input` objects/arrays
+- Responses-style tool calling (`{ "type": "function", "name": ... }`)
+- envelope mode metadata (`compatWarnings`, `featuresUsed`, `reasoning`)
+
+```rust,no_run
+# use rainy_sdk::{RainyClient, ResponsesRequest};
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
+# let client = RainyClient::with_api_key("dummy")?;
+let request = ResponsesRequest::text("openai/gpt-5-nano", "Summarize this image")
+    .with_reasoning_effort("medium")
+    .add_function_tool(
+        "web_search",
+        "Search the web",
+        serde_json::json!({
+            "type": "object",
+            "properties": { "q": { "type": "string" } },
+            "required": ["q"]
+        }),
+    );
+
+let (raw_response, metadata) = client.create_response(request.clone()).await?;
+println!("Response mode: {:?}", metadata.response_mode);
+println!("Compat warnings: {:?}", metadata.compat_warnings);
+println!("Output text: {:?}", raw_response.output_text);
+
+let (envelope, _) = client.create_response_envelope(request).await?;
+if let Some(meta) = envelope.meta {
+    println!("Reasoning meta: {:?}", meta.reasoning);
+}
+# Ok(())
+# }
+```
+
+You can also stream responses events:
+
+```rust,no_run
+# use rainy_sdk::{RainyClient, ResponsesRequest};
+# use futures::StreamExt;
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
+# let client = RainyClient::with_api_key("dummy")?;
+let mut stream = client
+    .create_response_stream(ResponsesRequest::text("openai/gpt-5-nano", "Hello").with_stream(true))
+    .await?;
+
+while let Some(event) = stream.next().await {
+    println!("Event: {:?}", event?);
+}
+# Ok(())
+# }
+```
+
 #### Usage Statistics
 
 Get credit and usage statistics.

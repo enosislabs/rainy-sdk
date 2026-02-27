@@ -2,6 +2,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+fn map_is_empty(value: &HashMap<String, serde_json::Value>) -> bool {
+    value.is_empty()
+}
+
 /// Represents a single message in a chat conversation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChatMessage {
@@ -310,6 +314,346 @@ pub struct RequestMetadata {
 
     /// The unique ID of the request, for tracking and debugging.
     pub request_id: Option<String>,
+
+    /// Count of non-blocking compatibility warnings returned by Rainy.
+    pub compat_warnings: Option<u32>,
+
+    /// Response mode selected by Rainy (`raw` or `envelope`).
+    pub response_mode: Option<String>,
+
+    /// Billing plan used for this request.
+    pub billing_plan: Option<String>,
+
+    /// Credits charged for the request.
+    pub rainy_credits_charged: Option<f64>,
+
+    /// Markup percent applied by gateway pricing.
+    pub rainy_markup_percent: Option<f64>,
+
+    /// Remaining daily credits reported by Rainy.
+    pub rainy_daily_credits_remaining: Option<String>,
+}
+
+/// OpenRouter/Rainy Responses API request payload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponsesRequest {
+    /// The identifier of the model to use.
+    pub model: String,
+
+    /// Input payload accepted by the Responses API (string, object, or array).
+    pub input: serde_json::Value,
+
+    /// If true, the response will be streamed as SSE events.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<bool>,
+
+    /// Responses tool definitions and/or custom tools.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<serde_json::Value>>,
+
+    /// Tool selection strategy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<serde_json::Value>,
+
+    /// Structured output format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<serde_json::Value>,
+
+    /// Sampling temperature.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+
+    /// Top-p nucleus sampling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
+
+    /// Maximum number of output tokens.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<u32>,
+
+    /// End-user identifier (legacy fallback accepted by Rainy).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+
+    /// Prompt cache key for routing/cache optimization.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_key: Option<String>,
+
+    /// Reasoning configuration object (provider/model dependent).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<serde_json::Value>,
+
+    /// Forward-compatible extra parameters.
+    #[serde(flatten, skip_serializing_if = "map_is_empty", default)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+impl ResponsesRequest {
+    /// Creates a new Responses request from an arbitrary input payload.
+    pub fn new(model: impl Into<String>, input: serde_json::Value) -> Self {
+        Self {
+            model: model.into(),
+            input,
+            stream: None,
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_output_tokens: None,
+            user: None,
+            prompt_cache_key: None,
+            reasoning: None,
+            extra: HashMap::new(),
+        }
+    }
+
+    /// Convenience constructor for plain text input.
+    pub fn text(model: impl Into<String>, input_text: impl Into<String>) -> Self {
+        Self::new(model, serde_json::Value::String(input_text.into()))
+    }
+
+    /// Sets streaming mode.
+    pub fn with_stream(mut self, stream: bool) -> Self {
+        self.stream = Some(stream);
+        self
+    }
+
+    /// Sets reasoning configuration object.
+    pub fn with_reasoning(mut self, reasoning: serde_json::Value) -> Self {
+        self.reasoning = Some(reasoning);
+        self
+    }
+
+    /// Convenience helper to set reasoning effort (`low`, `medium`, `high`).
+    pub fn with_reasoning_effort(mut self, effort: impl Into<String>) -> Self {
+        self.reasoning = Some(serde_json::json!({ "effort": effort.into() }));
+        self
+    }
+
+    /// Sets max output tokens.
+    pub fn with_max_output_tokens(mut self, max_output_tokens: u32) -> Self {
+        self.max_output_tokens = Some(max_output_tokens);
+        self
+    }
+
+    /// Sets prompt cache key.
+    pub fn with_prompt_cache_key(mut self, prompt_cache_key: impl Into<String>) -> Self {
+        self.prompt_cache_key = Some(prompt_cache_key.into());
+        self
+    }
+
+    /// Sets user identifier.
+    pub fn with_user(mut self, user: impl Into<String>) -> Self {
+        self.user = Some(user.into());
+        self
+    }
+
+    /// Sets tool definitions array directly.
+    pub fn with_tools(mut self, tools: Vec<serde_json::Value>) -> Self {
+        self.tools = Some(tools);
+        self
+    }
+
+    /// Adds a function tool using Responses-style shape.
+    pub fn add_function_tool(
+        mut self,
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: serde_json::Value,
+    ) -> Self {
+        let mut tools = self.tools.unwrap_or_default();
+        tools.push(serde_json::json!({
+            "type": "function",
+            "name": name.into(),
+            "description": description.into(),
+            "parameters": parameters
+        }));
+        self.tools = Some(tools);
+        self
+    }
+
+    /// Adds a custom extra parameter for forward compatibility.
+    pub fn with_extra(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.extra.insert(key.into(), value);
+        self
+    }
+}
+
+/// Responses API usage object (partial, forward-compatible).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ResponsesUsage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_creation_input_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_read_input_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens_details: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_tokens_details: Option<serde_json::Value>,
+    #[serde(flatten, default)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+/// Responses API raw response payload.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ResponsesApiResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub object: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<ResponsesUsage>,
+    #[serde(flatten, default)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+/// Non-blocking compatibility warning emitted by Rainy in envelope mode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompatWarning {
+    pub code: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+/// Features used by request (reported in envelope mode).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeaturesUsed {
+    pub reasoning: bool,
+    #[serde(rename = "imageInput")]
+    pub image_input: bool,
+    pub tools: bool,
+    #[serde(rename = "structuredOutput")]
+    pub structured_output: bool,
+}
+
+/// Reasoning summary metadata reported by Rainy in envelope mode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReasoningMeta {
+    pub present: bool,
+    pub summary_present: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokens: Option<u32>,
+}
+
+/// Rainy envelope metadata (partial, forward-compatible).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RainyEnvelopeMeta {
+    #[serde(
+        rename = "billingPlan",
+        alias = "billing_plan",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub billing_plan: Option<String>,
+    #[serde(
+        rename = "creditsCharged",
+        alias = "credits_charged",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub credits_charged: Option<f64>,
+    #[serde(
+        rename = "markupPercent",
+        alias = "markup_percent",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub markup_percent: Option<f64>,
+    #[serde(
+        rename = "dailyCreditsRemaining",
+        alias = "daily_credits_remaining",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub daily_credits_remaining: Option<String>,
+    #[serde(
+        rename = "compatWarnings",
+        alias = "compat_warnings",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub compat_warnings: Option<Vec<CompatWarning>>,
+    #[serde(
+        rename = "featuresUsed",
+        alias = "features_used",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub features_used: Option<FeaturesUsed>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<ReasoningMeta>,
+    #[serde(flatten, default)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+/// Standard Rainy success envelope.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RainyEnvelope<T> {
+    pub success: bool,
+    pub data: T,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meta: Option<RainyEnvelopeMeta>,
+}
+
+/// Response stream SSE event payload (dynamic by design).
+pub type ResponsesStreamEvent = serde_json::Value;
+
+/// Model architecture metadata returned by `/models/catalog`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelArchitecture {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_modalities: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_modalities: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokenizer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instruct_type: Option<String>,
+}
+
+/// Capability flag can be boolean or `"unknown"`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CapabilityFlag {
+    Bool(bool),
+    Text(String),
+}
+
+/// Rainy capability hints returned by `/models/catalog`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RainyCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<CapabilityFlag>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_input: Option<CapabilityFlag>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<CapabilityFlag>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<CapabilityFlag>,
+}
+
+/// Model entry returned by `/models/catalog`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelCatalogItem {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_length: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supported_parameters: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub architecture: Option<ModelArchitecture>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rainy_capabilities: Option<RainyCapabilities>,
+    #[serde(flatten, default)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// A collection of predefined model constants for convenience.
