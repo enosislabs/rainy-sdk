@@ -1,4 +1,4 @@
-# 🌧️ Rainy SDK v0.6.9
+# 🌧️ Rainy SDK v0.6.11
 
 [![Crates.io](https://img.shields.io/crates/v/rainy-sdk.svg)](https://crates.io/crates/rainy-sdk)
 [![Documentation](https://docs.rs/rainy-sdk/badge.svg)](https://docs.rs/rainy-sdk)
@@ -33,7 +33,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rainy-sdk = "0.6.9"
+rainy-sdk = "0.6.11"
 tokio = { version = "1.47", features = ["full"] }
 ```
 
@@ -54,7 +54,7 @@ Enable additional features as needed:
 
 ```toml
 [dependencies]
-rainy-sdk = { version = "0.6.9", features = ["rate-limiting", "tracing"] }
+rainy-sdk = { version = "0.6.11", features = ["rate-limiting", "tracing"] }
 ```
 
 Available features:
@@ -133,6 +133,48 @@ let (response, metadata) = client.chat_completion(request).await?;
 - **Reasoning Control**: `reasoning_effort` parameter for Gemini models
 - **Log Probabilities**: `logprobs` and `top_logprobs` support
 - **Streaming**: OpenAI-compatible delta format streaming with tool calls
+
+### Full Tool Replay for Agent Loops
+
+For agent runtimes that must replay assistant tool calls and `tool` role results across turns,
+use the OpenAI-compatible chat surface instead of the simplified `ChatCompletionRequest`:
+
+```rust
+use rainy_sdk::{
+    models::{
+        OpenAIChatCompletionRequest, OpenAIChatMessage, OpenAIFunctionCall, OpenAIToolCall,
+        ThinkingConfig, ThinkingLevel,
+    },
+    RainyClient,
+};
+
+let client = RainyClient::with_api_key("your-rainy-api-key")?;
+
+let request = OpenAIChatCompletionRequest::new(
+    "gemini-3-pro-preview",
+    vec![
+        OpenAIChatMessage::user("List all files in the workspace."),
+        OpenAIChatMessage::assistant_with_tool_calls(vec![OpenAIToolCall {
+            id: "call_123".to_string(),
+            r#type: "function".to_string(),
+            extra_content: Some(serde_json::json!({
+                "google": { "thought_signature": "encrypted_sig" }
+            })),
+            function: OpenAIFunctionCall {
+                name: "list_files".to_string(),
+                arguments: "{\"path\":\".\"}".to_string(),
+            },
+        }]),
+        OpenAIChatMessage::tool(
+            "call_123",
+            "{\"entries\":[\"src\",\"Cargo.toml\"]}",
+        ),
+    ],
+)
+.with_thinking_config(ThinkingConfig::gemini_3(ThinkingLevel::High, true));
+
+let response = client.create_openai_chat_completion(request).await?;
+```
 
 ## 🧠 Advanced Thinking Capabilities
 

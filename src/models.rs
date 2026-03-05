@@ -27,6 +27,92 @@ pub enum MessageRole {
     Assistant,
 }
 
+/// The role of an OpenAI-compatible chat message author.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum OpenAIMessageRole {
+    /// A message from the system.
+    System,
+    /// A message from the user.
+    User,
+    /// A message from the assistant.
+    Assistant,
+    /// A tool result message.
+    Tool,
+}
+
+/// OpenAI-compatible chat message content.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum OpenAIMessageContent {
+    /// Plain text content.
+    Text(String),
+    /// Multimodal content parts.
+    Parts(Vec<OpenAIContentPart>),
+}
+
+/// OpenAI-compatible multimodal content part.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIContentPart {
+    /// Text content part.
+    Text { text: String },
+    /// Image URL content part.
+    ImageUrl { image_url: OpenAIImageUrl },
+}
+
+/// OpenAI-compatible image URL payload.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OpenAIImageUrl {
+    /// Image URL or data URI.
+    pub url: String,
+    /// Optional detail level hint.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+/// OpenAI-compatible function call payload.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OpenAIFunctionCall {
+    /// Function name.
+    pub name: String,
+    /// JSON-encoded function arguments.
+    pub arguments: String,
+}
+
+/// OpenAI-compatible tool call payload.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OpenAIToolCall {
+    /// Tool call ID.
+    pub id: String,
+    /// Tool type (typically `function`).
+    pub r#type: String,
+    /// Optional provider-specific metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_content: Option<serde_json::Value>,
+    /// Function call details.
+    pub function: OpenAIFunctionCall,
+}
+
+/// OpenAI-compatible chat message with full tool-call replay support.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OpenAIChatMessage {
+    /// The role of the message author.
+    pub role: OpenAIMessageRole,
+    /// Message content. Assistant tool-call messages may omit content.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<OpenAIMessageContent>,
+    /// Optional display name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Assistant tool calls attached to this message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<OpenAIToolCall>>,
+    /// Tool call ID associated with a `tool` role message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
 /// The search provider to use for web research.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
@@ -134,6 +220,84 @@ pub struct ChatCompletionRequest {
     pub thinking_config: Option<ThinkingConfig>,
 }
 
+/// OpenAI-compatible request payload with full message replay support.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAIChatCompletionRequest {
+    /// The identifier of the model to use for the completion.
+    pub model: String,
+
+    /// Full OpenAI-compatible message history.
+    pub messages: Vec<OpenAIChatMessage>,
+
+    /// The sampling temperature to use.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+
+    /// The maximum number of tokens to generate in the completion.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+
+    /// Nucleus sampling parameter.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
+
+    /// Frequency penalty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frequency_penalty: Option<f32>,
+
+    /// Presence penalty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub presence_penalty: Option<f32>,
+
+    /// Stop sequences.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop: Option<Vec<String>>,
+
+    /// End-user identifier.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+
+    /// Router/provider hint.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+
+    /// If true, the response will be streamed as SSE events.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<bool>,
+
+    /// Logit bias map.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logit_bias: Option<serde_json::Value>,
+
+    /// Whether to return log probabilities.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logprobs: Option<bool>,
+
+    /// Number of top log probabilities to return.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_logprobs: Option<u32>,
+
+    /// Number of completion choices to generate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub n: Option<u32>,
+
+    /// Structured response format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<ResponseFormat>,
+
+    /// Tools available to the model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<Tool>>,
+
+    /// Tool selection strategy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<ToolChoice>,
+
+    /// Gemini thinking configuration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_config: Option<ThinkingConfig>,
+}
+
 /// Represents the response from a chat completion request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionResponse {
@@ -153,6 +317,29 @@ pub struct ChatCompletionResponse {
     pub choices: Vec<ChatChoice>,
 
     /// Information about the token usage for this completion.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<Usage>,
+}
+
+/// OpenAI-compatible chat completion response with tool-call aware messages.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAIChatCompletionResponse {
+    /// A unique identifier for the chat completion.
+    pub id: String,
+
+    /// The type of object, which is always `chat.completion`.
+    pub object: String,
+
+    /// The Unix timestamp (in seconds) of when the completion was created.
+    pub created: u64,
+
+    /// The model that was used for the completion.
+    pub model: String,
+
+    /// A list of chat completion choices.
+    pub choices: Vec<OpenAIChatChoice>,
+
+    /// Token usage information for this completion.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
@@ -214,6 +401,19 @@ pub struct ChatChoice {
 
     /// The message generated by the model.
     pub message: ChatMessage,
+
+    /// The reason the model stopped generating tokens.
+    pub finish_reason: String,
+}
+
+/// Represents a single choice in an OpenAI-compatible chat completion response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAIChatChoice {
+    /// The index of the choice in the list of choices.
+    pub index: u32,
+
+    /// The tool-call aware message generated by the model.
+    pub message: OpenAIChatMessage,
 
     /// The reason the model stopped generating tokens.
     pub finish_reason: String,
@@ -1112,6 +1312,195 @@ impl ChatCompletionRequest {
     }
 }
 
+impl OpenAIChatCompletionRequest {
+    /// Creates a new OpenAI-compatible chat completion request.
+    pub fn new(model: impl Into<String>, messages: Vec<OpenAIChatMessage>) -> Self {
+        Self {
+            model: model.into(),
+            messages,
+            temperature: None,
+            max_tokens: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            user: None,
+            provider: None,
+            stream: None,
+            logit_bias: None,
+            logprobs: None,
+            top_logprobs: None,
+            n: None,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            thinking_config: None,
+        }
+    }
+
+    /// Sets the sampling temperature.
+    pub fn with_temperature(mut self, temperature: f32) -> Self {
+        self.temperature = Some(temperature.clamp(0.0, 2.0));
+        self
+    }
+
+    /// Sets the maximum number of tokens to generate.
+    pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
+        self.max_tokens = Some(max_tokens);
+        self
+    }
+
+    /// Sets the end-user identifier.
+    pub fn with_user(mut self, user: impl Into<String>) -> Self {
+        self.user = Some(user.into());
+        self
+    }
+
+    /// Sets a provider hint.
+    pub fn with_provider(mut self, provider: impl Into<String>) -> Self {
+        self.provider = Some(provider.into());
+        self
+    }
+
+    /// Enables or disables streaming.
+    pub fn with_stream(mut self, stream: bool) -> Self {
+        self.stream = Some(stream);
+        self
+    }
+
+    /// Sets nucleus sampling.
+    pub fn with_top_p(mut self, top_p: f32) -> Self {
+        self.top_p = Some(top_p.clamp(0.0, 1.0));
+        self
+    }
+
+    /// Sets frequency penalty.
+    pub fn with_frequency_penalty(mut self, frequency_penalty: f32) -> Self {
+        self.frequency_penalty = Some(frequency_penalty.clamp(-2.0, 2.0));
+        self
+    }
+
+    /// Sets presence penalty.
+    pub fn with_presence_penalty(mut self, presence_penalty: f32) -> Self {
+        self.presence_penalty = Some(presence_penalty.clamp(-2.0, 2.0));
+        self
+    }
+
+    /// Sets stop sequences.
+    pub fn with_stop(mut self, stop: Vec<String>) -> Self {
+        self.stop = Some(stop);
+        self
+    }
+
+    /// Sets logit bias.
+    pub fn with_logit_bias(mut self, logit_bias: serde_json::Value) -> Self {
+        self.logit_bias = Some(logit_bias);
+        self
+    }
+
+    /// Enables or disables log probabilities.
+    pub fn with_logprobs(mut self, logprobs: bool) -> Self {
+        self.logprobs = Some(logprobs);
+        self
+    }
+
+    /// Sets the top log probabilities count.
+    pub fn with_top_logprobs(mut self, top_logprobs: u32) -> Self {
+        self.top_logprobs = Some(top_logprobs);
+        self
+    }
+
+    /// Sets the number of choices to generate.
+    pub fn with_n(mut self, n: u32) -> Self {
+        self.n = Some(n);
+        self
+    }
+
+    /// Sets the response format.
+    pub fn with_response_format(mut self, response_format: ResponseFormat) -> Self {
+        self.response_format = Some(response_format);
+        self
+    }
+
+    /// Sets the available tools.
+    pub fn with_tools(mut self, tools: Vec<Tool>) -> Self {
+        self.tools = Some(tools);
+        self
+    }
+
+    /// Sets the tool choice strategy.
+    pub fn with_tool_choice(mut self, tool_choice: ToolChoice) -> Self {
+        self.tool_choice = Some(tool_choice);
+        self
+    }
+
+    /// Sets the Gemini thinking configuration.
+    pub fn with_thinking_config(mut self, thinking_config: ThinkingConfig) -> Self {
+        self.thinking_config = Some(thinking_config);
+        self
+    }
+
+    /// Enables or disables thought summaries.
+    pub fn with_include_thoughts(mut self, include_thoughts: bool) -> Self {
+        let mut config = self.thinking_config.unwrap_or_default();
+        config.include_thoughts = Some(include_thoughts);
+        self.thinking_config = Some(config);
+        self
+    }
+
+    /// Sets the Gemini 3 thinking level.
+    pub fn with_thinking_level(mut self, thinking_level: ThinkingLevel) -> Self {
+        let mut config = self.thinking_config.unwrap_or_default();
+        config.thinking_level = Some(thinking_level);
+        self.thinking_config = Some(config);
+        self
+    }
+
+    /// Sets the Gemini 2.5 thinking budget.
+    pub fn with_thinking_budget(mut self, thinking_budget: i32) -> Self {
+        let mut config = self.thinking_config.unwrap_or_default();
+        config.thinking_budget = Some(thinking_budget);
+        self.thinking_config = Some(config);
+        self
+    }
+
+    /// Validates compatibility using the same parameter rules as the simple chat request.
+    pub fn validate_openai_compatibility(&self) -> Result<(), String> {
+        ChatCompletionRequest {
+            model: self.model.clone(),
+            messages: vec![],
+            temperature: self.temperature,
+            max_tokens: self.max_tokens,
+            top_p: self.top_p,
+            frequency_penalty: self.frequency_penalty,
+            presence_penalty: self.presence_penalty,
+            stop: self.stop.clone(),
+            user: self.user.clone(),
+            provider: self.provider.clone(),
+            stream: self.stream,
+            logit_bias: self.logit_bias.clone(),
+            logprobs: self.logprobs,
+            top_logprobs: self.top_logprobs,
+            n: self.n,
+            response_format: self.response_format.clone(),
+            tools: self.tools.clone(),
+            tool_choice: self.tool_choice.clone(),
+            thinking_config: self.thinking_config.clone(),
+        }
+        .validate_openai_compatibility()
+    }
+
+    /// Checks whether the selected model supports thinking features.
+    pub fn supports_thinking(&self) -> bool {
+        self.model.contains("gemini-3") || self.model.contains("gemini-2.5")
+    }
+
+    /// Checks whether the selected model requires thought signatures for function calling.
+    pub fn requires_thought_signatures(&self) -> bool {
+        self.model.contains("gemini-3")
+    }
+}
+
 impl ChatMessage {
     /// Creates a new message with the `System` role.
     ///
@@ -1147,6 +1536,132 @@ impl ChatMessage {
             role: MessageRole::Assistant,
             content: content.into(),
         }
+    }
+}
+
+impl OpenAIMessageContent {
+    /// Creates text content.
+    pub fn text(content: impl Into<String>) -> Self {
+        Self::Text(content.into())
+    }
+
+    /// Creates multimodal content parts.
+    pub fn parts(parts: Vec<OpenAIContentPart>) -> Self {
+        Self::Parts(parts)
+    }
+}
+
+impl OpenAIContentPart {
+    /// Creates a text content part.
+    pub fn text(content: impl Into<String>) -> Self {
+        Self::Text {
+            text: content.into(),
+        }
+    }
+
+    /// Creates an image URL part.
+    pub fn image_url(url: impl Into<String>) -> Self {
+        Self::ImageUrl {
+            image_url: OpenAIImageUrl {
+                url: url.into(),
+                detail: None,
+            },
+        }
+    }
+
+    /// Creates an image URL part with a specific detail hint.
+    pub fn image_url_with_detail(url: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self::ImageUrl {
+            image_url: OpenAIImageUrl {
+                url: url.into(),
+                detail: Some(detail.into()),
+            },
+        }
+    }
+}
+
+impl OpenAIChatMessage {
+    /// Creates a new system message.
+    pub fn system(content: impl Into<OpenAIMessageContent>) -> Self {
+        Self {
+            role: OpenAIMessageRole::System,
+            content: Some(content.into()),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    /// Creates a new user message.
+    pub fn user(content: impl Into<OpenAIMessageContent>) -> Self {
+        Self {
+            role: OpenAIMessageRole::User,
+            content: Some(content.into()),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    /// Creates a new assistant message.
+    pub fn assistant(content: impl Into<OpenAIMessageContent>) -> Self {
+        Self {
+            role: OpenAIMessageRole::Assistant,
+            content: Some(content.into()),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    /// Creates an assistant message that only carries tool calls.
+    pub fn assistant_with_tool_calls(tool_calls: Vec<OpenAIToolCall>) -> Self {
+        Self {
+            role: OpenAIMessageRole::Assistant,
+            content: None,
+            name: None,
+            tool_calls: Some(tool_calls),
+            tool_call_id: None,
+        }
+    }
+
+    /// Creates a tool result message.
+    pub fn tool(tool_call_id: impl Into<String>, content: impl Into<OpenAIMessageContent>) -> Self {
+        Self {
+            role: OpenAIMessageRole::Tool,
+            content: Some(content.into()),
+            name: None,
+            tool_calls: None,
+            tool_call_id: Some(tool_call_id.into()),
+        }
+    }
+
+    /// Creates a message with full control over optional OpenAI-compatible fields.
+    pub fn with_parts(
+        role: OpenAIMessageRole,
+        content: Option<OpenAIMessageContent>,
+        tool_calls: Option<Vec<OpenAIToolCall>>,
+        tool_call_id: Option<String>,
+    ) -> Self {
+        Self {
+            role,
+            content,
+            name: None,
+            tool_calls,
+            tool_call_id,
+        }
+    }
+}
+
+impl From<String> for OpenAIMessageContent {
+    fn from(value: String) -> Self {
+        Self::Text(value)
+    }
+}
+
+impl From<&str> for OpenAIMessageContent {
+    fn from(value: &str) -> Self {
+        Self::Text(value.to_string())
     }
 }
 

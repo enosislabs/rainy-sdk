@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.11] - 2026-03-05
+
+### 🚀 OpenAI Chat Replay Support for Agent Tool Loops
+
+- Added a new OpenAI-compatible chat surface for `/api/v1/chat/completions`:
+  - `OpenAIChatCompletionRequest`
+  - `OpenAIChatCompletionResponse`
+  - `OpenAIChatMessage`
+  - multimodal `OpenAIMessageContent` / `OpenAIContentPart`
+  - tool replay payloads `OpenAIToolCall` / `OpenAIFunctionCall`
+- Added `RainyClient` methods for full tool-history replay without external wrappers:
+  - `create_openai_chat_completion`
+  - `create_openai_chat_completion_stream`
+- Preserved backwards compatibility by keeping the existing simplified `ChatCompletionRequest`
+  API unchanged for simple text-first chat flows.
+- Added `tests/openai_chat_api_test.rs` covering:
+  - serialization of assistant `tool_calls`
+  - serialization of `tool` role follow-up messages
+  - multimodal content serialization
+  - deserialization of tool-call aware responses
+  - public client surface availability
+- Updated `README.md` with the new release version and a practical example of replaying
+  tool history in agent runtimes.
+
+### Validation
+
+- `cargo fmt` - passes
+- `cargo test` - passes
+- `cargo clippy --all-targets --all-features` - passes
+- `cargo doc --no-deps` - passes
+
+---
+
 ## [0.6.10] - 2026-02-27
 
 ### 🚀 Rainy API v3 Compatibility (Responses + Tool Calling)
