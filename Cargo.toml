@@ -1,6 +1,6 @@
 [package]
 name = "rainy-sdk"
-version = "0.6.11"
+version = "0.6.12"
 edition = "2021"
 authors = ["Enosis Labs <hello@enosislabs.com>"]
 description = "Official Rust SDK for Rainy API by Enosis Labs v0.6.11 - OpenAI chat replay support and v3 compatibility updates"
@@ -37,26 +37,26 @@ include = [
 # Core dependencies
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.143"
+serde_json = "1.0.149"
 tokio = { version = "1.47", features = ["full"] }
-anyhow = "1.0.99"
-thiserror = "2.0"
-url = "2.5"
-uuid = { version = "1.18", features = ["v4", "serde"] }
+anyhow = "1.0.102"
+thiserror = "2.0.18"
+url = "2.5.8"
+uuid = { version = "1.22.0", features = ["v4", "serde"] }
 chrono = { version = "0.4.41", features = ["serde"] }
-base64 = "0.22"
-secrecy = { version = "0.8", features = ["serde"] }
+base64 = "0.22.1"
+secrecy = { version = "0.10.3", features = ["serde"] }
 
 # Optional dependencies for advanced features
-governor = { version = "0.7", optional = true }
+governor = { version = "0.10.4", optional = true }
 tracing = { version = "0.1.41", optional = true }
-futures = "0.3.31"
+futures = "0.3.32"
 
 # Dependencies for retry logic with jitter
-rand = "0.8"
+rand = "0.10.0"
 
 # SSE parsing (keep for backward compatibility)
-eventsource-stream = "0.2"
+eventsource-stream = "0.2.3"
 
 [features]
 default = ["rate-limiting", "tracing"]
@@ -67,9 +67,9 @@ cowork = []  # Legacy Cowork compatibility only (opt-in)
 
 # Development dependencies
 [dev-dependencies]
-mockito = "1.7"
-tokio-test = "0.4.4"
-env_logger = "0.11"
+mockito = "1.7.2"
+tokio-test = "0.4.5"
+env_logger = "0.11.10"
 
 # Production optimizations
 [profile.release]
