@@ -483,6 +483,24 @@ impl RainyClient {
         }
     }
 
+    /// Retrieves catalog and filters/sorts models using SDK selector criteria.
+    pub async fn select_models(
+        &self,
+        criteria: ModelSelectionCriteria,
+    ) -> Result<Vec<ModelCatalogItem>> {
+        let catalog = self.get_models_catalog().await?;
+        Ok(crate::models::select_models(&catalog, &criteria))
+    }
+
+    /// Builds provider-aware reasoning payload from a catalog entry and preference.
+    pub fn build_reasoning_config(
+        &self,
+        model: &ModelCatalogItem,
+        preference: &ReasoningPreference,
+    ) -> Option<serde_json::Value> {
+        crate::models::build_reasoning_config(model, preference)
+    }
+
     /// Creates a simple chat completion with a single user prompt.
     ///
     /// This is a convenience method for simple use cases where you only need to send a single

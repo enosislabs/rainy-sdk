@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 fn map_is_empty(value: &HashMap<String, serde_json::Value>) -> bool {
@@ -838,6 +839,103 @@ pub struct RainyCapabilities {
     pub response_format: Option<CapabilityFlag>,
 }
 
+/// Provider-specific reasoning profile.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningProvider {
+    Openai,
+    Google,
+    Anthropic,
+    Other,
+}
+
+/// Thinking budget range metadata.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ThinkingBudget {
+    pub min: i32,
+    pub max: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dynamic_value: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disable_value: Option<i32>,
+}
+
+/// Reasoning controls available for a model.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ReasoningControls {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effort: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_level: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_budget: Option<ThinkingBudget>,
+}
+
+/// Provider profile for reasoning/thinking.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReasoningProfile {
+    pub provider: ReasoningProvider,
+    pub parameter_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub values: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+}
+
+/// Reasoning toggle paths for clients.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ReasoningToggle {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_param: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_reasoning_param: Option<String>,
+}
+
+/// Reasoning capability block in `rainy_capabilities_v2`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct RainyReasoningCapabilitiesV2 {
+    pub supported: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub controls: Option<ReasoningControls>,
+    #[serde(default)]
+    pub profiles: Vec<ReasoningProfile>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub toggle: Option<ReasoningToggle>,
+}
+
+/// Multimodal capability block in `rainy_capabilities_v2`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct RainyMultimodalCapabilitiesV2 {
+    #[serde(default)]
+    pub input: Vec<String>,
+    #[serde(default)]
+    pub output: Vec<String>,
+}
+
+/// Parameter capability block in `rainy_capabilities_v2`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct RainyParametersCapabilitiesV2 {
+    #[serde(default)]
+    pub accepted: Vec<String>,
+}
+
+/// Full v2 capability block returned by `/models/catalog`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct RainyCapabilitiesV2 {
+    pub multimodal: RainyMultimodalCapabilitiesV2,
+    pub reasoning: RainyReasoningCapabilitiesV2,
+    pub parameters: RainyParametersCapabilitiesV2,
+}
+
+/// Pricing metadata for model ranking helpers.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ModelPricing {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion: Option<String>,
+}
+
 /// Model entry returned by `/models/catalog`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ModelCatalogItem {
@@ -847,13 +945,290 @@ pub struct ModelCatalogItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_length: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub pricing: Option<ModelPricing>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub supported_parameters: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub architecture: Option<ModelArchitecture>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rainy_capabilities: Option<RainyCapabilities>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rainy_capabilities_v2: Option<RainyCapabilitiesV2>,
     #[serde(flatten, default)]
     pub extra: HashMap<String, serde_json::Value>,
+}
+
+/// Reasoning mode expected by the caller when selecting models.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReasoningMode {
+    Effort,
+    ThinkingLevel,
+    ThinkingBudget,
+}
+
+/// Selector criteria for model discovery from `/models/catalog`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ModelSelectionCriteria {
+    #[serde(default)]
+    pub required_input_modalities: Vec<String>,
+    #[serde(default)]
+    pub required_output_modalities: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_tools: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_structured_output: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_mode: Option<ReasoningMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_value: Option<String>,
+}
+
+/// Builder preference for reasoning payload generation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReasoningPreference {
+    pub mode: ReasoningMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget: Option<i32>,
+}
+
+fn parse_price(value: Option<&str>) -> f64 {
+    value
+        .and_then(|raw| raw.parse::<f64>().ok())
+        .filter(|v| v.is_finite())
+        .unwrap_or(f64::MAX)
+}
+
+fn has_required_modalities(available: &[String], required: &[String]) -> bool {
+    if required.is_empty() {
+        return true;
+    }
+
+    required.iter().all(|modality| {
+        available
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(modality))
+    })
+}
+
+fn supports_reasoning_preference(
+    capabilities: &RainyCapabilitiesV2,
+    mode: &ReasoningMode,
+    reasoning_value: Option<&str>,
+) -> bool {
+    if !capabilities.reasoning.supported {
+        return false;
+    }
+
+    let controls = capabilities.reasoning.controls.as_ref();
+    match mode {
+        ReasoningMode::Effort => controls
+            .and_then(|c| c.effort.as_ref())
+            .map(|values| {
+                reasoning_value.map_or(true, |value| {
+                    values
+                        .iter()
+                        .any(|candidate| candidate.eq_ignore_ascii_case(value))
+                })
+            })
+            .unwrap_or(false),
+        ReasoningMode::ThinkingLevel => controls
+            .and_then(|c| c.thinking_level.as_ref())
+            .map(|values| {
+                reasoning_value.map_or(true, |value| {
+                    values
+                        .iter()
+                        .any(|candidate| candidate.eq_ignore_ascii_case(value))
+                })
+            })
+            .unwrap_or(false),
+        ReasoningMode::ThinkingBudget => {
+            controls.and_then(|c| c.thinking_budget.as_ref()).is_some()
+        }
+    }
+}
+
+fn catalog_item_supports(item: &ModelCatalogItem, parameter: &str) -> bool {
+    if let Some(v2) = &item.rainy_capabilities_v2 {
+        return v2
+            .parameters
+            .accepted
+            .iter()
+            .any(|candidate| candidate == parameter);
+    }
+
+    item.supported_parameters
+        .as_ref()
+        .map(|params| params.iter().any(|candidate| candidate == parameter))
+        .unwrap_or(false)
+}
+
+/// Select models from catalog and rank by prompt price, completion price, then context length desc.
+pub fn select_models(
+    models: &[ModelCatalogItem],
+    criteria: &ModelSelectionCriteria,
+) -> Vec<ModelCatalogItem> {
+    let required_inputs: Vec<String> = criteria
+        .required_input_modalities
+        .iter()
+        .map(|v| v.to_lowercase())
+        .collect();
+    let required_outputs: Vec<String> = criteria
+        .required_output_modalities
+        .iter()
+        .map(|v| v.to_lowercase())
+        .collect();
+
+    let mut filtered: Vec<ModelCatalogItem> = models
+        .iter()
+        .filter(|item| {
+            let Some(v2) = item.rainy_capabilities_v2.as_ref() else {
+                return false;
+            };
+            let input: Vec<String> = v2
+                .multimodal
+                .input
+                .iter()
+                .map(|v| v.to_lowercase())
+                .collect();
+            let output: Vec<String> = v2
+                .multimodal
+                .output
+                .iter()
+                .map(|v| v.to_lowercase())
+                .collect();
+
+            if !has_required_modalities(&input, &required_inputs) {
+                return false;
+            }
+
+            if !has_required_modalities(&output, &required_outputs) {
+                return false;
+            }
+
+            if criteria.require_tools == Some(true) && !catalog_item_supports(item, "tools") {
+                return false;
+            }
+
+            if criteria.require_structured_output == Some(true)
+                && !catalog_item_supports(item, "response_format")
+                && !catalog_item_supports(item, "structured_outputs")
+            {
+                return false;
+            }
+
+            if let Some(mode) = &criteria.reasoning_mode {
+                let reasoning_value = criteria.reasoning_value.as_deref();
+                if !supports_reasoning_preference(v2, mode, reasoning_value) {
+                    return false;
+                }
+            }
+
+            true
+        })
+        .cloned()
+        .collect();
+
+    filtered.sort_by(|a, b| {
+        let a_prompt = parse_price(a.pricing.as_ref().and_then(|p| p.prompt.as_deref()));
+        let b_prompt = parse_price(b.pricing.as_ref().and_then(|p| p.prompt.as_deref()));
+        let prompt_cmp = a_prompt.partial_cmp(&b_prompt).unwrap_or(Ordering::Equal);
+        if prompt_cmp != Ordering::Equal {
+            return prompt_cmp;
+        }
+
+        let a_completion = parse_price(a.pricing.as_ref().and_then(|p| p.completion.as_deref()));
+        let b_completion = parse_price(b.pricing.as_ref().and_then(|p| p.completion.as_deref()));
+        let completion_cmp = a_completion
+            .partial_cmp(&b_completion)
+            .unwrap_or(Ordering::Equal);
+        if completion_cmp != Ordering::Equal {
+            return completion_cmp;
+        }
+
+        let a_context = a.context_length.unwrap_or_default();
+        let b_context = b.context_length.unwrap_or_default();
+        b_context.cmp(&a_context)
+    });
+
+    filtered
+}
+
+/// Build provider-aware reasoning payload from `rainy_capabilities_v2`.
+pub fn build_reasoning_config(
+    model: &ModelCatalogItem,
+    preference: &ReasoningPreference,
+) -> Option<serde_json::Value> {
+    let v2 = model.rainy_capabilities_v2.as_ref()?;
+    if !v2.reasoning.supported {
+        return None;
+    }
+
+    let profiles = &v2.reasoning.profiles;
+    let controls = v2.reasoning.controls.as_ref();
+    match preference.mode {
+        ReasoningMode::Effort => {
+            let value = preference.value.clone()?;
+            let supports = controls
+                .and_then(|c| c.effort.as_ref())
+                .map(|efforts| efforts.iter().any(|v| v.eq_ignore_ascii_case(&value)))
+                .unwrap_or(false);
+            if !supports {
+                return None;
+            }
+
+            let prefers_google_thinking_level = profiles.iter().any(|p| {
+                p.provider == ReasoningProvider::Google
+                    && p.parameter_path == "thinking_config.thinking_level"
+            });
+            if prefers_google_thinking_level {
+                return Some(serde_json::json!({
+                    "thinking_config": { "thinking_level": value }
+                }));
+            }
+
+            Some(serde_json::json!({
+                "reasoning": { "effort": value }
+            }))
+        }
+        ReasoningMode::ThinkingLevel => {
+            let value = preference.value.clone()?;
+            let supports = controls
+                .and_then(|c| c.thinking_level.as_ref())
+                .map(|levels| levels.iter().any(|v| v.eq_ignore_ascii_case(&value)))
+                .unwrap_or(false);
+            if !supports {
+                return None;
+            }
+            Some(serde_json::json!({
+                "thinking_config": { "thinking_level": value }
+            }))
+        }
+        ReasoningMode::ThinkingBudget => {
+            let budget = preference.budget?;
+            let supports = controls.and_then(|c| c.thinking_budget.as_ref())?;
+            if budget < supports.min || budget > supports.max {
+                return None;
+            }
+
+            let uses_anthropic_budget = profiles.iter().any(|p| {
+                p.provider == ReasoningProvider::Anthropic
+                    && p.parameter_path == "thinking.budget_tokens"
+            });
+
+            if uses_anthropic_budget {
+                return Some(serde_json::json!({
+                    "thinking": { "budget_tokens": budget }
+                }));
+            }
+
+            Some(serde_json::json!({
+                "thinking_config": { "thinking_budget": budget }
+            }))
+        }
+    }
 }
 
 /// A collection of predefined model constants for convenience.

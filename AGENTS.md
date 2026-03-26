@@ -1,6 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Architecture
+
 This repository is a single Rust library crate, `rainy-sdk`. Public exports are assembled in `src/lib.rs`. The core transport layer lives in `src/client.rs` and `src/session.rs`:
 
 - `RainyClient`: API-key client for model, chat, responses, search, and health endpoints.
@@ -16,6 +17,7 @@ Routing is centralized through helper methods on `RainyClient`:
 Keep new endpoint methods consistent with that split instead of hardcoding URLs in multiple places.
 
 ## Build, Test, and Dev Commands
+
 - `cargo build`: compile the crate with default features.
 - `cargo build --all-features`: verify optional surfaces such as `cowork`.
 - `cargo test`: run unit, integration, and doc tests.
@@ -30,6 +32,7 @@ Useful env vars for tests:
 - `RAINY_TEST_BASE_URL`: override base URL, usually `http://localhost:3000`.
 
 ## Coding Style & Naming Conventions
+
 Use Rust 2021 idioms and `rustfmt` defaults with 4-space indentation. Follow these naming rules:
 
 - modules, functions, and tests: `snake_case`
@@ -39,6 +42,7 @@ Use Rust 2021 idioms and `rustfmt` defaults with 4-space indentation. Follow the
 Prefer builder-style APIs for request types, matching existing patterns like `ChatCompletionRequest::new(...).with_temperature(...)`. Public methods should return `Result<T, RainyError>` and keep serialization details encapsulated inside the client layer. Document public API surfaces with `///` doc comments and add `rust,no_run` examples where the behavior is user-facing.
 
 ## Testing Guidelines
+
 The repository uses:
 
 - inline/unit coverage in `tests/unit_tests.rs`
@@ -56,6 +60,7 @@ Name tests after observable behavior, for example `session_org_and_usage_calls_s
 If you add public request/response types, also add a focused serialization test similar to `tests/responses_api_test.rs`.
 
 ## Commit & Pull Request Guidelines
+
 Recent history uses Conventional Commits, including scoped forms:
 
 - `feat: add responses api compatibility for rainy v3`
@@ -73,4 +78,5 @@ Pull requests should include:
 - sample request/response notes when API contracts changed
 
 ## Security & Configuration Tips
+
 Do not commit real API keys, refresh tokens, or session tokens. Keep secrets in environment variables and prefer mock servers for endpoint tests. For security issues, follow the private reporting path in `SECURITY.md` instead of opening a public issue.

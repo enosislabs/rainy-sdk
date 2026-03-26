@@ -33,7 +33,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rainy-sdk = "0.6.11"
+rainy-sdk = "0.6.12"
 tokio = { version = "1.47", features = ["full"] }
 ```
 
@@ -54,7 +54,7 @@ Enable additional features as needed:
 
 ```toml
 [dependencies]
-rainy-sdk = { version = "0.6.11", features = ["rate-limiting", "tracing"] }
+rainy-sdk = { version = "0.6.12", features = ["rate-limiting", "tracing"] }
 ```
 
 Available features:
@@ -458,6 +458,41 @@ let mut stream = client
 
 while let Some(event) = stream.next().await {
     println!("Event: {:?}", event?);
+}
+# Ok(())
+# }
+```
+
+#### Dynamic Model Selector From Catalog Capabilities
+
+Build model selectors without hardcoding provider quirks by using `rainy_capabilities_v2`:
+
+```rust,no_run
+# use rainy_sdk::{ModelSelectionCriteria, RainyClient, ReasoningMode, ReasoningPreference};
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
+# let client = RainyClient::with_api_key("dummy")?;
+let selected = client
+    .select_models(ModelSelectionCriteria {
+        required_input_modalities: vec!["text".into(), "image".into()],
+        require_tools: Some(true),
+        require_structured_output: Some(true),
+        reasoning_mode: Some(ReasoningMode::Effort),
+        reasoning_value: Some("high".into()),
+        ..Default::default()
+    })
+    .await?;
+
+if let Some(model) = selected.first() {
+    let reasoning_payload = client.build_reasoning_config(
+        model,
+        &ReasoningPreference {
+            mode: ReasoningMode::Effort,
+            value: Some("high".into()),
+            budget: None,
+        },
+    );
+    println!("Model: {}", model.id);
+    println!("Reasoning payload: {:?}", reasoning_payload);
 }
 # Ok(())
 # }

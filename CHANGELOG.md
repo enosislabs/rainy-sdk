@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.12] - 2026-03-26
+
+### 🚀 Model Capability Registry v2 + Selector Helpers
+
+- Added support for `rainy_capabilities_v2` in `/api/v1/models/catalog` deserialization:
+  - `RainyCapabilitiesV2`
+  - reasoning controls/profiles/toggles types
+  - multimodal and accepted-parameter capability blocks
+- Extended `ModelCatalogItem` with:
+  - `rainy_capabilities_v2`
+  - typed `pricing` metadata for ranking helpers
+- Added SDK helpers for dynamic model discovery:
+  - `select_models(...)` free function and `RainyClient::select_models(...)`
+  - `build_reasoning_config(...)` free function and `RainyClient::build_reasoning_config(...)`
+- Selector default ranking order:
+  - lowest prompt cost
+  - then lowest completion cost
+  - then highest context length
+- Added tests for:
+  - v2 capability deserialization
+  - selector ranking/filter behavior
+  - provider-aware reasoning payload builder
+
+### Validation
+
+- `cargo fmt` - passes
+- `cargo test --test responses_api_test` - passes
+
+---
+
 ## [0.6.11] - 2026-03-05
 
 ### 🚀 OpenAI Chat Replay Support for Agent Tool Loops
@@ -31,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated `README.md` with the new release version and a practical example of replaying
   tool history in agent runtimes.
 
-### Validation
+### Validations
 
 - `cargo fmt` - passes
 - `cargo test` - passes
