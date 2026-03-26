@@ -1,6 +1,6 @@
 use crate::error::{RainyError, Result};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT};
-use secrecy::{ExposeSecret, Secret};
+use secrecy::{ExposeSecret, SecretString};
 use std::time::Duration;
 
 /// Configuration for authentication and client behavior.
@@ -25,7 +25,7 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
     /// The API key used for authenticating with the Rainy API.
-    pub api_key: Secret<String>,
+    pub api_key: SecretString,
 
     /// The base URL of the Rainy API. Defaults to the official endpoint.
     pub base_url: String,
@@ -51,7 +51,7 @@ impl AuthConfig {
     /// * `api_key` - Your Rainy API key.
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
-            api_key: Secret::new(api_key.into()),
+            api_key: SecretString::from(api_key.into()),
             base_url: crate::DEFAULT_BASE_URL.to_string(),
             timeout_seconds: 30,
             max_retries: 3,
