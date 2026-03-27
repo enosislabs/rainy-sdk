@@ -864,6 +864,12 @@ pub struct ThinkingBudget {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ReasoningControls {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_parameters: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_toggle: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_level: Option<Vec<String>>,
@@ -1025,19 +1031,25 @@ fn supports_reasoning_preference(
     let controls = capabilities.reasoning.controls.as_ref();
     match mode {
         ReasoningMode::Effort => controls
-            .and_then(|c| c.effort.as_ref())
-            .map(|values| {
-                reasoning_value.map_or(true, |value| {
-                    values
-                        .iter()
-                        .any(|candidate| candidate.eq_ignore_ascii_case(value))
-                })
+            .map(|c| c.reasoning_effort == Some(true) || c.effort.as_ref().is_some_and(|v| !v.is_empty()))
+            .filter(|supported| *supported)
+            .map(|_| {
+                controls
+                    .and_then(|c| c.effort.as_ref())
+                    .map(|values| {
+                        reasoning_value.is_none_or(|value| {
+                            values
+                                .iter()
+                                .any(|candidate| candidate.eq_ignore_ascii_case(value))
+                        })
+                    })
+                    .unwrap_or(reasoning_value.is_none())
             })
             .unwrap_or(false),
         ReasoningMode::ThinkingLevel => controls
             .and_then(|c| c.thinking_level.as_ref())
             .map(|values| {
-                reasoning_value.map_or(true, |value| {
+                reasoning_value.is_none_or(|value| {
                     values
                         .iter()
                         .any(|candidate| candidate.eq_ignore_ascii_case(value))
@@ -1171,27 +1183,27 @@ pub fn build_reasoning_config(
     match preference.mode {
         ReasoningMode::Effort => {
             let value = preference.value.clone()?;
-            let supports = controls
-                .and_then(|c| c.effort.as_ref())
-                .map(|efforts| efforts.iter().any(|v| v.eq_ignore_ascii_case(&value)))
+            let supports_effort = controls
+                .map(|c| c.reasoning_effort == Some(true) || c.effort.as_ref().is_some_and(|v| !v.is_empty()))
                 .unwrap_or(false);
-            if !supports {
+            if !supports_effort {
                 return None;
             }
-
-            let prefers_google_thinking_level = profiles.iter().any(|p| {
-                p.provider == ReasoningProvider::Google
-                    && p.parameter_path == "thinking_config.thinking_level"
-            });
-            if prefers_google_thinking_level {
-                return Some(serde_json::json!({
-                    "thinking_config": { "thinking_level": value }
-                }));
+            if let Some(efforts) = controls.and_then(|c| c.effort.as_ref()) {
+                if !efforts.iter().any(|v| v.eq_ignore_ascii_case(&value)) {
+                    return None;
+                }
             }
 
-            Some(serde_json::json!({
-                "reasoning": { "effort": value }
-            }))
+            let effort_profile = profiles
+                .iter()
+                .find(|p| p.parameter_path == "reasoning.effort")?;
+            match effort_profile.parameter_path.as_str() {
+                "reasoning.effort" => Some(serde_json::json!({
+                    "reasoning": { "effort": value }
+                })),
+                _ => None,
+            }
         }
         ReasoningMode::ThinkingLevel => {
             let value = preference.value.clone()?;
@@ -1201,6 +1213,14 @@ pub fn build_reasoning_config(
                 .unwrap_or(false);
             if !supports {
                 return None;
+            }
+            let level_profile = profiles
+                .iter()
+                .find(|p| p.parameter_path == "thinking_config.thinking_level")?;
+            if let Some(values) = &level_profile.values {
+                if !values.iter().any(|v| v.eq_ignore_ascii_case(&value)) {
+                    return None;
+                }
             }
             Some(serde_json::json!({
                 "thinking_config": { "thinking_level": value }
@@ -1212,21 +1232,22 @@ pub fn build_reasoning_config(
             if budget < supports.min || budget > supports.max {
                 return None;
             }
+            let budget_profile = profiles.iter().find(|p| {
+                p.parameter_path == "thinking.budget_tokens"
+                    || p.parameter_path == "thinking_config.thinking_budget"
+            })?;
 
-            let uses_anthropic_budget = profiles.iter().any(|p| {
-                p.provider == ReasoningProvider::Anthropic
-                    && p.parameter_path == "thinking.budget_tokens"
-            });
-
-            if uses_anthropic_budget {
+            if budget_profile.parameter_path == "thinking.budget_tokens" {
                 return Some(serde_json::json!({
                     "thinking": { "budget_tokens": budget }
                 }));
             }
-
-            Some(serde_json::json!({
+            if budget_profile.parameter_path == "thinking_config.thinking_budget" {
+                return Some(serde_json::json!({
                 "thinking_config": { "thinking_budget": budget }
-            }))
+                }));
+            }
+            None
         }
     }
 }

@@ -77,7 +77,8 @@ fn test_models_catalog_capabilities_v2_deserialization() {
             "reasoning": {
                 "supported": true,
                 "controls": {
-                    "effort": ["low", "medium", "high"],
+                    "observed_parameters": ["reasoning", "include_reasoning", "response_format"],
+                    "reasoning_toggle": true,
                     "thinking_level": ["minimal", "low", "medium", "high"],
                     "thinking_budget": { "min": -1, "max": 32768, "dynamic_value": -1, "disable_value": 0 }
                 },
@@ -119,13 +120,16 @@ fn test_select_models_ranks_by_prompt_completion_and_context() {
             reasoning: rainy_sdk::RainyReasoningCapabilitiesV2 {
                 supported: true,
                 controls: Some(rainy_sdk::ReasoningControls {
-                    effort: Some(vec![
-                        "low".to_string(),
-                        "medium".to_string(),
-                        "high".to_string(),
-                    ]),
+                    reasoning_effort: Some(true),
+                    effort: Some(vec!["low".to_string(), "medium".to_string(), "high".to_string()]),
                     ..Default::default()
                 }),
+                profiles: vec![rainy_sdk::ReasoningProfile {
+                    provider: rainy_sdk::ReasoningProvider::Other,
+                    parameter_path: "reasoning.effort".to_string(),
+                    values: Some(vec!["low".to_string(), "medium".to_string(), "high".to_string()]),
+                    notes: None,
+                }],
                 ..Default::default()
             },
             parameters: rainy_sdk::RainyParametersCapabilitiesV2 {
@@ -167,18 +171,19 @@ fn test_select_models_ranks_by_prompt_completion_and_context() {
 #[test]
 fn test_build_reasoning_config_by_profile() {
     let model = ModelCatalogItem {
-        id: "google/gemini-3.1-pro-preview".to_string(),
+        id: "minimax/minimax-m2.5".to_string(),
         rainy_capabilities_v2: Some(serde_json::from_value(serde_json::json!({
             "multimodal": { "input": ["text"], "output": ["text"] },
             "reasoning": {
                 "supported": true,
                 "controls": {
+                    "reasoning_effort": true,
                     "effort": ["low", "medium", "high"],
-                    "thinking_level": ["minimal", "low", "medium", "high"],
-                    "thinking_budget": { "min": -1, "max": 32768, "dynamic_value": -1, "disable_value": 0 }
+                    "thinking_budget": { "min": 0, "max": 32768, "disable_value": 0 }
                 },
                 "profiles": [
-                    { "provider": "google", "parameter_path": "thinking_config.thinking_level" }
+                    { "provider": "other", "parameter_path": "reasoning.effort", "values": ["low", "medium", "high"] },
+                    { "provider": "other", "parameter_path": "thinking_config.thinking_budget" }
                 ]
             },
             "parameters": { "accepted": ["reasoning"] }
@@ -195,7 +200,7 @@ fn test_build_reasoning_config_by_profile() {
         },
     )
     .expect("effort payload");
-    assert_eq!(effort_payload["thinking_config"]["thinking_level"], "high");
+    assert_eq!(effort_payload["reasoning"]["effort"], "high");
 
     let budget_payload = build_reasoning_config(
         &model,
@@ -207,4 +212,35 @@ fn test_build_reasoning_config_by_profile() {
     )
     .expect("budget payload");
     assert_eq!(budget_payload["thinking_config"]["thinking_budget"], 1024);
+}
+
+#[test]
+fn test_build_reasoning_config_returns_none_without_confirmed_profile() {
+    let model = ModelCatalogItem {
+        id: "google/gemini-3.1-pro-preview".to_string(),
+        rainy_capabilities_v2: Some(serde_json::from_value(serde_json::json!({
+            "multimodal": { "input": ["text"], "output": ["text"] },
+            "reasoning": {
+                "supported": true,
+                "controls": {
+                    "reasoning_toggle": true,
+                    "observed_parameters": ["reasoning", "include_reasoning"]
+                },
+                "profiles": []
+            },
+            "parameters": { "accepted": ["reasoning", "include_reasoning"] }
+        })).expect("caps deserialize")),
+        ..Default::default()
+    };
+
+    let payload = build_reasoning_config(
+        &model,
+        &ReasoningPreference {
+            mode: ReasoningMode::Effort,
+            value: Some("high".to_string()),
+            budget: None,
+        },
+    );
+
+    assert!(payload.is_none());
 }
