@@ -1031,7 +1031,9 @@ fn supports_reasoning_preference(
     let controls = capabilities.reasoning.controls.as_ref();
     match mode {
         ReasoningMode::Effort => controls
-            .map(|c| c.reasoning_effort == Some(true) || c.effort.as_ref().is_some_and(|v| !v.is_empty()))
+            .map(|c| {
+                c.reasoning_effort == Some(true) || c.effort.as_ref().is_some_and(|v| !v.is_empty())
+            })
             .filter(|supported| *supported)
             .map(|_| {
                 controls
@@ -1184,7 +1186,10 @@ pub fn build_reasoning_config(
         ReasoningMode::Effort => {
             let value = preference.value.clone()?;
             let supports_effort = controls
-                .map(|c| c.reasoning_effort == Some(true) || c.effort.as_ref().is_some_and(|v| !v.is_empty()))
+                .map(|c| {
+                    c.reasoning_effort == Some(true)
+                        || c.effort.as_ref().is_some_and(|v| !v.is_empty())
+                })
                 .unwrap_or(false);
             if !supports_effort {
                 return None;

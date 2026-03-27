@@ -121,13 +121,21 @@ fn test_select_models_ranks_by_prompt_completion_and_context() {
                 supported: true,
                 controls: Some(rainy_sdk::ReasoningControls {
                     reasoning_effort: Some(true),
-                    effort: Some(vec!["low".to_string(), "medium".to_string(), "high".to_string()]),
+                    effort: Some(vec![
+                        "low".to_string(),
+                        "medium".to_string(),
+                        "high".to_string(),
+                    ]),
                     ..Default::default()
                 }),
                 profiles: vec![rainy_sdk::ReasoningProfile {
                     provider: rainy_sdk::ReasoningProvider::Other,
                     parameter_path: "reasoning.effort".to_string(),
-                    values: Some(vec!["low".to_string(), "medium".to_string(), "high".to_string()]),
+                    values: Some(vec![
+                        "low".to_string(),
+                        "medium".to_string(),
+                        "high".to_string(),
+                    ]),
                     notes: None,
                 }],
                 ..Default::default()
@@ -218,18 +226,21 @@ fn test_build_reasoning_config_by_profile() {
 fn test_build_reasoning_config_returns_none_without_confirmed_profile() {
     let model = ModelCatalogItem {
         id: "google/gemini-3.1-pro-preview".to_string(),
-        rainy_capabilities_v2: Some(serde_json::from_value(serde_json::json!({
-            "multimodal": { "input": ["text"], "output": ["text"] },
-            "reasoning": {
-                "supported": true,
-                "controls": {
-                    "reasoning_toggle": true,
-                    "observed_parameters": ["reasoning", "include_reasoning"]
+        rainy_capabilities_v2: Some(
+            serde_json::from_value(serde_json::json!({
+                "multimodal": { "input": ["text"], "output": ["text"] },
+                "reasoning": {
+                    "supported": true,
+                    "controls": {
+                        "reasoning_toggle": true,
+                        "observed_parameters": ["reasoning", "include_reasoning"]
+                    },
+                    "profiles": []
                 },
-                "profiles": []
-            },
-            "parameters": { "accepted": ["reasoning", "include_reasoning"] }
-        })).expect("caps deserialize")),
+                "parameters": { "accepted": ["reasoning", "include_reasoning"] }
+            }))
+            .expect("caps deserialize"),
+        ),
         ..Default::default()
     };
 
