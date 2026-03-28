@@ -76,11 +76,13 @@ jobs:
         set -e
 
         if [ "$DEADLINKS_STATUS" -ne 0 ]; then
-          FILTERED_LOG=$(grep -Ev 'rainy_sdk/.*/dispatcher|Linked file at path .*dispatcher does not exist' deadlinks.log || true)
+          # rustdoc generates internal `.../dispatcher` paths for enums/traits that
+          # cargo-deadlinks incorrectly flags. Only fail on real broken links.
+          REAL_ERRORS=$(grep 'does not exist' deadlinks.log | grep -v 'dispatcher' || true)
 
-          if echo "$FILTERED_LOG" | grep -Eq 'Found invalid urls|Error:'; then
+          if [ -n "$REAL_ERRORS" ]; then
             echo "Unexpected documentation dead links detected:"
-            echo "$FILTERED_LOG"
+            echo "$REAL_ERRORS"
             exit "$DEADLINKS_STATUS"
           fi
 

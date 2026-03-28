@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.13] - 2026-03-28
+
+### 🔧 Fix CI Documentation Dead-Link Check
+
+- Fixed `docs.yml` "Generate coverage report for docs" step failing on valid rustdoc output.
+  `cargo-deadlinks` reports false positives for internal `.../dispatcher` paths that rustdoc
+  generates for enums and traits. The previous line-by-line `grep -Ev` filter stripped the
+  detail lines but left the `Found invalid urls in ...` header lines intact, causing the
+  subsequent `grep -Eq 'Found invalid urls'` check to always trigger and fail the job.
+- New approach: grep `does not exist` lines directly and exclude only `dispatcher` hits.
+  The job now only fails when there are genuine broken links unrelated to dispatcher paths.
+
+---
+
 ## [0.6.12] - 2026-03-26
 
 ### 🚀 Model Capability Registry v2 + Selector Helpers
