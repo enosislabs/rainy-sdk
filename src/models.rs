@@ -57,9 +57,15 @@ pub enum OpenAIMessageContent {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAIContentPart {
     /// Text content part.
-    Text { text: String },
+    Text {
+        /// The text content.
+        text: String,
+    },
     /// Image URL content part.
-    ImageUrl { image_url: OpenAIImageUrl },
+    ImageUrl {
+        /// Image URL payload.
+        image_url: OpenAIImageUrl,
+    },
 }
 
 /// OpenAI-compatible image URL payload.
@@ -297,6 +303,12 @@ pub struct OpenAIChatCompletionRequest {
     /// Gemini thinking configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_config: Option<ThinkingConfig>,
+
+    /// Anthropic extended-thinking configuration (`thinking.budget_tokens`).
+    /// Serialised as the `thinking` top-level field so it is passed through to
+    /// OpenRouter/Anthropic as `{"type":"enabled","budget_tokens":N}`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<serde_json::Value>,
 }
 
 /// Represents the response from a chat completion request.
@@ -684,18 +696,25 @@ impl ResponsesRequest {
 /// Responses API usage object (partial, forward-compatible).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResponsesUsage {
+    /// Number of input tokens consumed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_tokens: Option<u32>,
+    /// Number of output tokens generated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_tokens: Option<u32>,
+    /// Number of tokens used for cache creation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_creation_input_tokens: Option<u32>,
+    /// Number of tokens read from cache.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_read_input_tokens: Option<u32>,
+    /// Detailed breakdown of output tokens.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_tokens_details: Option<serde_json::Value>,
+    /// Detailed breakdown of completion tokens.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completion_tokens_details: Option<serde_json::Value>,
+    /// Additional provider-specific usage fields.
     #[serde(flatten, default)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -703,18 +722,25 @@ pub struct ResponsesUsage {
 /// Responses API raw response payload.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResponsesApiResponse {
+    /// Unique identifier for the response.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    /// Object type identifier.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub object: Option<String>,
+    /// Model used for the response.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// Plain text output content.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_text: Option<String>,
+    /// Structured output items.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<Vec<serde_json::Value>>,
+    /// Token usage information.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<ResponsesUsage>,
+    /// Additional provider-specific response fields.
     #[serde(flatten, default)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -722,8 +748,11 @@ pub struct ResponsesApiResponse {
 /// Non-blocking compatibility warning emitted by Rainy in envelope mode.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompatWarning {
+    /// Warning code identifier.
     pub code: String,
+    /// Human-readable warning message.
     pub message: String,
+    /// JSON path to the field that triggered the warning.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
 }
@@ -731,10 +760,14 @@ pub struct CompatWarning {
 /// Features used by request (reported in envelope mode).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeaturesUsed {
+    /// Whether reasoning/thinking was used.
     pub reasoning: bool,
+    /// Whether image input was provided.
     #[serde(rename = "imageInput")]
     pub image_input: bool,
+    /// Whether tool calling was used.
     pub tools: bool,
+    /// Whether structured output was requested.
     #[serde(rename = "structuredOutput")]
     pub structured_output: bool,
 }
@@ -742,8 +775,11 @@ pub struct FeaturesUsed {
 /// Reasoning summary metadata reported by Rainy in envelope mode.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReasoningMeta {
+    /// Whether reasoning was present in the response.
     pub present: bool,
+    /// Whether a reasoning summary was provided.
     pub summary_present: bool,
+    /// Number of tokens used for reasoning.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens: Option<u32>,
 }
@@ -751,44 +787,52 @@ pub struct ReasoningMeta {
 /// Rainy envelope metadata (partial, forward-compatible).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RainyEnvelopeMeta {
+    /// Billing plan identifier.
     #[serde(
         rename = "billingPlan",
         alias = "billing_plan",
         skip_serializing_if = "Option::is_none"
     )]
     pub billing_plan: Option<String>,
+    /// Credits charged for the request.
     #[serde(
         rename = "creditsCharged",
         alias = "credits_charged",
         skip_serializing_if = "Option::is_none"
     )]
     pub credits_charged: Option<f64>,
+    /// Markup percentage applied to pricing.
     #[serde(
         rename = "markupPercent",
         alias = "markup_percent",
         skip_serializing_if = "Option::is_none"
     )]
     pub markup_percent: Option<f64>,
+    /// Daily credits remaining for the user.
     #[serde(
         rename = "dailyCreditsRemaining",
         alias = "daily_credits_remaining",
         skip_serializing_if = "Option::is_none"
     )]
     pub daily_credits_remaining: Option<String>,
+    /// Compatibility warnings emitted during processing.
     #[serde(
         rename = "compatWarnings",
         alias = "compat_warnings",
         skip_serializing_if = "Option::is_none"
     )]
     pub compat_warnings: Option<Vec<CompatWarning>>,
+    /// Features used by the request.
     #[serde(
         rename = "featuresUsed",
         alias = "features_used",
         skip_serializing_if = "Option::is_none"
     )]
     pub features_used: Option<FeaturesUsed>,
+    /// Reasoning metadata for the response.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<ReasoningMeta>,
+    /// Additional envelope metadata fields.
     #[serde(flatten, default)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -796,8 +840,11 @@ pub struct RainyEnvelopeMeta {
 /// Standard Rainy success envelope.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RainyEnvelope<T> {
+    /// Whether the request was successful.
     pub success: bool,
+    /// The response data payload.
     pub data: T,
+    /// Optional envelope metadata.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meta: Option<RainyEnvelopeMeta>,
 }
@@ -808,12 +855,16 @@ pub type ResponsesStreamEvent = serde_json::Value;
 /// Model architecture metadata returned by `/models/catalog`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ModelArchitecture {
+    /// Supported input modalities (e.g., "text", "image").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_modalities: Option<Vec<String>>,
+    /// Supported output modalities (e.g., "text").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_modalities: Option<Vec<String>>,
+    /// Tokenizer used by the model.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokenizer: Option<String>,
+    /// Instruction type supported by the model.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instruct_type: Option<String>,
 }
@@ -822,19 +873,25 @@ pub struct ModelArchitecture {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CapabilityFlag {
+    /// Boolean capability flag.
     Bool(bool),
+    /// Text-based capability flag (e.g., "unknown").
     Text(String),
 }
 
 /// Rainy capability hints returned by `/models/catalog`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RainyCapabilities {
+    /// Whether the model supports reasoning/thinking.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<CapabilityFlag>,
+    /// Whether the model supports image input.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_input: Option<CapabilityFlag>,
+    /// Whether the model supports tool calling.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<CapabilityFlag>,
+    /// Whether the model supports structured output formats.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_format: Option<CapabilityFlag>,
 }
@@ -843,19 +900,27 @@ pub struct RainyCapabilities {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ReasoningProvider {
+    /// OpenAI provider.
     Openai,
+    /// Google provider.
     Google,
+    /// Anthropic provider.
     Anthropic,
+    /// Other providers.
     Other,
 }
 
 /// Thinking budget range metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ThinkingBudget {
+    /// Minimum budget value.
     pub min: i32,
+    /// Maximum budget value.
     pub max: i32,
+    /// Dynamic budget value if applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dynamic_value: Option<i32>,
+    /// Value that disables thinking budget.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disable_value: Option<i32>,
 }
@@ -863,16 +928,22 @@ pub struct ThinkingBudget {
 /// Reasoning controls available for a model.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ReasoningControls {
+    /// Parameters observed for reasoning control.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub observed_parameters: Option<Vec<String>>,
+    /// Whether reasoning toggle is supported.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_toggle: Option<bool>,
+    /// Whether reasoning effort control is supported.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<bool>,
+    /// Available effort levels.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<Vec<String>>,
+    /// Available thinking levels.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_level: Option<Vec<String>>,
+    /// Thinking budget configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget: Option<ThinkingBudget>,
 }
@@ -880,10 +951,14 @@ pub struct ReasoningControls {
 /// Provider profile for reasoning/thinking.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ReasoningProfile {
+    /// The provider this profile applies to.
     pub provider: ReasoningProvider,
+    /// JSON path to the reasoning parameter.
     pub parameter_path: String,
+    /// Available values for the parameter.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub values: Option<Vec<String>>,
+    /// Additional notes about this profile.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
 }
@@ -891,8 +966,10 @@ pub struct ReasoningProfile {
 /// Reasoning toggle paths for clients.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ReasoningToggle {
+    /// Parameter path to enable reasoning.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enable_param: Option<String>,
+    /// Parameter path to include reasoning in response.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub include_reasoning_param: Option<String>,
 }
@@ -900,11 +977,15 @@ pub struct ReasoningToggle {
 /// Reasoning capability block in `rainy_capabilities_v2`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RainyReasoningCapabilitiesV2 {
+    /// Whether reasoning is supported.
     pub supported: bool,
+    /// Available reasoning controls.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controls: Option<ReasoningControls>,
+    /// Provider-specific reasoning profiles.
     #[serde(default)]
     pub profiles: Vec<ReasoningProfile>,
+    /// Reasoning toggle configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub toggle: Option<ReasoningToggle>,
 }
@@ -912,8 +993,10 @@ pub struct RainyReasoningCapabilitiesV2 {
 /// Multimodal capability block in `rainy_capabilities_v2`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RainyMultimodalCapabilitiesV2 {
+    /// Supported input modalities.
     #[serde(default)]
     pub input: Vec<String>,
+    /// Supported output modalities.
     #[serde(default)]
     pub output: Vec<String>,
 }
@@ -921,6 +1004,7 @@ pub struct RainyMultimodalCapabilitiesV2 {
 /// Parameter capability block in `rainy_capabilities_v2`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RainyParametersCapabilitiesV2 {
+    /// Accepted parameter names.
     #[serde(default)]
     pub accepted: Vec<String>,
 }
@@ -928,16 +1012,21 @@ pub struct RainyParametersCapabilitiesV2 {
 /// Full v2 capability block returned by `/models/catalog`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RainyCapabilitiesV2 {
+    /// Multimodal capabilities.
     pub multimodal: RainyMultimodalCapabilitiesV2,
+    /// Reasoning capabilities.
     pub reasoning: RainyReasoningCapabilitiesV2,
+    /// Parameter capabilities.
     pub parameters: RainyParametersCapabilitiesV2,
 }
 
 /// Pricing metadata for model ranking helpers.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ModelPricing {
+    /// Prompt token pricing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
+    /// Completion token pricing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completion: Option<String>,
 }
@@ -945,21 +1034,30 @@ pub struct ModelPricing {
 /// Model entry returned by `/models/catalog`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ModelCatalogItem {
+    /// Unique model identifier.
     pub id: String,
+    /// Human-readable model name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Maximum context length in tokens.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_length: Option<u32>,
+    /// Model pricing information.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pricing: Option<ModelPricing>,
+    /// Supported API parameters.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supported_parameters: Option<Vec<String>>,
+    /// Model architecture metadata.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub architecture: Option<ModelArchitecture>,
+    /// Rainy capability hints (v1).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rainy_capabilities: Option<RainyCapabilities>,
+    /// Rainy capability hints (v2).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rainy_capabilities_v2: Option<RainyCapabilitiesV2>,
+    /// Additional model metadata.
     #[serde(flatten, default)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -968,24 +1066,33 @@ pub struct ModelCatalogItem {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ReasoningMode {
+    /// Effort-based reasoning control.
     Effort,
+    /// Thinking level-based reasoning control.
     ThinkingLevel,
+    /// Thinking budget-based reasoning control.
     ThinkingBudget,
 }
 
 /// Selector criteria for model discovery from `/models/catalog`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ModelSelectionCriteria {
+    /// Required input modalities.
     #[serde(default)]
     pub required_input_modalities: Vec<String>,
+    /// Required output modalities.
     #[serde(default)]
     pub required_output_modalities: Vec<String>,
+    /// Whether tool calling is required.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub require_tools: Option<bool>,
+    /// Whether structured output is required.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub require_structured_output: Option<bool>,
+    /// Required reasoning mode.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_mode: Option<ReasoningMode>,
+    /// Reasoning value to match.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_value: Option<String>,
 }
@@ -993,9 +1100,12 @@ pub struct ModelSelectionCriteria {
 /// Builder preference for reasoning payload generation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ReasoningPreference {
+    /// Reasoning mode to use.
     pub mode: ReasoningMode,
+    /// Reasoning value to apply.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    /// Thinking budget value.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub budget: Option<i32>,
 }
@@ -1736,6 +1846,7 @@ impl OpenAIChatCompletionRequest {
             tools: None,
             tool_choice: None,
             thinking_config: None,
+            thinking: None,
         }
     }
 
@@ -1862,6 +1973,16 @@ impl OpenAIChatCompletionRequest {
         let mut config = self.thinking_config.unwrap_or_default();
         config.thinking_budget = Some(thinking_budget);
         self.thinking_config = Some(config);
+        self
+    }
+
+    /// Sets Anthropic extended-thinking configuration.
+    ///
+    /// Serialised as `thinking: {"type":"enabled","budget_tokens":N}` — the format
+    /// expected by Anthropic's API via OpenRouter/Rainy API.
+    pub fn with_anthropic_thinking(mut self, budget_tokens: i32) -> Self {
+        self.thinking =
+            Some(serde_json::json!({"type": "enabled", "budget_tokens": budget_tokens}));
         self
     }
 
