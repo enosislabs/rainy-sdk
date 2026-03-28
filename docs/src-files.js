@@ -1,2 +1,2 @@
-createSrcSidebar('[["rainy_sdk",["",[["endpoints",[],["chat.rs","health.rs","keys.rs","mod.rs","usage.rs","user.rs"]]],["auth.rs","client.rs","error.rs","lib.rs","models.rs","retry.rs"]]]]');
-//{"start":19,"fragment_lengths":[168]}
+createSrcSidebar('[["rainy_sdk",["",[["endpoints",[],["chat.rs","cowork.rs","health.rs","keys.rs","mod.rs","search.rs","usage.rs","user.rs"]]],["auth.rs","client.rs","cowork.rs","error.rs","lib.rs","models.rs","retry.rs","search.rs","session.rs"]]]]');
+//{"start":19,"fragment_lengths":[229]}

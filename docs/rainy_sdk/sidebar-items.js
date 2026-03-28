@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_BASE_URL","VERSION"],"mod":["auth","client","error","models","retry"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_BASE_URL","VERSION"],"fn":["get_offline_capabilities"],"mod":["auth","client","cowork","error","models","retry","search","session"]};
