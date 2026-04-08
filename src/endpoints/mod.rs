@@ -11,10 +11,13 @@ pub mod cowork;
 /// Endpoint for checking the health of the API.
 pub mod health;
 /// Endpoint for managing API keys.
+#[cfg(feature = "legacy")]
 pub mod keys;
 /// Endpoint for web search via Tavily.
 pub mod search;
 /// Endpoint for retrieving usage statistics.
+#[cfg(feature = "legacy")]
 pub mod usage;
 /// Endpoint for managing user information.
+#[cfg(feature = "legacy")]
 pub mod user;

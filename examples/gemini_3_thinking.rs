@@ -2,8 +2,8 @@ use rainy_sdk::{
     client::RainyClient,
     error::RainyError,
     models::{
-        model_constants::GOOGLE_GEMINI_3_PRO, ChatCompletionRequest, ChatMessage, ContentPart,
-        EnhancedChatMessage, FunctionDefinition, ThinkingConfig, ThinkingLevel, Tool, ToolType,
+        ChatCompletionRequest, ChatMessage, ContentPart, EnhancedChatMessage, FunctionDefinition,
+        ThinkingConfig, ThinkingLevel, Tool, ToolType,
     },
 };
 use serde_json::json;
@@ -18,7 +18,7 @@ async fn main() -> Result<(), RainyError> {
     // Example 1: Basic thinking with high reasoning
     println!("1. Complex reasoning task with high thinking level:");
     let request = ChatCompletionRequest::new(
-        GOOGLE_GEMINI_3_PRO,
+        "gemini-3-pro-preview",
         vec![ChatMessage::user(
             "Analyze the potential economic impacts of implementing a universal basic income \
              in a developed country. Consider both short-term and long-term effects, \
@@ -43,7 +43,7 @@ async fn main() -> Result<(), RainyError> {
     // Example 2: Fast response with low thinking
     println!("2. Quick task with low thinking level:");
     let request = ChatCompletionRequest::new(
-        GOOGLE_GEMINI_3_PRO,
+        "gemini-3-pro-preview",
         vec![ChatMessage::user(
             "List 5 programming languages and their primary use cases.",
         )],
@@ -100,7 +100,7 @@ async fn main() -> Result<(), RainyError> {
     ];
 
     let request = ChatCompletionRequest::new(
-        GOOGLE_GEMINI_3_PRO,
+        "gemini-3-pro-preview",
         vec![ChatMessage::user(
             "Check the weather in Paris and if it's nice, book a table for 2 at Le Bernardin for 7 PM tonight."
         )]
@@ -143,8 +143,10 @@ async fn main() -> Result<(), RainyError> {
     // Example 5: Model validation
     println!("\n5. Model capability validation:");
 
-    let gemini_3_request =
-        ChatCompletionRequest::new(GOOGLE_GEMINI_3_PRO, vec![ChatMessage::user("Test message")]);
+    let gemini_3_request = ChatCompletionRequest::new(
+        "gemini-3-pro-preview",
+        vec![ChatMessage::user("Test message")],
+    );
 
     println!(
         "Gemini 3 Pro supports thinking: {}",

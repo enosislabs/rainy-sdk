@@ -1,6 +1,6 @@
 use crate::client::RainyClient;
 use crate::error::Result;
-use crate::models::{HealthCheck, ServiceStatus};
+use crate::models::{HealthStatus, ServiceStatus};
 use serde::Deserialize;
 
 impl RainyClient {
@@ -10,7 +10,7 @@ impl RainyClient {
     ///
     /// # Returns
     ///
-    /// A `Result` containing a `HealthCheck` struct with basic health information.
+    /// A `Result` containing a `HealthStatus` struct with basic health information.
     ///
     /// # Example
     ///
@@ -23,7 +23,7 @@ impl RainyClient {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn health_check(&self) -> Result<HealthCheck> {
+    pub async fn health_check(&self) -> Result<HealthStatus> {
         #[derive(Deserialize)]
         struct RootHealthResponse {
             status: String,
@@ -37,7 +37,7 @@ impl RainyClient {
             .await?;
         let payload: RootHealthResponse = self.handle_response(response).await?;
 
-        Ok(HealthCheck {
+        Ok(HealthStatus {
             status: payload.status,
             timestamp: payload.timestamp,
             uptime: 0.0,
@@ -56,7 +56,7 @@ impl RainyClient {
     ///
     /// # Returns
     ///
-    /// A `Result` containing a `HealthCheck` struct with detailed service status.
+    /// A `Result` containing a `HealthStatus` struct with detailed service status.
     ///
     /// # Example
     ///
@@ -70,7 +70,7 @@ impl RainyClient {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn detailed_health_check(&self) -> Result<HealthCheck> {
+    pub async fn detailed_health_check(&self) -> Result<HealthStatus> {
         #[derive(Deserialize)]
         struct DependencyFlags {
             database: bool,
@@ -94,7 +94,7 @@ impl RainyClient {
             .await?;
         let payload: DependenciesHealthResponse = self.handle_response(response).await?;
 
-        Ok(HealthCheck {
+        Ok(HealthStatus {
             status: payload.status,
             timestamp: payload.timestamp,
             uptime: 0.0,

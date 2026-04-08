@@ -6,8 +6,7 @@
 //! - Error recovery strategies
 
 use rainy_sdk::{
-    models, retry_with_backoff, ChatCompletionRequest, ChatMessage, RainyClient, RainyError,
-    RetryConfig,
+    retry_with_backoff, ChatCompletionRequest, ChatMessage, RainyClient, RainyError, RetryConfig,
 };
 use std::time::Duration;
 
@@ -58,9 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let result = retry_with_backoff(&retry_config, || async {
         // Simulate a potentially failing operation
-        client
-            .simple_chat(models::model_constants::OPENAI_GPT_4O, "Tell me a joke")
-            .await
+        client.simple_chat("gpt-4o", "Tell me a joke").await
     })
     .await;
 
@@ -76,10 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n⏱️  Example 3: Rate limit handling");
     for i in 1..=5 {
         match client
-            .simple_chat(
-                models::model_constants::OPENAI_GPT_4O,
-                &format!("Quick question #{}", i),
-            )
+            .simple_chat("gpt-4o", &format!("Quick question #{}", i))
             .await
         {
             Ok(response) => println!(
@@ -104,10 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 4: Structured error details
     println!("\n📋 Example 4: Structured error details");
-    let request = ChatCompletionRequest::new(
-        models::model_constants::OPENAI_GPT_4O,
-        vec![ChatMessage::user("Test message")],
-    );
+    let request = ChatCompletionRequest::new("gpt-4o", vec![ChatMessage::user("Test message")]);
     match client.chat_completion(request).await {
         Ok((_response, metadata)) => {
             println!("✅ Success with metadata:");

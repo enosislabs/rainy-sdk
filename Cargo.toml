@@ -42,7 +42,7 @@ tokio = { version = "1.47", features = ["full"] }
 anyhow = "1.0.102"
 thiserror = "2.0.18"
 url = "2.5.8"
-uuid = { version = "1.22.0", features = ["v4", "serde"] }
+uuid = { version = "1.22.0", features = ["v4", "serde"], optional = true }
 chrono = { version = "0.4.41", features = ["serde"] }
 base64 = "0.22.1"
 secrecy = { version = "0.10.3", features = ["serde"] }
@@ -64,6 +64,7 @@ rate-limiting = ["governor"]
 tracing = ["dep:tracing"]
 cache = []
 cowork = []  # Legacy Cowork compatibility only (opt-in)
+legacy = ["dep:uuid"]  # Legacy v2 endpoints/types (opt-in)
 
 # Development dependencies
 [dev-dependencies]

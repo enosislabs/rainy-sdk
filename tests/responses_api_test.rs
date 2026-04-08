@@ -1,12 +1,12 @@
 use rainy_sdk::{
-    build_reasoning_config, model_constants::OPENAI_GPT_5, select_models, CapabilityFlag,
-    ModelCatalogItem, ModelPricing, ModelSelectionCriteria, RainyCapabilities, RainyCapabilitiesV2,
-    RainyClient, ReasoningMode, ReasoningPreference, ResponsesRequest,
+    build_reasoning_config, select_models, CapabilityFlag, ModelCatalogItem, ModelPricing,
+    ModelSelectionCriteria, RainyCapabilities, RainyCapabilitiesV2, RainyClient, ReasoningMode,
+    ReasoningPreference, ResponsesRequest,
 };
 
 #[test]
 fn test_responses_request_serialization_supports_reasoning_and_responses_tools() {
-    let request = ResponsesRequest::text(OPENAI_GPT_5, "hello")
+    let request = ResponsesRequest::text("gpt-5", "hello")
         .with_reasoning_effort("medium")
         .with_max_output_tokens(512)
         .add_function_tool(
@@ -57,7 +57,7 @@ fn test_responses_api_surface_exists() {
     let client = RainyClient::with_api_key(format!("ra-{}", "c".repeat(48)))
         .expect("failed to build client");
 
-    let request = ResponsesRequest::text(OPENAI_GPT_5, "ping");
+    let request = ResponsesRequest::text("gpt-5", "ping");
     let _create_response_future = client.create_response(request.clone());
     let _create_response_envelope_future = client.create_response_envelope(request.clone());
     let _create_response_stream_future = client.create_response_stream(request);

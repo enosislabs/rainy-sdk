@@ -1,14 +1,13 @@
 use rainy_sdk::{
-    model_constants::GOOGLE_GEMINI_3_PRO, ChatCompletionStreamResponse,
-    OpenAIChatCompletionRequest, OpenAIChatCompletionResponse, OpenAIChatMessage,
-    OpenAIContentPart, OpenAIFunctionCall, OpenAIMessageRole, OpenAIToolCall, RainyClient,
-    ThinkingConfig, ThinkingLevel, Tool, ToolChoice, ToolFunction, ToolType,
+    ChatCompletionStreamResponse, OpenAIChatCompletionRequest, OpenAIChatCompletionResponse,
+    OpenAIChatMessage, OpenAIContentPart, OpenAIFunctionCall, OpenAIMessageRole, OpenAIToolCall,
+    RainyClient, ThinkingConfig, ThinkingLevel, Tool, ToolChoice, ToolFunction, ToolType,
 };
 
 #[test]
 fn test_openai_chat_request_serialization_supports_tool_history() {
     let request = OpenAIChatCompletionRequest::new(
-        GOOGLE_GEMINI_3_PRO,
+        "gemini-3-pro-preview",
         vec![
             OpenAIChatMessage::system("Use tools when needed."),
             OpenAIChatMessage::user("List files in the workspace."),
@@ -50,7 +49,7 @@ fn test_openai_chat_request_serialization_supports_tool_history() {
 
     let json = serde_json::to_value(&request).expect("serialize request");
 
-    assert_eq!(json["model"], GOOGLE_GEMINI_3_PRO);
+    assert_eq!(json["model"], "gemini-3-pro-preview");
     assert_eq!(json["messages"][2]["role"], "assistant");
     assert!(json["messages"][2]["content"].is_null());
     assert_eq!(json["messages"][2]["tool_calls"][0]["id"], "call_123");
@@ -66,7 +65,7 @@ fn test_openai_chat_request_serialization_supports_tool_history() {
 #[test]
 fn test_openai_chat_request_supports_multimodal_content() {
     let request = OpenAIChatCompletionRequest::new(
-        GOOGLE_GEMINI_3_PRO,
+        "gemini-3-pro-preview",
         vec![OpenAIChatMessage::user(
             rainy_sdk::OpenAIMessageContent::parts(vec![
                 OpenAIContentPart::text("Describe this image."),
@@ -139,7 +138,7 @@ fn test_openai_chat_stream_surface_exists() {
         .expect("failed to build client");
 
     let request = OpenAIChatCompletionRequest::new(
-        GOOGLE_GEMINI_3_PRO,
+        "gemini-3-pro-preview",
         vec![OpenAIChatMessage::user("ping")],
     );
 

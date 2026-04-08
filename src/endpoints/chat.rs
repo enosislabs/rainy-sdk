@@ -1,5 +1,5 @@
 use crate::client::RainyClient;
-use crate::error::{RainyError, Result};
+use crate::error::Result;
 use crate::models::{
     ChatCompletionRequest, ChatCompletionResponse, ChatCompletionStreamResponse,
     OpenAIChatCompletionRequest, OpenAIChatCompletionResponse,
@@ -116,63 +116,7 @@ impl RainyClient {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionStreamResponse>> + Send>>> {
-        use eventsource_stream::Eventsource;
-        use futures::StreamExt;
-
-        let mut request_with_stream = request;
-        request_with_stream.stream = Some(true);
-
-        let url = format!("{}/api/v1/chat/completions", self.auth_config().base_url);
-        let headers = self.auth_config().build_headers()?;
-
-        let response = self
-            .http_client()
-            .post(&url)
-            .headers(headers)
-            .json(&request_with_stream)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            return Err(self
-                .handle_response::<ChatCompletionStreamResponse>(response)
-                .await
-                .err()
-                .unwrap());
-        }
-
-        let stream = response
-            .bytes_stream()
-            .eventsource()
-            .filter_map(|event| async move {
-                match event {
-                    Ok(event) => {
-                        // Handle the [DONE] marker
-                        if event.data.trim() == "[DONE]" {
-                            return None;
-                        }
-
-                        // Parse the JSON data
-                        match serde_json::from_str::<ChatCompletionStreamResponse>(&event.data) {
-                            Ok(response) => Some(Ok(response)),
-                            Err(e) => Some(Err(RainyError::Serialization {
-                                message: e.to_string(),
-                                source_error: Some(e.to_string()),
-                            })),
-                        }
-                    }
-                    Err(e) => {
-                        // Convert eventsource error to RainyError
-                        Some(Err(RainyError::Network {
-                            message: format!("SSE parsing error: {e}"),
-                            retryable: true,
-                            source_error: Some(e.to_string()),
-                        }))
-                    }
-                }
-            });
-
-        Ok(Box::pin(stream))
+        self.chat_completion_stream(request).await
     }
 
     /// Create a streaming OpenAI-compatible chat completion.
@@ -184,57 +128,18 @@ impl RainyClient {
         &self,
         request: OpenAIChatCompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionStreamResponse>> + Send>>> {
-        use eventsource_stream::Eventsource;
-        use futures::StreamExt;
-
         let mut request_with_stream = request;
         request_with_stream.stream = Some(true);
 
-        let url = format!("{}/api/v1/chat/completions", self.auth_config().base_url);
-        let headers = self.auth_config().build_headers()?;
+        let url = self.api_v1_url("/chat/completions");
 
         let response = self
             .http_client()
             .post(&url)
-            .headers(headers)
             .json(&request_with_stream)
             .send()
             .await?;
 
-        if !response.status().is_success() {
-            return Err(self
-                .handle_response::<ChatCompletionStreamResponse>(response)
-                .await
-                .err()
-                .unwrap());
-        }
-
-        let stream = response
-            .bytes_stream()
-            .eventsource()
-            .filter_map(|event| async move {
-                match event {
-                    Ok(event) => {
-                        if event.data.trim() == "[DONE]" {
-                            return None;
-                        }
-
-                        match serde_json::from_str::<ChatCompletionStreamResponse>(&event.data) {
-                            Ok(response) => Some(Ok(response)),
-                            Err(e) => Some(Err(RainyError::Serialization {
-                                message: e.to_string(),
-                                source_error: Some(e.to_string()),
-                            })),
-                        }
-                    }
-                    Err(e) => Some(Err(RainyError::Network {
-                        message: format!("SSE parsing error: {e}"),
-                        retryable: true,
-                        source_error: Some(e.to_string()),
-                    })),
-                }
-            });
-
-        Ok(Box::pin(stream))
+        self.handle_stream_response(response).await
     }
 }

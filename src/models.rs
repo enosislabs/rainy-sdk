@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -355,55 +354,6 @@ pub struct OpenAIChatCompletionResponse {
     /// Token usage information for this completion.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
-}
-
-/// Represents a chunk of a streaming chat completion response.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatCompletionChunk {
-    /// A unique identifier for the chat completion.
-    pub id: String,
-
-    /// The type of object, which is always "chat.completion.chunk".
-    pub object: String,
-
-    /// The Unix timestamp (in seconds) of when the completion was created.
-    pub created: u64,
-
-    /// The model that was used for the completion.
-    pub model: String,
-
-    /// A list of chat completion choices.
-    pub choices: Vec<ChatCompletionChunkChoice>,
-}
-
-/// Represents a single choice in a streaming chat completion response.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatCompletionChunkChoice {
-    /// The index of the choice in the list of choices.
-    pub index: u32,
-
-    /// A delta payload with the content that has changed since the last chunk.
-    pub delta: ChatCompletionChunkDelta,
-
-    /// The reason the model stopped generating tokens.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub finish_reason: Option<String>,
-}
-
-/// Represents the delta payload of a streaming chat completion chunk.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatCompletionChunkDelta {
-    /// The role of the message author.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub role: Option<MessageRole>,
-
-    /// The content of the message.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
-
-    /// The thinking content (for Gemini 3 models).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub thought: Option<String>,
 }
 
 /// Represents a single choice in a chat completion response.
@@ -1367,84 +1317,8 @@ pub fn build_reasoning_config(
     }
 }
 
-/// A collection of predefined model constants for convenience.
-/// All models listed here are confirmed to be 100% OpenAI-compatible without parameter adaptations.
-pub mod model_constants {
-    // OpenAI models (fully compatible)
-    /// Constant for the GPT-4o model.
-    pub const OPENAI_GPT_4O: &str = "gpt-4o";
-    /// Constant for the GPT-5 model.
-    pub const OPENAI_GPT_5: &str = "gpt-5";
-    /// Constant for the GPT-5 Pro model.
-    pub const OPENAI_GPT_5_PRO: &str = "gpt-5-pro";
-    /// Constant for the O3 model.
-    pub const OPENAI_O3: &str = "o3";
-    /// Constant for the O4 Mini model.
-    pub const OPENAI_O4_MINI: &str = "o4-mini";
-
-    // Google Gemini models (fully compatible via official compatibility layer)
-    /// Constant for the Gemini 2.5 Pro model.
-    pub const GOOGLE_GEMINI_2_5_PRO: &str = "gemini-2.5-pro";
-    /// Constant for the Gemini 2.5 Flash model.
-    pub const GOOGLE_GEMINI_2_5_FLASH: &str = "gemini-2.5-flash";
-    /// Constant for the Gemini 2.5 Flash Lite model.
-    pub const GOOGLE_GEMINI_2_5_FLASH_LITE: &str = "gemini-2.5-flash-lite";
-
-    // Gemini 3 series - Advanced reasoning models with thinking capabilities
-    /// Constant for the Gemini 3 Pro model with advanced reasoning.
-    pub const GOOGLE_GEMINI_3_PRO: &str = "gemini-3-pro-preview";
-    /// Constant for the Gemini 3 Flash model with thinking capabilities.
-    pub const GOOGLE_GEMINI_3_FLASH: &str = "gemini-3-flash-preview";
-    /// Constant for the Gemini 3 Pro Image model with multimodal reasoning.
-    pub const GOOGLE_GEMINI_3_PRO_IMAGE: &str = "gemini-3-pro-image-preview";
-
-    // Groq models (fully compatible)
-    /// Constant for the Llama 3.1 8B Instant model.
-    pub const GROQ_LLAMA_3_1_8B_INSTANT: &str = "llama-3.1-8b-instant";
-    /// Constant for the Llama 3.3 70B Versatile model.
-    pub const GROQ_LLAMA_3_3_70B_VERSATILE: &str = "llama-3.3-70b-versatile";
-    /// Constant for the moonshotai/kimi-k2-instruct-0905 Instant model.
-    pub const KIMI_K2_0925: &str = "moonshotai/kimi-k2-instruct-0905";
-
-    // Cerebras models (fully compatible)
-    /// Constant for the Llama3.1 8B model.
-    pub const CEREBRAS_LLAMA3_1_8B: &str = "cerebras/llama3.1-8b";
-
-    // Enosis Labs models (fully compatible)
-    /// Constant for the Astronomer 1 model.
-    pub const ASTRONOMER_1: &str = "astronomer-1";
-    /// Constant for the Astronomer 1 Max model.
-    pub const ASTRONOMER_1_MAX: &str = "astronomer-1-max";
-    /// Constant for the Astronomer 1.5 model.
-    pub const ASTRONOMER_1_5: &str = "astronomer-1.5";
-    /// Constant for the Astronomer 2 model.
-    pub const ASTRONOMER_2: &str = "astronomer-2";
-    /// Constant for the Astronomer 2 Pro model.
-    pub const ASTRONOMER_2_PRO: &str = "astronomer-2-pro";
-
-    // Legacy aliases for backward compatibility (deprecated - use provider-prefixed versions above)
-    /// Legacy constant for the GPT-4o model (use OPENAI_GPT_4O instead).
-    #[deprecated(note = "Use OPENAI_GPT_4O instead for OpenAI compatibility")]
-    pub const GPT_4O: &str = "openai/gpt-4o";
-    /// Legacy constant for the GPT-5 model (use OPENAI_GPT_5 instead).
-    #[deprecated(note = "Use OPENAI_GPT_5 instead for OpenAI compatibility")]
-    pub const GPT_5: &str = "openai/gpt-5";
-    /// Legacy constant for the Gemini 2.5 Pro model (use GOOGLE_GEMINI_2_5_PRO instead).
-    #[deprecated(note = "Use GOOGLE_GEMINI_2_5_PRO instead for OpenAI compatibility")]
-    pub const GEMINI_2_5_PRO: &str = "google/gemini-2.5-pro";
-    /// Legacy constant for the Gemini 2.5 Flash model (use GOOGLE_GEMINI_2_5_FLASH instead).
-    #[deprecated(note = "Use GOOGLE_GEMINI_2_5_FLASH instead for OpenAI compatibility")]
-    pub const GEMINI_2_5_FLASH: &str = "google/gemini-2.5-flash";
-    /// Legacy constant for the Gemini 2.5 Flash Lite model (use GOOGLE_GEMINI_2_5_FLASH_LITE instead).
-    #[deprecated(note = "Use GOOGLE_GEMINI_2_5_FLASH_LITE instead for OpenAI compatibility")]
-    pub const GEMINI_2_5_FLASH_LITE: &str = "google/gemini-2.5-flash-lite";
-    /// Legacy constant for the Llama 3.1 8B Instant model (use GROQ_LLAMA_3_1_8B_INSTANT instead).
-    #[deprecated(note = "Use GROQ_LLAMA_3_1_8B_INSTANT instead for OpenAI compatibility")]
-    pub const LLAMA_3_1_8B_INSTANT: &str = "groq/llama-3.1-8b-instant";
-    /// Legacy constant for the Llama3.1 8B model (use CEREBRAS_LLAMA3_1_8B instead).
-    #[deprecated(note = "Use CEREBRAS_LLAMA3_1_8B instead for OpenAI compatibility")]
-    pub const LLAMA3_1_8B: &str = "cerebras/llama3.1-8b";
-}
+#[cfg(feature = "legacy")]
+pub mod model_constants;
 
 /// A collection of predefined provider name constants for convenience.
 pub mod providers {
@@ -2187,146 +2061,13 @@ impl From<&str> for OpenAIMessageContent {
     }
 }
 
-// Legacy compatibility types - keep existing types for backward compatibility
-use uuid::Uuid;
-
-/// Represents a user account (legacy).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct User {
-    /// The unique ID of the user.
-    pub id: Uuid,
-    /// The user's identifier string.
-    pub user_id: String,
-    /// The name of the user's subscription plan.
-    pub plan_name: String,
-    /// The user's current credit balance.
-    pub current_credits: f64,
-    /// The amount of credits the user has used in the current month.
-    pub credits_used_this_month: f64,
-    /// The date when the user's credits will reset.
-    pub credits_reset_date: DateTime<Utc>,
-    /// Indicates if the user account is active.
-    pub is_active: bool,
-    /// The timestamp of when the user account was created.
-    pub created_at: DateTime<Utc>,
-}
-
-/// Represents an API key (legacy).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ApiKey {
-    /// The unique ID of the API key.
-    pub id: Uuid,
-    /// The API key string.
-    pub key: String,
-    /// The ID of the user who owns the key.
-    pub owner_id: Uuid,
-    /// Indicates if the API key is active.
-    pub is_active: bool,
-    /// The timestamp of when the key was created.
-    pub created_at: DateTime<Utc>,
-    /// The expiration date of the key, if any.
-    pub expires_at: Option<DateTime<Utc>>,
-    /// A description of the key.
-    pub description: Option<String>,
-    /// The timestamp of when the key was last used.
-    pub last_used_at: Option<DateTime<Utc>>,
-}
-
-/// Represents usage statistics over a period (legacy).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UsageStats {
-    /// The number of days in the usage period.
-    pub period_days: u32,
-    /// A list of daily usage data.
-    pub daily_usage: Vec<DailyUsage>,
-    /// A list of recent credit transactions.
-    pub recent_transactions: Vec<CreditTransaction>,
-    /// The total number of requests made in the period.
-    pub total_requests: u64,
-    /// The total number of tokens used in the period.
-    pub total_tokens: u64,
-}
-
-/// Represents usage data for a single day (legacy).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DailyUsage {
-    /// The date for the usage data.
-    pub date: String,
-    /// The number of credits used on this day.
-    pub credits_used: f64,
-    /// The number of requests made on this day.
-    pub requests: u64,
-    /// The number of tokens used on this day.
-    pub tokens: u64,
-}
-
-/// Represents a single credit transaction (legacy).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreditTransaction {
-    /// The unique ID of the transaction.
-    pub id: Uuid,
-    /// The type of the transaction.
-    pub transaction_type: TransactionType,
-    /// The amount of credits involved in the transaction.
-    pub credits_amount: f64,
-    /// The credit balance after the transaction.
-    pub credits_balance_after: f64,
-    /// The provider associated with the transaction, if any.
-    pub provider: Option<String>,
-    /// The model associated with the transaction, if any.
-    pub model: Option<String>,
-    /// A description of the transaction.
-    pub description: String,
-    /// The timestamp of when the transaction occurred.
-    pub created_at: DateTime<Utc>,
-}
-
-/// The type of credit transaction (legacy).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TransactionType {
-    /// A transaction for API usage.
-    Usage,
-    /// A transaction for a credit reset.
-    Reset,
-    /// A transaction for a credit purchase.
-    Purchase,
-    /// A transaction for a credit refund.
-    Refund,
-}
-
-// Legacy aliases for backward compatibility
-/// A legacy type alias for `MessageRole`.
-pub type ChatRole = MessageRole;
-/// A legacy type alias for `Usage`.
-pub type ChatUsage = Usage;
-/// A legacy type alias for `HealthStatus`.
-pub type HealthCheck = HealthStatus;
-
-/// Represents the status of backend services (legacy).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HealthServices {
-    /// The status of the database connection.
-    pub database: bool,
-    /// The status of the Redis connection.
-    pub redis: bool,
-    /// The overall status of AI providers.
-    pub providers: bool,
-}
-
-/// The health status of the API (legacy).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum HealthStatusEnum {
-    /// The API is healthy.
-    Healthy,
-    /// The API is in a degraded state.
-    Degraded,
-    /// The API is unhealthy.
-    Unhealthy,
-    /// The API needs initialization.
-    NeedsInit,
-}
+#[cfg(feature = "legacy")]
+mod legacy_types;
+#[cfg(feature = "legacy")]
+pub use legacy_types::{
+    ApiKey, ChatRole, ChatUsage, CreditTransaction, DailyUsage, HealthCheck, HealthServices,
+    HealthStatusEnum, TransactionType, UsageStats, User,
+};
 
 /// Represents the format that the model must output.
 #[derive(Debug, Clone, Serialize, Deserialize)]

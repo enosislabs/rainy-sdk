@@ -283,11 +283,12 @@ impl RainyClient {
     ///
     /// # Returns
     ///
-    /// A `Result` containing a stream of `ChatCompletionChunk`s on success, or a `RainyError` on failure.
+    /// A `Result` containing a stream of OpenAI-style `chat.completion.chunk` events on success,
+    /// or a `RainyError` on failure.
     pub async fn chat_completion_stream(
         &self,
         mut request: ChatCompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionChunk>> + Send>>> {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionStreamResponse>> + Send>>> {
         // Ensure stream is set to true
         request.stream = Some(true);
 
@@ -410,45 +411,7 @@ impl RainyClient {
                     source_error: Some(e.to_string()),
                 })?;
 
-            let status = response.status();
-            if !status.is_success() {
-                return Err(self
-                    .handle_response::<ResponsesApiResponse>(response)
-                    .await
-                    .err()
-                    .unwrap());
-            }
-
-            let stream = response
-                .bytes_stream()
-                .eventsource()
-                .filter_map(|event| async move {
-                    match event {
-                        Ok(event) => {
-                            if event.data.trim() == "[DONE]" {
-                                return None;
-                            }
-
-                            match serde_json::from_str::<ResponsesStreamEvent>(&event.data) {
-                                Ok(payload) => Some(Ok(payload)),
-                                Err(e) => Some(Err(RainyError::Serialization {
-                                    message: e.to_string(),
-                                    source_error: Some(e.to_string()),
-                                })),
-                            }
-                        }
-                        Err(e) => Some(Err(RainyError::Network {
-                            message: format!("SSE parsing error: {e}"),
-                            retryable: true,
-                            source_error: Some(e.to_string()),
-                        })),
-                    }
-                });
-
-            Ok(Box::pin(stream)
-                as Pin<
-                    Box<dyn Stream<Item = Result<ResponsesStreamEvent>> + Send>,
-                >)
+            self.handle_stream_response(response).await
         };
 
         if self.auth_config.enable_retry {
@@ -547,40 +510,25 @@ impl RainyClient {
             .map(String::from);
 
         if status.is_success() {
-            let text = response.text().await?;
-            serde_json::from_str(&text).map_err(|e| RainyError::Serialization {
+            let body = response.bytes().await?;
+            serde_json::from_slice(&body).map_err(|e| RainyError::Serialization {
                 message: format!("Failed to parse response: {}", e),
                 source_error: Some(e.to_string()),
             })
         } else {
             let text = response.text().await.unwrap_or_default();
-
-            // Try to parse structured error response
-            if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&text) {
-                let error = error_response.error;
-                self.map_api_error(error, status.as_u16(), request_id)
-            } else {
-                // Fallback to generic error
-                Err(RainyError::Api {
-                    code: status.canonical_reason().unwrap_or("UNKNOWN").to_string(),
-                    message: if text.is_empty() {
-                        format!("HTTP {}", status.as_u16())
-                    } else {
-                        text
-                    },
-                    status_code: status.as_u16(),
-                    retryable: status.is_server_error(),
-                    request_id,
-                })
-            }
+            self.handle_error_text(status, request_id, text)
         }
     }
 
     /// Handles the HTTP response for streaming requests.
-    pub(crate) async fn handle_stream_response(
+    pub(crate) async fn handle_stream_response<T>(
         &self,
         response: Response,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionChunk>> + Send>>> {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<T>> + Send>>>
+    where
+        T: serde::de::DeserializeOwned + Send + 'static,
+    {
         let status = response.status();
         let request_id = response
             .headers()
@@ -588,17 +536,23 @@ impl RainyClient {
             .and_then(|v| v.to_str().ok())
             .map(String::from);
 
-        if status.is_success() {
-            let stream = response
-                .bytes_stream()
-                .eventsource()
-                .map(move |event| match event {
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            return self.handle_error_text(status, request_id, text);
+        }
+
+        let stream = response
+            .bytes_stream()
+            .eventsource()
+            .filter_map(|event| async move {
+                match event {
                     Ok(event) => {
-                        if event.data == "[DONE]" {
+                        let payload = event.data.trim();
+                        if payload.is_empty() || payload.eq_ignore_ascii_case("[DONE]") {
                             return None;
                         }
 
-                        match serde_json::from_str::<ChatCompletionChunk>(&event.data) {
+                        match serde_json::from_str::<T>(payload) {
                             Ok(chunk) => Some(Ok(chunk)),
                             Err(e) => Some(Err(RainyError::Serialization {
                                 message: format!("Failed to parse stream chunk: {}", e),
@@ -611,31 +565,33 @@ impl RainyClient {
                         retryable: true,
                         source_error: Some(e.to_string()),
                     })),
-                })
-                .take_while(|x| futures::future::ready(x.is_some()))
-                .map(|x| x.unwrap());
+                }
+            });
 
-            Ok(Box::pin(stream))
+        Ok(Box::pin(stream))
+    }
+
+    fn handle_error_text<T>(
+        &self,
+        status: reqwest::StatusCode,
+        request_id: Option<String>,
+        text: String,
+    ) -> Result<T> {
+        if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&text) {
+            let error = error_response.error;
+            self.map_api_error(error, status.as_u16(), request_id)
         } else {
-            let text = response.text().await.unwrap_or_default();
-
-            // Try to parse structured error response
-            if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&text) {
-                let error = error_response.error;
-                self.map_api_error(error, status.as_u16(), request_id)
-            } else {
-                Err(RainyError::Api {
-                    code: status.canonical_reason().unwrap_or("UNKNOWN").to_string(),
-                    message: if text.is_empty() {
-                        format!("HTTP {}", status.as_u16())
-                    } else {
-                        text
-                    },
-                    status_code: status.as_u16(),
-                    retryable: status.is_server_error(),
-                    request_id,
-                })
-            }
+            Err(RainyError::Api {
+                code: status.canonical_reason().unwrap_or("UNKNOWN").to_string(),
+                message: if text.is_empty() {
+                    format!("HTTP {}", status.as_u16())
+                } else {
+                    text
+                },
+                status_code: status.as_u16(),
+                retryable: status.is_server_error(),
+                request_id,
+            })
         }
     }
 
@@ -877,9 +833,7 @@ impl RainyClient {
         }
 
         let url = self.api_v1_url(endpoint);
-        let headers = self.auth_config.build_headers()?;
-
-        let mut request = self.client.request(method, &url).headers(headers);
+        let mut request = self.client.request(method, &url);
 
         if let Some(body) = body {
             request = request.json(&body);

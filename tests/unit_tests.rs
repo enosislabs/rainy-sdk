@@ -1,7 +1,6 @@
-use rainy_sdk::models::model_constants::*;
 use rainy_sdk::{
     AuthConfig, ChatCompletionRequest, ChatMessage, MessageRole, RainyError, RainySessionClient,
-    RetryConfig, SessionConfig,
+    RetryConfig, SessionConfig, ThinkingLevel,
 };
 
 #[cfg(test)]
@@ -79,12 +78,12 @@ mod tests {
     #[test]
     fn test_chat_completion_request_builder() {
         let messages = vec![ChatMessage::user("Test message")];
-        let request = ChatCompletionRequest::new(OPENAI_GPT_4O, messages.clone())
+        let request = ChatCompletionRequest::new("gpt-4o", messages.clone())
             .with_temperature(0.7)
             .with_max_tokens(100)
             .with_user("test-user");
 
-        assert_eq!(request.model, OPENAI_GPT_4O);
+        assert_eq!(request.model, "gpt-4o");
         assert_eq!(request.messages, messages);
         assert_eq!(request.temperature, Some(0.7));
         assert_eq!(request.max_tokens, Some(100));
@@ -150,16 +149,79 @@ mod tests {
     }
 
     #[test]
+    fn test_thinking_capability_flags() {
+        let gemini3 = ChatCompletionRequest::new("gemini-3-pro-preview", vec![]);
+        assert!(gemini3.supports_thinking());
+        assert!(gemini3.requires_thought_signatures());
+
+        let gemini25 = ChatCompletionRequest::new("gemini-2.5-pro", vec![]);
+        assert!(gemini25.supports_thinking());
+        assert!(!gemini25.requires_thought_signatures());
+
+        let gpt = ChatCompletionRequest::new("gpt-4o", vec![]);
+        assert!(!gpt.supports_thinking());
+        assert!(!gpt.requires_thought_signatures());
+    }
+
+    #[test]
+    fn test_thinking_validation_rules() {
+        let valid_gemini3 = ChatCompletionRequest::new("gemini-3-flash-preview", vec![])
+            .with_thinking_level(ThinkingLevel::Medium)
+            .validate_openai_compatibility();
+        assert!(valid_gemini3.is_ok());
+
+        let invalid_non_gemini = ChatCompletionRequest::new("gpt-4o", vec![])
+            .with_thinking_level(ThinkingLevel::High)
+            .validate_openai_compatibility();
+        assert!(invalid_non_gemini.is_err());
+        assert!(invalid_non_gemini
+            .err()
+            .unwrap()
+            .contains("thinking_level is only supported for Gemini 3"));
+
+        let invalid_gemini3_pro_level = ChatCompletionRequest::new("gemini-3-pro-preview", vec![])
+            .with_thinking_level(ThinkingLevel::Minimal)
+            .validate_openai_compatibility();
+        assert!(invalid_gemini3_pro_level.is_err());
+        assert!(invalid_gemini3_pro_level
+            .err()
+            .unwrap()
+            .contains("Gemini 3 Pro only supports 'low' and 'high'"));
+
+        let valid_budget = ChatCompletionRequest::new("gemini-2.5-pro", vec![])
+            .with_thinking_budget(1024)
+            .validate_openai_compatibility();
+        assert!(valid_budget.is_ok());
+
+        let invalid_budget_model = ChatCompletionRequest::new("gemini-3-pro-preview", vec![])
+            .with_thinking_budget(1024)
+            .validate_openai_compatibility();
+        assert!(invalid_budget_model.is_err());
+        assert!(invalid_budget_model
+            .err()
+            .unwrap()
+            .contains("thinking_budget is only supported for Gemini 2.5"));
+
+        let conflicting = ChatCompletionRequest::new("gemini-3-pro-preview", vec![])
+            .with_thinking_level(ThinkingLevel::High)
+            .with_thinking_budget(1024)
+            .validate_openai_compatibility();
+        assert!(conflicting.is_err());
+        let conflict_error = conflicting.err().unwrap();
+        assert!(
+            conflict_error.contains("Cannot specify both thinking_level")
+                || conflict_error.contains("thinking_budget is only supported for Gemini 2.5")
+        );
+    }
+
+    #[cfg(feature = "legacy")]
+    #[test]
     fn test_model_constants() {
-        // Test new provider-prefixed constants
+        use rainy_sdk::models::model_constants::*;
+
         assert_eq!(OPENAI_GPT_4O, "gpt-4o");
         assert_eq!(GOOGLE_GEMINI_2_5_PRO, "gemini-2.5-pro");
         assert_eq!(GROQ_LLAMA_3_1_8B_INSTANT, "llama-3.1-8b-instant");
         assert_eq!(CEREBRAS_LLAMA3_1_8B, "cerebras/llama3.1-8b");
-
-        // Test legacy constants (deprecated but still available)
-        assert_eq!(OPENAI_GPT_4O, "gpt-4o");
-        assert_eq!(GOOGLE_GEMINI_2_5_PRO, "gemini-2.5-pro");
-        assert_eq!(GROQ_LLAMA_3_1_8B_INSTANT, "llama-3.1-8b-instant");
     }
 }
