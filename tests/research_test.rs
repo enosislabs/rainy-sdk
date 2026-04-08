@@ -23,4 +23,10 @@ async fn test_research_client_api() {
     // Check if method exists
     // Check if method exists and compiles - don't execute as it needs valid key
     let _ = client.research("test topic", None).await;
+    let _ = client
+        .search("test topic", Some(ResearchDepth::Basic), Some(5))
+        .await;
+    let _ = client
+        .search_extract(vec!["https://example.com".to_string()])
+        .await;
 }

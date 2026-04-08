@@ -1,10 +1,10 @@
 use crate::client::RainyClient;
 use crate::error::Result;
 use crate::models::{
-    ChatCompletionRequest, ChatCompletionResponse, ChatCompletionStreamResponse,
-    OpenAIChatCompletionRequest, OpenAIChatCompletionResponse,
+    ChatCompletionRequest, ChatCompletionResponse, ChatCompletionStreamResponse, ChatStreamEvent,
+    OpenAIChatCompletionRequest, OpenAIChatCompletionResponse, RainyEnvelope,
 };
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use std::pin::Pin;
 
 impl RainyClient {
@@ -64,6 +64,24 @@ impl RainyClient {
         let body = serde_json::to_value(request)?;
         self.make_request(reqwest::Method::POST, "/chat/completions", Some(body))
             .await
+    }
+
+    /// Create a chat completion in envelope mode.
+    pub async fn create_chat_completion_envelope(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> Result<RainyEnvelope<ChatCompletionResponse>> {
+        let (response, _) = self.chat_completion_envelope(request).await?;
+        Ok(response)
+    }
+
+    /// Create an OpenAI-compatible chat completion in envelope mode.
+    pub async fn create_openai_chat_completion_envelope(
+        &self,
+        request: OpenAIChatCompletionRequest,
+    ) -> Result<RainyEnvelope<OpenAIChatCompletionResponse>> {
+        let (response, _) = self.openai_chat_completion_envelope(request).await?;
+        Ok(response)
     }
 
     /// Create a chat completion with streaming
@@ -140,6 +158,41 @@ impl RainyClient {
             .send()
             .await?;
 
-        self.handle_stream_response(response).await
+        let events = self.handle_chat_stream_response(response).await?;
+        let stream = events.filter_map(|event| async move {
+            match event {
+                Ok(ChatStreamEvent::Chunk(chunk)) => Some(Ok(chunk)),
+                Ok(ChatStreamEvent::Billing(_)) | Ok(ChatStreamEvent::Raw(_)) => None,
+                Err(error) => Some(Err(error)),
+            }
+        });
+        Ok(Box::pin(stream))
+    }
+
+    /// Create a streaming chat completion returning typed stream events.
+    pub async fn create_chat_completion_stream_events(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatStreamEvent>> + Send>>> {
+        self.chat_completion_stream_events(request).await
+    }
+
+    /// Create a streaming OpenAI-compatible chat completion returning typed stream events.
+    pub async fn create_openai_chat_completion_stream_events(
+        &self,
+        request: OpenAIChatCompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatStreamEvent>> + Send>>> {
+        let mut request_with_stream = request;
+        request_with_stream.stream = Some(true);
+
+        let url = self.api_v1_url("/chat/completions");
+        let response = self
+            .http_client()
+            .post(&url)
+            .json(&request_with_stream)
+            .send()
+            .await?;
+
+        self.handle_chat_stream_response(response).await
     }
 }

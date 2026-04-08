@@ -1,7 +1,8 @@
 use rainy_sdk::{
-    ChatCompletionStreamResponse, OpenAIChatCompletionRequest, OpenAIChatCompletionResponse,
-    OpenAIChatMessage, OpenAIContentPart, OpenAIFunctionCall, OpenAIMessageRole, OpenAIToolCall,
-    RainyClient, ThinkingConfig, ThinkingLevel, Tool, ToolChoice, ToolFunction, ToolType,
+    ChatCompletionStreamResponse, ChatStreamEvent, OpenAIChatCompletionRequest,
+    OpenAIChatCompletionResponse, OpenAIChatMessage, OpenAIContentPart, OpenAIFunctionCall,
+    OpenAIMessageRole, OpenAIToolCall, RainyClient, ThinkingConfig, ThinkingLevel, Tool,
+    ToolChoice, ToolFunction, ToolType,
 };
 
 #[test]
@@ -84,6 +85,28 @@ fn test_openai_chat_request_supports_multimodal_content() {
 }
 
 #[test]
+fn test_openai_chat_request_serialization_supports_modern_fields() {
+    let mut metadata = std::collections::HashMap::new();
+    metadata.insert("flow".to_string(), "sdk-test".to_string());
+
+    let request = OpenAIChatCompletionRequest::new("gpt-5", vec![OpenAIChatMessage::user("hello")])
+        .with_max_completion_tokens(256)
+        .with_stream_options(serde_json::json!({ "include_usage": true }))
+        .with_reasoning(serde_json::json!({ "effort": "medium" }))
+        .with_include_reasoning(true)
+        .with_service_tier("auto")
+        .with_metadata(metadata);
+
+    let json = serde_json::to_value(&request).expect("serialize modern openai fields");
+    assert_eq!(json["max_completion_tokens"], 256);
+    assert_eq!(json["stream_options"]["include_usage"], true);
+    assert_eq!(json["reasoning"]["effort"], "medium");
+    assert_eq!(json["include_reasoning"], true);
+    assert_eq!(json["service_tier"], "auto");
+    assert_eq!(json["metadata"]["flow"], "sdk-test");
+}
+
+#[test]
 fn test_openai_chat_response_deserializes_tool_calls() {
     let payload = serde_json::json!({
         "id": "chatcmpl_123",
@@ -144,6 +167,11 @@ fn test_openai_chat_stream_surface_exists() {
 
     let _future = client.create_openai_chat_completion(request.clone());
     let _stream_future = client.create_openai_chat_completion_stream(request);
+    let _stream_events_future =
+        client.create_openai_chat_completion_stream_events(OpenAIChatCompletionRequest::new(
+            "gemini-3-pro-preview",
+            vec![OpenAIChatMessage::user("ping")],
+        ));
 
     let chunk_payload = serde_json::json!({
         "id": "chatcmpl_chunk_1",
@@ -179,4 +207,46 @@ fn test_openai_chat_stream_surface_exists() {
             .as_deref(),
         Some("list_files")
     );
+}
+
+#[test]
+fn test_chat_stream_event_parsing_chunk_and_billing() {
+    let chunk_payload = serde_json::json!({
+        "id": "chatcmpl_chunk_1",
+        "object": "chat.completion.chunk",
+        "created": 1741171200u64,
+        "model": "gpt-5",
+        "choices": [{
+            "index": 0,
+            "delta": { "role": "assistant", "content": "hi" },
+            "finish_reason": null
+        }]
+    });
+
+    let billing_payload = serde_json::json!({
+        "plan_id": "payg",
+        "charged_credits": 0.12345,
+        "usage": {
+            "prompt_tokens": 12,
+            "completion_tokens": 7
+        }
+    });
+
+    let chunk_event = ChatStreamEvent::from_value(chunk_payload);
+    let billing_event = ChatStreamEvent::from_value(billing_payload);
+
+    match chunk_event {
+        ChatStreamEvent::Chunk(chunk) => {
+            assert_eq!(chunk.model, "gpt-5");
+        }
+        other => panic!("expected chunk event, got {other:?}"),
+    }
+
+    match billing_event {
+        ChatStreamEvent::Billing(event) => {
+            assert_eq!(event.plan_id.as_deref(), Some("payg"));
+            assert_eq!(event.usage.as_ref().and_then(|u| u.prompt_tokens), Some(12));
+        }
+        other => panic!("expected billing event, got {other:?}"),
+    }
 }

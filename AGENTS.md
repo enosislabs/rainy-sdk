@@ -7,7 +7,7 @@ This repository is a single Rust library crate, `rainy-sdk`. Public exports are 
 - `RainyClient`: API-key client for model, chat, responses, search, and health endpoints.
 - `RainySessionClient`: JWT/session client for dashboard-style endpoints such as auth, orgs, usage, and keys.
 
-Domain types live in `src/models.rs`, authentication setup in `src/auth.rs`, retry behavior in `src/retry.rs`, and search/research types in `src/search.rs`. Endpoint-specific request methods are split under `src/endpoints/` (`chat.rs`, `search.rs`, `health.rs`, `keys.rs`, `usage.rs`, `user.rs`, and feature-gated `cowork.rs`).
+Domain types live in `src/models.rs`, authentication setup in `src/auth.rs`, retry behavior in `src/retry.rs`, and search/research types in `src/search.rs`. Endpoint-specific request methods are split under `src/endpoints/` (`chat.rs`, `search.rs`, `health.rs`, `keys.rs`, `usage.rs`, and `user.rs`).
 
 Routing is centralized through helper methods on `RainyClient`:
 
@@ -19,7 +19,7 @@ Keep new endpoint methods consistent with that split instead of hardcoding URLs 
 ## Build, Test, and Dev Commands
 
 - `cargo build`: compile the crate with default features.
-- `cargo build --all-features`: verify optional surfaces such as `cowork`.
+- `cargo build --all-features`: verify optional surfaces such as `legacy` endpoints.
 - `cargo test`: run unit, integration, and doc tests.
 - `cargo test --test session_client_integration_test -- --nocapture`: run one suite with visible output.
 - `cargo fmt --check`: enforce formatting.

@@ -30,6 +30,55 @@ fn test_responses_request_serialization_supports_reasoning_and_responses_tools()
 }
 
 #[test]
+fn test_responses_request_serialization_supports_gpt5_native_fields() {
+    let mut metadata = std::collections::HashMap::new();
+    metadata.insert("flow".to_string(), "responses".to_string());
+
+    let request = ResponsesRequest::text("gpt-5", "hello")
+        .with_instructions("Be concise")
+        .with_previous_response_id("resp_123")
+        .with_service_tier("auto")
+        .with_include_reasoning(true)
+        .with_provider_options(serde_json::json!({
+            "openai": { "reasoning": { "effort": "medium" } }
+        }))
+        .with_metadata(metadata);
+
+    let json = serde_json::to_value(&request).expect("serialize gpt5-native fields");
+    assert_eq!(json["instructions"], "Be concise");
+    assert_eq!(json["previous_response_id"], "resp_123");
+    assert_eq!(json["service_tier"], "auto");
+    assert_eq!(json["include_reasoning"], true);
+    assert_eq!(
+        json["provider_options"]["openai"]["reasoning"]["effort"],
+        "medium"
+    );
+    assert_eq!(json["metadata"]["flow"], "responses");
+}
+
+#[test]
+fn test_responses_api_response_deserializes_extended_fields() {
+    let payload = serde_json::json!({
+        "id": "resp_123",
+        "object": "response",
+        "model": "gpt-5",
+        "status": "completed",
+        "output_text": "done",
+        "error": null,
+        "incomplete_details": null,
+        "usage": {
+            "input_tokens": 10,
+            "output_tokens": 20
+        }
+    });
+
+    let response: rainy_sdk::ResponsesApiResponse =
+        serde_json::from_value(payload).expect("deserialize extended response");
+    assert_eq!(response.status.as_deref(), Some("completed"));
+    assert_eq!(response.output_text.as_deref(), Some("done"));
+}
+
+#[test]
 fn test_models_catalog_capabilities_deserialization() {
     let payload = serde_json::json!({
         "reasoning": "unknown",

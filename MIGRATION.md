@@ -5,8 +5,6 @@ This guide helps migrate SDK usage from legacy v2-era patterns to the Rainy API 
 Important:
 
 - The Rainy API v3 service currently exposes canonical HTTP routes under `/api/v1/*`.
-- Legacy `cowork` routes were removed due to billing/usage discrepancies and operational overhead.
-- Traces of Cowork remain in the SDK only as deprecated compatibility (opt-in `cowork` feature).
 
 ## Client Split (Recommended)
 
@@ -60,19 +58,6 @@ Notes:
     - `RainySessionClient::usage_credits()`
     - `RainySessionClient::usage_stats(days)`
 
-## Cowork Legacy Compatibility (Opt-In Only)
-
-Cowork-related SDK compatibility is no longer enabled by default.
-
-To compile Cowork compatibility traces:
-
-```toml
-[dependencies]
-rainy-sdk = { version = "0.6.4", features = ["cowork"] }
-```
-
-Use only for short-lived migration support. New integrations should not depend on Cowork endpoints.
-
 ## Code Examples
 
 ### Before (v2-style, mixed concerns)
@@ -104,11 +89,9 @@ let _credits = session.usage_credits().await?;
 - Update to a version containing the v3 base URL and route fixes
 - Stop using deprecated `RainyClient` account/keys/usage helpers
 - Move JWT/dashboard flows to `RainySessionClient`
-- Remove any Cowork feature dependency unless strictly required for migration
 - Run tests with:
   - default features
   - `--no-default-features`
-  - (optional) `--features cowork` if legacy compatibility must remain enabled
 
 ## Security/Operational Guidance
 

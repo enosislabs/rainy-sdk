@@ -5,9 +5,6 @@
 
 /// Endpoint for chat completions.
 pub mod chat;
-/// Endpoint for Cowork capabilities and tier management.
-#[cfg(feature = "cowork")]
-pub mod cowork;
 /// Endpoint for checking the health of the API.
 pub mod health;
 /// Endpoint for managing API keys.

@@ -23,7 +23,6 @@ Migration guide: see [`MIGRATION.md`](./MIGRATION.md) for v2 -> v3 method mappin
 - **📈 Rate Limiting**: Optional governor-based rate limiting
 - **🔧 Advanced Parameters**: Support for response_format, tools, tool_choice, reasoning_effort, logprobs, and streaming
 - **🌐 Web Search Integration**: Built-in Tavily-powered web search with content extraction
-- **👥 Legacy Cowork Compatibility**: Deprecated v2 Cowork helpers kept temporarily for migration only
 - **🎨 Multimodal Support**: Image processing and multimodal capabilities (coming soon)
 - **📚 Rich Documentation**: Complete API documentation with practical examples
 
@@ -61,8 +60,6 @@ Available features:
 
 - `rate-limiting`: Built-in rate limiting with the `governor` crate
 - `tracing`: Request/response logging with the `tracing` crate
-- `cowork`: Legacy Cowork compatibility only (opt-in, disabled by default)
-  - Retained temporarily for v2 migration compatibility traces
 
 ## 🔀 v2 to v3 Migration (Minimal Surface)
 
@@ -77,7 +74,6 @@ Why split clients?
 
 - Reduces accidental misuse of JWT-only endpoints with API keys
 - Keeps the API-key SDK surface smaller and safer by default
-- Makes legacy v2/Cowork traces easier to isolate and remove later
 
 ### Quick Mapping
 
@@ -260,28 +256,6 @@ for result in search_results.results {
 // Extract content from specific URLs
 let extracted = client.extract_content(vec!["https://example.com/article".to_string()]).await?;
 println!("Content: {}", extracted.content);
-```
-
-## 👥 Cowork Integration
-
-Tier-based feature gating with Free/GoPlus/Plus/Pro/ProPlus plans:
-
-```rust
-use rainy_sdk::{CoworkStatus, CoworkClient};
-
-let cowork_client = CoworkClient::new(client);
-let status = cowork_client.get_cowork_status().await?;
-
-println!("Plan: {:?}", status.plan);
-println!("Remaining uses: {}", status.usage.remaining_uses);
-
-// Check feature availability
-if status.can_use_web_research() {
-    // Enable web search features
-}
-if status.can_use_document_export() {
-    // Enable document generation
-}
 ```
 
 ## 🚀 Quick Start
@@ -581,7 +555,6 @@ The SDK is built with a modular architecture:
 src/
 ├── auth.rs            # Authentication and API key management
 ├── client.rs          # Main API client with request handling
-├── cowork.rs          # Tier-based feature gating and capabilities
 ├── endpoints/         # API endpoint implementations (internal)
 ├── error.rs           # Comprehensive error handling
 ├── models.rs          # Data structures and type definitions
@@ -595,7 +568,6 @@ src/
 - **`client.rs`**: Core `RainyClient` with async HTTP handling and response processing
 - **`models.rs`**: Complete type system including `ChatCompletionRequest`, `ThinkingConfig`, `EnhancedChatMessage`
 - **`auth.rs`**: Secure authentication with the `secrecy` crate for API key management
-- **`cowork.rs`**: Integration with Enosis Labs' tier system (Free/GoPlus/Plus/Pro/ProPlus)
 - **`search.rs`**: Tavily-powered web search with content extraction capabilities
 - **`endpoints/`**: Internal API endpoint implementations (chat, health, keys, usage, user)
 

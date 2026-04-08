@@ -137,6 +137,39 @@ pub struct ResearchSource {
     pub snippet: Option<String>,
 }
 
+/// Native `/api/v1/search` result item.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SearchResultItem {
+    /// Result title.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Result URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// Optional rich content.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    /// Optional snippet preview.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+}
+
+/// Native `/api/v1/search` response payload.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SearchResponse {
+    /// Result list returned by provider.
+    #[serde(default)]
+    pub results: Vec<SearchResultItem>,
+}
+
+/// Native `/api/v1/search/extract` response payload.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SearchExtractResponse {
+    /// Provider-specific extraction results.
+    #[serde(default)]
+    pub results: Vec<serde_json::Value>,
+}
+
 /// Response from the research API
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]

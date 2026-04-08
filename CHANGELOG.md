@@ -7,6 +7,119 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.14] - 2026-04-08
+
+### ⚠️ Breaking Change: Cowork Deprecated and Removed
+
+- The `cowork` surface has been fully deprecated and removed from the SDK.
+- Removed the `cowork` feature flag from `Cargo.toml`.
+- Removed legacy `cowork` modules and endpoints:
+  - `src/cowork.rs`
+  - `src/endpoints/cowork.rs`
+  - exports/re-exports in `src/lib.rs` and `src/endpoints/mod.rs`
+  - `RainyClient::get_cowork_profile(...)`
+- Removed `ra-cowork...` API key compatibility:
+  - `AuthConfig::validate()` now accepts only the standard `ra-{48 hex}` format.
+  - removed `AuthConfig::is_cowork_key()`.
+- Updated documentation and tests to reflect full `cowork` removal.
+
+### 🚀 OpenAI/GPT-5 Request Parity and Responses v3 Coverage
+
+- Extended `ChatCompletionRequest` and `OpenAIChatCompletionRequest` with modern compatibility fields used by OpenAI-style runtimes and Rainy v3 passthrough, including:
+  - `max_completion_tokens`
+  - `stream_options`
+  - `parallel_tool_calls`
+  - `seed`
+  - `prompt_cache_key`
+  - `provider_options`
+  - `prompt_cache_retention`
+  - `reasoning`
+  - `include_reasoning`
+  - `metadata`
+  - `service_tier`
+  - `store`
+  - `safety_identifier`
+  - `modalities`
+  - `audio`
+  - `prediction`
+  - `verbosity`
+  - `web_search_options`
+  - `functions`
+  - `function_call`
+- Added new builders for these fields across both chat request shapes, including `with_max_completion_tokens`, `with_stream_options`, `with_reasoning`, `with_include_reasoning`, `with_service_tier`, and `with_metadata`.
+- Strengthened OpenAI compatibility validation to reject invalid `max_completion_tokens` values (`0`).
+- Extended `ResponsesRequest` for newer GPT-5/Responses patterns with additional fields and builders:
+  - request-level controls: `include_reasoning`, `parallel_tool_calls`, `metadata`, `service_tier`, `store`, `safety_identifier`, `provider_options`, `prompt_cache_retention`
+  - workflow controls: `text`, `instructions`, `include`, `previous_response_id`, `conversation`, `prompt`, `background`, `context_management`, `truncation`
+- Extended `ResponsesApiResponse` with optional response lifecycle fields:
+  - `status`
+  - `error`
+  - `incomplete_details`
+
+### ⚡ Streaming Reliability and Native Event Support
+
+- Added typed chat stream events to support Rainy/OpenAI-compatible SSE payload diversity without parse breakage:
+  - `ChatStreamEvent::Chunk(ChatCompletionStreamResponse)`
+  - `ChatStreamEvent::Billing(RainyBillingStreamEvent)`
+  - `ChatStreamEvent::Raw(serde_json::Value)`
+- Added `ChatStreamEvent::from_value(...)` for deterministic event classification.
+- Added new client method:
+  - `chat_completion_stream_events(...)`
+- Updated existing chunk-only stream methods to internally consume the typed stream and ignore non-chunk native events instead of failing parsing:
+  - `chat_completion_stream(...)`
+  - `create_openai_chat_completion_stream(...)`
+- Added new endpoint helpers for native stream event access:
+  - `create_chat_completion_stream_events(...)`
+  - `create_openai_chat_completion_stream_events(...)`
+
+### 📦 Envelope Mode and Metadata Hardening
+
+- Added envelope-returning chat methods on `RainyClient`:
+  - `chat_completion_envelope(...)`
+  - `openai_chat_completion_envelope(...)`
+- Added endpoint-level convenience wrappers:
+  - `create_chat_completion_envelope(...)`
+  - `create_openai_chat_completion_envelope(...)`
+- Updated `RequestMetadata` extraction and shape:
+  - Added `rainy_sanitized_params`
+  - Added `rainy_billing_adjustment`
+  - Added `rainy_billing_outstanding_credits`
+  - Removed public markup exposure (`rainy_markup_percent`) from metadata parsing/output
+
+### 🔎 Search API Expansion (Native Methods)
+
+- Added first-class typed search responses:
+  - `SearchResultItem`
+  - `SearchResponse`
+  - `SearchExtractResponse`
+- Added native methods on `RainyClient`:
+  - `search(query, depth, max_results)`
+  - `search_extract(urls)`
+- Kept `research(...)` compatibility while routing through the native search path internally.
+
+### 🧹 Legacy Static Model Noise Reduction
+
+- Removed static model-per-plan fallback logic from legacy compatibility assembly.
+- Removed static offline single-model fallback to avoid embedding stale catalog assumptions.
+
+### ✅ Tests and Validation
+
+- Added/updated tests in:
+  - `tests/openai_chat_api_test.rs`
+  - `tests/responses_api_test.rs`
+  - `tests/research_test.rs`
+- New coverage includes:
+  - modern OpenAI request field serialization
+  - GPT-5/Responses request field serialization
+  - streaming event parsing (chunk + billing event handling)
+  - native method surface availability (`search`, `search_extract`, stream events)
+  - extended Responses API response deserialization (`status`, `error`, `incomplete_details`)
+- Validation executed:
+  - `cargo test -q` ✅
+  - `cargo test --all-features -q` ✅
+
+---
+
 ## [0.6.13] - 2026-03-28
 
 ### 🔧 Fix CI Documentation Dead-Link Check
@@ -134,7 +247,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔧 Release Validation Fixes
 
-- **Clippy Pre-Release Fix**: Allowed deprecated usage only inside the legacy Cowork endpoint module so `clippy -D warnings` passes under `--all-features`.
+- **Clippy Pre-Release Fix**: Allowed deprecated usage only inside legacy endpoint modules so `clippy -D warnings` passes under `--all-features`.
 - **Dead Code Cleanup**: Removed unused legacy `ResearchRequest` type after the v3 search endpoint migration.
 
 ---
@@ -149,12 +262,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Search Migration**: `RainyClient::research()` now maps to Rainy API v3 `/api/v1/search` and returns a legacy-compatible synthesized result payload.
 - **Session Client Added**: Introduced `RainySessionClient` for JWT/session endpoints (auth, keys, usage, orgs) to keep API-key and session flows separated.
 - **Legacy Method Deprecations**: Marked v2-style `RainyClient` account/keys/usage helpers as deprecated in favor of `RainySessionClient`.
-- **Cowork Hardening**: Legacy Cowork compatibility is now **opt-in** via the `cowork` feature and no longer enabled by default.
 - **Migration Documentation**: Added `MIGRATION.md` with v2 -> v3 method mapping and rollout checklist.
 
 ### 🛡️ Security / Surface Area
 
-- Reduced default SDK surface by disabling legacy Cowork compatibility in default features.
 - Clarified security guidance and trust-boundary split (`RainyClient` vs `RainySessionClient`) in documentation.
 
 ---
@@ -232,27 +343,7 @@ Added a dedicated endpoint for fetching available models, reducing the payload s
 
 #### Added
 
-- **`get_cowork_models()`**: New method to efficiently retrieve available models for the current plan.
-- **`CoworkModelsResponse`**: New struct for the models endpoint response.
-
----
-
-## [0.6.0] - 2026-01-23
-
-### 🛡️ Cowork API Integration
-
-Rainy SDK v0.6.0 implements the full **Rainy Cowork API** specifications, including dynamic plan structures, usage tracking, and profile management.
-
-#### Breaking Changes
-
-- **`CoworkPlan` Structure**: Changed from an `enum` to a `struct` to support dynamic plan details returned by the API (id, name, limits).
-- **`CoworkCapabilities`**: Refactored to include a nested `CoworkProfile` containing plan and usage info.
-- **`CoworkUsage`**: Updated fields to match API response (camelCase mapping).
-
-#### Added
-
-- **`get_cowork_profile()`**: New method to retrieve comprehensive user profile and subscription status.
-- **`CoworkProfile`**: New struct mapping the `/cowork/profile` endpoint response.
+- Added endpoint-level model listing support for plan-aware integrations.
 
 ---
 
@@ -264,72 +355,11 @@ This release fixes missing documentation that caused CI failures with `cargo doc
 
 #### Fixed
 
-##### Missing Documentation in `cowork.rs`
-
-- Added doc comments to `CoworkPlan` enum variants (`Free`, `GoPlus`, `Plus`, `Pro`, `ProPlus`)
-- Added doc comments to `CoworkFeatures` struct fields
-- Added doc comments to `CoworkUsage` struct fields
-- Added doc comments to `CoworkCapabilities` struct fields
-
 ##### Missing Documentation in `models.rs`
 
 - Added doc comment to `ResponseFormat::JsonSchema` variant's `json_schema` field
 - Added doc comments to `ToolChoice::Tool` variant's `r#type` and `function` fields
 
----
-
-## [0.5.2] - 2026-01-22
-
-### 🔑 Cowork API Key Validation
-
-Rainy SDK v0.5.2 introduces **support for Cowork-specific API keys** (`ra-cowork{48 hex}`) used by the Rainy Cowork desktop application.
-
-#### Added
-
-##### New Validation Methods
-
-- **`is_cowork_key()`**: Check if an API key is a Cowork-specific key
-  - Returns `true` for keys starting with `ra-cowork`
-  - Returns `false` for standard keys starting with `ra-`
-
-##### Enhanced Key Format Validation
-
-- **Standard Keys**: `ra-{48 hex characters}` = 51 characters total
-- **Cowork Keys**: `ra-cowork{48 hex characters}` = 57 characters total
-
-#### Changed
-
-##### `AuthConfig::validate()` Improvements
-
-- **Stricter Length Validation**: Now enforces exact key lengths
-- **Cowork Detection**: Automatically detects and validates Cowork key format
-- **Better Error Messages**: Specific error codes for each key type:
-  - `INVALID_API_KEY_FORMAT` for standard key issues
-  - `INVALID_COWORK_API_KEY_FORMAT` for Cowork key issues
-
-#### Example
-
-```rust
-use rainy_sdk::AuthConfig;
-
-// Standard key (51 chars)
-let standard = AuthConfig::new("ra-abc123..."); // 51 chars total
-assert!(!standard.is_cowork_key());
-assert!(standard.validate().is_ok());
-
-// Cowork key (57 chars)
-let cowork = AuthConfig::new("ra-coworkabc123..."); // 57 chars total
-assert!(cowork.is_cowork_key());
-assert!(cowork.validate().is_ok());
-```
-
-#### Technical Details
-
-- **Backward Compatible**: Existing code using valid 51-char keys continues to work
-- **Test Coverage**: 37 tests passing (unit, integration, and doc tests)
-- **No New Dependencies**: Uses existing validation infrastructure
-
----
 
 ## [0.5.0] - 2025-01-19
 
@@ -540,64 +570,6 @@ model_constants::GOOGLE_GEMINI_3_PRO
 - **Google AI**: For Gemini 3 models and thinking capabilities
 - **Google Documentation**: For comprehensive thinking and thought signature guides
 - **Community**: For feedback on advanced reasoning requirements
-
----
-
-## [0.4.0] - 2026-01-18
-
-### 🎯 Major Feature: Cowork Integration
-
-Rainy SDK v0.4.0 introduces **Cowork Integration** - a tier-based feature gating system designed for Rainy Cowork and other client applications. The SDK now acts as the gatekeeper for premium features.
-
-#### Added
-
-##### Cowork Module (`src/cowork.rs`)
-
-- **`CoworkTier`**: Subscription tier enum (Free, Basic, Pro, Enterprise)
-- **`CoworkCapabilities`**: Complete capabilities structure including:
-  - Available AI models per tier
-  - Feature flags
-  - Usage limits
-  - Validity status
-- **`CoworkFeatures`**: Feature flag struct for premium features:
-  - `web_research`: Web browsing and research
-  - `document_export`: PDF/DOCX export
-  - `image_analysis`: AI vision capabilities
-  - `automation`: Advanced workflows
-  - `priority_queue`: Faster processing
-  - `beta_features`: Early access
-- **`CoworkLimits`**: Usage limits per tier:
-  - `max_tasks_per_day`
-  - `max_tokens_per_request`
-  - `max_file_size_bytes`
-
-##### New Client Methods
-
-- **`get_cowork_capabilities()`**: Validate API key and retrieve tier info
-- **`is_premium()`**: Quick check for premium access
-- **`can_use_feature(feature)`**: Check specific feature availability
-- **`can_use_model(model)`**: Check model availability for tier
-- **`get_cowork_models()`**: Get models available for current tier
-
-##### Tier-Based Model Access
-
-| Tier       | Models                                 |
-| ---------- | -------------------------------------- |
-| Free       | None (use own Gemini key)              |
-| Basic      | GPT-4o, Gemini Flash, Llama 3.1        |
-| Pro        | All models including GPT-5, Gemini Pro |
-| Enterprise | Full access + beta models              |
-
-#### Changed
-
-- **Feature Flags**: Added `cowork` feature (default enabled)
-- **Re-exports**: `CoworkCapabilities`, `CoworkFeatures`, `CoworkLimits`, `CoworkTier` exported at crate root
-
-#### Technical Details
-
-- New endpoint: `/api/v1/cowork/capabilities`
-- Graceful fallback to Free tier on network errors
-- 4 new unit tests for cowork module
 
 ---
 

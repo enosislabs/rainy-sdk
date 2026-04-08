@@ -275,6 +275,76 @@ impl RainyClient {
         }
     }
 
+    /// Creates a chat completion in envelope mode (`X-Rainy-Response-Mode: envelope`).
+    pub async fn chat_completion_envelope(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> Result<(RainyEnvelope<ChatCompletionResponse>, RequestMetadata)> {
+        #[cfg(feature = "rate-limiting")]
+        if let Some(ref limiter) = self.rate_limiter {
+            limiter.until_ready().await;
+        }
+
+        let url = self.api_v1_url("/chat/completions");
+        let start_time = Instant::now();
+
+        let operation = || async {
+            let response = self
+                .client
+                .post(&url)
+                .header("X-Rainy-Response-Mode", "envelope")
+                .json(&request)
+                .send()
+                .await?;
+
+            let metadata = self.extract_metadata(&response, start_time);
+            let chat_response: RainyEnvelope<ChatCompletionResponse> =
+                self.handle_response(response).await?;
+            Ok((chat_response, metadata))
+        };
+
+        if self.auth_config.enable_retry {
+            retry_with_backoff(&self.retry_config, operation).await
+        } else {
+            operation().await
+        }
+    }
+
+    /// Creates an OpenAI-compatible chat completion in envelope mode.
+    pub async fn openai_chat_completion_envelope(
+        &self,
+        request: OpenAIChatCompletionRequest,
+    ) -> Result<(RainyEnvelope<OpenAIChatCompletionResponse>, RequestMetadata)> {
+        #[cfg(feature = "rate-limiting")]
+        if let Some(ref limiter) = self.rate_limiter {
+            limiter.until_ready().await;
+        }
+
+        let url = self.api_v1_url("/chat/completions");
+        let start_time = Instant::now();
+
+        let operation = || async {
+            let response = self
+                .client
+                .post(&url)
+                .header("X-Rainy-Response-Mode", "envelope")
+                .json(&request)
+                .send()
+                .await?;
+
+            let metadata = self.extract_metadata(&response, start_time);
+            let chat_response: RainyEnvelope<OpenAIChatCompletionResponse> =
+                self.handle_response(response).await?;
+            Ok((chat_response, metadata))
+        };
+
+        if self.auth_config.enable_retry {
+            retry_with_backoff(&self.retry_config, operation).await
+        } else {
+            operation().await
+        }
+    }
+
     /// Creates a streaming chat completion based on the provided request.
     ///
     /// # Arguments
@@ -313,7 +383,19 @@ impl RainyClient {
                     source_error: Some(e.to_string()),
                 })?;
 
-            self.handle_stream_response(response).await
+            let events = self.handle_chat_stream_response(response).await?;
+            let stream = events.filter_map(|event| async move {
+                match event {
+                    Ok(ChatStreamEvent::Chunk(chunk)) => Some(Ok(chunk)),
+                    Ok(ChatStreamEvent::Billing(_)) | Ok(ChatStreamEvent::Raw(_)) => None,
+                    Err(error) => Some(Err(error)),
+                }
+            });
+
+            Ok(Box::pin(stream)
+                as Pin<
+                    Box<dyn Stream<Item = Result<ChatCompletionStreamResponse>> + Send>,
+                >)
         };
 
         if self.auth_config.enable_retry {
@@ -412,6 +494,42 @@ impl RainyClient {
                 })?;
 
             self.handle_stream_response(response).await
+        };
+
+        if self.auth_config.enable_retry {
+            retry_with_backoff(&self.retry_config, operation).await
+        } else {
+            operation().await
+        }
+    }
+
+    /// Creates a chat completion stream returning typed events (OpenAI chunks + Rainy native events).
+    pub async fn chat_completion_stream_events(
+        &self,
+        mut request: ChatCompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatStreamEvent>> + Send>>> {
+        request.stream = Some(true);
+
+        #[cfg(feature = "rate-limiting")]
+        if let Some(ref limiter) = self.rate_limiter {
+            limiter.until_ready().await;
+        }
+
+        let url = self.api_v1_url("/chat/completions");
+        let operation = || async {
+            let response = self
+                .client
+                .post(&url)
+                .json(&request)
+                .send()
+                .await
+                .map_err(|e| RainyError::Network {
+                    message: format!("Failed to send request: {}", e),
+                    retryable: true,
+                    source_error: Some(e.to_string()),
+                })?;
+
+            self.handle_chat_stream_response(response).await
         };
 
         if self.auth_config.enable_retry {
@@ -571,6 +689,52 @@ impl RainyClient {
         Ok(Box::pin(stream))
     }
 
+    pub(crate) async fn handle_chat_stream_response(
+        &self,
+        response: Response,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatStreamEvent>> + Send>>> {
+        let status = response.status();
+        let request_id = response
+            .headers()
+            .get("x-request-id")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            return self.handle_error_text(status, request_id, text);
+        }
+
+        let stream = response
+            .bytes_stream()
+            .eventsource()
+            .filter_map(|event| async move {
+                match event {
+                    Ok(event) => {
+                        let payload = event.data.trim();
+                        if payload.is_empty() || payload.eq_ignore_ascii_case("[DONE]") {
+                            return None;
+                        }
+
+                        match serde_json::from_str::<serde_json::Value>(payload) {
+                            Ok(value) => Some(Ok(ChatStreamEvent::from_value(value))),
+                            Err(e) => Some(Err(RainyError::Serialization {
+                                message: format!("Failed to parse stream chunk: {}", e),
+                                source_error: Some(e.to_string()),
+                            })),
+                        }
+                    }
+                    Err(e) => Some(Err(RainyError::Network {
+                        message: format!("Stream error: {}", e),
+                        retryable: true,
+                        source_error: Some(e.to_string()),
+                    })),
+                }
+            });
+
+        Ok(Box::pin(stream))
+    }
+
     fn handle_error_text<T>(
         &self,
         status: reqwest::StatusCode,
@@ -639,14 +803,22 @@ impl RainyClient {
                 .get("x-rainy-credits-charged")
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.parse().ok()),
-            rainy_markup_percent: headers
-                .get("x-rainy-markup-percent")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse().ok()),
             rainy_daily_credits_remaining: headers
                 .get("x-rainy-daily-credits-remaining")
                 .and_then(|v| v.to_str().ok())
                 .map(String::from),
+            rainy_sanitized_params: headers
+                .get("x-rainy-sanitized-params")
+                .and_then(|v| v.to_str().ok())
+                .map(String::from),
+            rainy_billing_adjustment: headers
+                .get("x-rainy-billing-adjustment")
+                .and_then(|v| v.to_str().ok())
+                .map(String::from),
+            rainy_billing_outstanding_credits: headers
+                .get("x-rainy-billing-outstanding-credits")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse().ok()),
         }
     }
 
@@ -788,32 +960,6 @@ impl RainyClient {
     /// ```
     pub async fn list_available_models(&self) -> Result<AvailableModels> {
         self.get_available_models().await
-    }
-
-    /// Retrieves the Cowork profile for the current user.
-    ///
-    /// This includes subscription plan details, usage statistics, and feature flags.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a `CoworkProfile` struct on success, or a `RainyError` on failure.
-    #[cfg(feature = "cowork")]
-    #[deprecated(
-        note = "Cowork endpoints are legacy and not supported by Rainy API v3. Migrate to v3 session/org endpoints."
-    )]
-    pub async fn get_cowork_profile(&self) -> Result<crate::cowork::CoworkProfile> {
-        let url = self.api_v1_url("/cowork/profile");
-
-        let operation = || async {
-            let response = self.client.get(&url).send().await?;
-            self.handle_response(response).await
-        };
-
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
     }
 
     // Legacy methods for backward compatibility

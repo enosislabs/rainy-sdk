@@ -4,10 +4,9 @@
 
 use crate::{
     error::{RainyError, Result},
-    search::{DeepResearchResponse, ResearchConfig},
+    search::{DeepResearchResponse, ResearchConfig, SearchExtractResponse, SearchResponse},
     RainyClient,
 };
-use serde::Deserialize;
 use serde_json::json;
 
 impl RainyClient {
@@ -52,52 +51,13 @@ impl RainyClient {
         topic: impl Into<String>,
         config: Option<ResearchConfig>,
     ) -> Result<DeepResearchResponse> {
-        #[derive(Deserialize)]
-        struct SearchResultItem {
-            title: Option<String>,
-            url: Option<String>,
-            content: Option<String>,
-            snippet: Option<String>,
-        }
-        #[derive(Deserialize)]
-        struct SearchData {
-            results: Vec<SearchResultItem>,
-        }
-        #[derive(Deserialize)]
-        struct SearchEnvelope {
-            success: bool,
-            data: SearchData,
-        }
-
         let cfg = config.unwrap_or_default();
         let topic = topic.into();
-        let url = self.api_v1_url("/search");
-        let search_depth = match cfg.depth {
-            crate::models::ResearchDepth::Advanced => "advanced",
-            _ => "basic",
-        };
-        let request = json!({
-            "query": topic,
-            "searchDepth": search_depth,
-            "maxResults": cfg.max_sources.min(20),
-        });
-
-        let response = self
-            .http_client()
-            .post(&url)
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| RainyError::Network {
-                message: e.to_string(),
-                retryable: true,
-                source_error: Some(e.to_string()),
-            })?;
-
-        let envelope: SearchEnvelope = self.handle_response(response).await?;
+        let search_depth = Some(cfg.depth);
+        let max_results = Some(cfg.max_sources.min(20));
+        let envelope = self.search(topic, search_depth, max_results).await?;
 
         let results_json = envelope
-            .data
             .results
             .iter()
             .map(|item| {
@@ -110,7 +70,6 @@ impl RainyClient {
             .collect::<Vec<_>>();
 
         let synthesized_content = envelope
-            .data
             .results
             .iter()
             .enumerate()
@@ -128,7 +87,7 @@ impl RainyClient {
             .join("\n\n");
 
         Ok(DeepResearchResponse {
-            success: envelope.success,
+            success: true,
             mode: "sync".to_string(),
             result: Some(json!({
                 "content": synthesized_content,
@@ -139,5 +98,73 @@ impl RainyClient {
             provider: Some("tavily".to_string()),
             message: None,
         })
+    }
+
+    /// Performs a native `/api/v1/search` query.
+    pub async fn search(
+        &self,
+        query: impl Into<String>,
+        depth: Option<crate::models::ResearchDepth>,
+        max_results: Option<u32>,
+    ) -> Result<SearchResponse> {
+        #[derive(serde::Deserialize)]
+        struct SearchEnvelope {
+            data: SearchResponse,
+        }
+
+        let url = self.api_v1_url("/search");
+        let search_depth = match depth.unwrap_or(crate::models::ResearchDepth::Basic) {
+            crate::models::ResearchDepth::Advanced => "advanced",
+            _ => "basic",
+        };
+
+        let request = json!({
+            "query": query.into(),
+            "searchDepth": search_depth,
+            "maxResults": max_results.unwrap_or(10).clamp(1, 20),
+        });
+
+        let response = self
+            .http_client()
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| RainyError::Network {
+                message: e.to_string(),
+                retryable: true,
+                source_error: Some(e.to_string()),
+            })?;
+
+        let envelope: SearchEnvelope = self.handle_response(response).await?;
+        Ok(envelope.data)
+    }
+
+    /// Performs a native `/api/v1/search/extract` request.
+    pub async fn search_extract(&self, urls: Vec<String>) -> Result<SearchExtractResponse> {
+        #[derive(serde::Deserialize)]
+        struct ExtractEnvelope {
+            data: SearchExtractResponse,
+        }
+
+        let url = self.api_v1_url("/search/extract");
+        let request = json!({
+            "urls": urls,
+        });
+
+        let response = self
+            .http_client()
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| RainyError::Network {
+                message: e.to_string(),
+                retryable: true,
+                source_error: Some(e.to_string()),
+            })?;
+
+        let envelope: ExtractEnvelope = self.handle_response(response).await?;
+        Ok(envelope.data)
     }
 }

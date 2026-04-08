@@ -13,13 +13,6 @@ mod tests {
         let standard_key = format!("ra-{}", "a".repeat(48));
         let config = AuthConfig::new(&standard_key);
         assert!(config.validate().is_ok());
-        assert!(!config.is_cowork_key());
-
-        // Test valid legacy Cowork API key (57 chars: ra-cowork + 48 hex)
-        let cowork_key = format!("ra-cowork{}", "b".repeat(48));
-        let config = AuthConfig::new(&cowork_key);
-        assert!(config.validate().is_ok());
-        assert!(config.is_cowork_key());
 
         // Test invalid API key format (no ra- prefix)
         let config = AuthConfig::new("invalid-key");
@@ -27,10 +20,6 @@ mod tests {
 
         // Test invalid standard key length (too short)
         let config = AuthConfig::new("ra-tooshort");
-        assert!(config.validate().is_err());
-
-        // Test invalid cowork key length (too short)
-        let config = AuthConfig::new("ra-coworktooshort");
         assert!(config.validate().is_err());
     }
 

@@ -52,9 +52,6 @@
 pub mod auth;
 /// The main client for interacting with the Rainy API.
 pub mod client;
-/// Cowork integration (legacy compatibility, opt-in feature).
-#[cfg(feature = "cowork")]
-pub mod cowork;
 /// Defines error types and result aliases for the SDK.
 pub mod error;
 /// Contains the data models for API requests and responses.
@@ -78,17 +75,6 @@ pub use session::{
     SessionApiKeyListItem, SessionConfig, SessionTokens, SessionUser, UsageCreditsResponse,
     UsageStatsResponse,
 };
-
-// Re-export Cowork types for convenience
-#[cfg(feature = "cowork")]
-#[deprecated(note = "Cowork types are legacy and retained only for v2 compatibility.")]
-pub use cowork::{CoworkCapabilities, CoworkFeatures, CoworkPlan, CoworkUsage};
-// Backward compatibility aliases
-// #[allow(deprecated)]
-// pub use cowork::{CoworkLimits, CoworkTier};
-#[cfg(feature = "cowork")]
-#[deprecated(note = "Cowork helpers are legacy and retained only for v2 compatibility.")]
-pub use endpoints::cowork::get_offline_capabilities;
 
 // Re-export Research types for convenience
 pub use search::{

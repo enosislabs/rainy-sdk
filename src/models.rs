@@ -161,6 +161,10 @@ pub struct ChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
 
+    /// Upper bound for completion tokens in modern OpenAI-compatible payloads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_completion_tokens: Option<u32>,
+
     /// The nucleus sampling parameter. The model considers the results of the tokens with `top_p`
     /// probability mass. So, 0.1 means only the tokens comprising the top 10% probability mass are considered.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -193,6 +197,10 @@ pub struct ChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
 
+    /// Stream behavior options (`include_usage`, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_options: Option<serde_json::Value>,
+
     /// Modify the likelihood of specified tokens appearing in the completion.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logit_bias: Option<serde_json::Value>,
@@ -221,6 +229,78 @@ pub struct ChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
 
+    /// Whether multiple tool calls may be emitted in parallel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parallel_tool_calls: Option<bool>,
+
+    /// Seed for deterministic sampling where supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<i64>,
+
+    /// Prompt cache key for provider routing/cache optimization.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_key: Option<String>,
+
+    /// Provider-specific option bag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_options: Option<serde_json::Value>,
+
+    /// Prompt cache retention mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_retention: Option<String>,
+
+    /// Reasoning settings (bool/object depending on provider).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<serde_json::Value>,
+
+    /// Include reasoning traces where supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_reasoning: Option<bool>,
+
+    /// Arbitrary request metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<HashMap<String, String>>,
+
+    /// Requested service tier (`auto`, `default`, `flex`, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<String>,
+
+    /// Persist request/response server-side when supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub store: Option<bool>,
+
+    /// Stable identifier used by safety systems.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safety_identifier: Option<String>,
+
+    /// Requested output modalities.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modalities: Option<Vec<String>>,
+
+    /// Audio generation options.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<serde_json::Value>,
+
+    /// Prediction optimization payload.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prediction: Option<serde_json::Value>,
+
+    /// Verbosity hint for some models.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<String>,
+
+    /// Native web search options.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub web_search_options: Option<serde_json::Value>,
+
+    /// Legacy functions field accepted by compat layers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub functions: Option<Vec<serde_json::Value>>,
+
+    /// Legacy function-call directive accepted by compat layers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function_call: Option<serde_json::Value>,
+
     /// Configuration for thinking capabilities (Gemini 3 and 2.5 series).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_config: Option<ThinkingConfig>,
@@ -242,6 +322,10 @@ pub struct OpenAIChatCompletionRequest {
     /// The maximum number of tokens to generate in the completion.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
+
+    /// Upper bound for completion tokens in modern OpenAI-compatible payloads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_completion_tokens: Option<u32>,
 
     /// Nucleus sampling parameter.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -271,6 +355,10 @@ pub struct OpenAIChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
 
+    /// Stream behavior options (`include_usage`, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_options: Option<serde_json::Value>,
+
     /// Logit bias map.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logit_bias: Option<serde_json::Value>,
@@ -298,6 +386,78 @@ pub struct OpenAIChatCompletionRequest {
     /// Tool selection strategy.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
+
+    /// Whether multiple tool calls may be emitted in parallel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parallel_tool_calls: Option<bool>,
+
+    /// Seed for deterministic sampling where supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<i64>,
+
+    /// Prompt cache key for provider routing/cache optimization.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_key: Option<String>,
+
+    /// Provider-specific option bag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_options: Option<serde_json::Value>,
+
+    /// Prompt cache retention mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_retention: Option<String>,
+
+    /// Reasoning settings (bool/object depending on provider).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<serde_json::Value>,
+
+    /// Include reasoning traces where supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_reasoning: Option<bool>,
+
+    /// Arbitrary request metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<HashMap<String, String>>,
+
+    /// Requested service tier (`auto`, `default`, `flex`, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<String>,
+
+    /// Persist request/response server-side when supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub store: Option<bool>,
+
+    /// Stable identifier used by safety systems.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safety_identifier: Option<String>,
+
+    /// Requested output modalities.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modalities: Option<Vec<String>>,
+
+    /// Audio generation options.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<serde_json::Value>,
+
+    /// Prediction optimization payload.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prediction: Option<serde_json::Value>,
+
+    /// Verbosity hint for some models.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<String>,
+
+    /// Native web search options.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub web_search_options: Option<serde_json::Value>,
+
+    /// Legacy functions field accepted by compat layers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub functions: Option<Vec<serde_json::Value>>,
+
+    /// Legacy function-call directive accepted by compat layers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function_call: Option<serde_json::Value>,
 
     /// Gemini thinking configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -490,11 +650,17 @@ pub struct RequestMetadata {
     /// Credits charged for the request.
     pub rainy_credits_charged: Option<f64>,
 
-    /// Markup percent applied by gateway pricing.
-    pub rainy_markup_percent: Option<f64>,
-
     /// Remaining daily credits reported by Rainy.
     pub rainy_daily_credits_remaining: Option<String>,
+
+    /// Sanitized parameters removed/rewritten by the compatibility layer.
+    pub rainy_sanitized_params: Option<String>,
+
+    /// Billing reconciliation status (`exact`, `refunded`, `undercharged`, etc.).
+    pub rainy_billing_adjustment: Option<String>,
+
+    /// Outstanding credits that could not be charged in post-processing.
+    pub rainy_billing_outstanding_credits: Option<f64>,
 }
 
 /// OpenRouter/Rainy Responses API request payload.
@@ -546,6 +712,74 @@ pub struct ResponsesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<serde_json::Value>,
 
+    /// Include reasoning traces where supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_reasoning: Option<bool>,
+
+    /// Whether multiple tool calls may be emitted in parallel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parallel_tool_calls: Option<bool>,
+
+    /// Arbitrary request metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<HashMap<String, String>>,
+
+    /// Requested service tier (`auto`, `default`, `flex`, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<String>,
+
+    /// Persist request/response server-side when supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub store: Option<bool>,
+
+    /// Stable identifier used by safety systems.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safety_identifier: Option<String>,
+
+    /// Provider-specific option bag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_options: Option<serde_json::Value>,
+
+    /// Prompt cache retention mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_retention: Option<String>,
+
+    /// Text/output controls supported by modern Responses API.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<serde_json::Value>,
+
+    /// System-level instructions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<String>,
+
+    /// Include directives for response rendering/metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include: Option<Vec<String>>,
+
+    /// Previous response ID for multi-turn server-side continuation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_response_id: Option<String>,
+
+    /// Conversation identifier or object.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<serde_json::Value>,
+
+    /// Prompt object for hosted prompts/templates.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<serde_json::Value>,
+
+    /// Request asynchronous/background processing where supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background: Option<bool>,
+
+    /// Context management directives.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_management: Option<Vec<serde_json::Value>>,
+
+    /// Truncation strategy (`auto` or `disabled`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub truncation: Option<String>,
+
     /// Forward-compatible extra parameters.
     #[serde(flatten, skip_serializing_if = "map_is_empty", default)]
     pub extra: HashMap<String, serde_json::Value>,
@@ -567,6 +801,23 @@ impl ResponsesRequest {
             user: None,
             prompt_cache_key: None,
             reasoning: None,
+            include_reasoning: None,
+            parallel_tool_calls: None,
+            metadata: None,
+            service_tier: None,
+            store: None,
+            safety_identifier: None,
+            provider_options: None,
+            prompt_cache_retention: None,
+            text: None,
+            instructions: None,
+            include: None,
+            previous_response_id: None,
+            conversation: None,
+            prompt: None,
+            background: None,
+            context_management: None,
+            truncation: None,
             extra: HashMap::new(),
         }
     }
@@ -585,6 +836,12 @@ impl ResponsesRequest {
     /// Sets reasoning configuration object.
     pub fn with_reasoning(mut self, reasoning: serde_json::Value) -> Self {
         self.reasoning = Some(reasoning);
+        self
+    }
+
+    /// Requests explicit reasoning traces when supported.
+    pub fn with_include_reasoning(mut self, include_reasoning: bool) -> Self {
+        self.include_reasoning = Some(include_reasoning);
         self
     }
 
@@ -609,6 +866,36 @@ impl ResponsesRequest {
     /// Sets user identifier.
     pub fn with_user(mut self, user: impl Into<String>) -> Self {
         self.user = Some(user.into());
+        self
+    }
+
+    /// Sets provider option bag (forwarded as-is).
+    pub fn with_provider_options(mut self, provider_options: serde_json::Value) -> Self {
+        self.provider_options = Some(provider_options);
+        self
+    }
+
+    /// Sets system-level instructions.
+    pub fn with_instructions(mut self, instructions: impl Into<String>) -> Self {
+        self.instructions = Some(instructions.into());
+        self
+    }
+
+    /// Sets previous response identifier for stateful continuation.
+    pub fn with_previous_response_id(mut self, previous_response_id: impl Into<String>) -> Self {
+        self.previous_response_id = Some(previous_response_id.into());
+        self
+    }
+
+    /// Sets service tier hint (`auto`, `default`, `flex`, etc.).
+    pub fn with_service_tier(mut self, service_tier: impl Into<String>) -> Self {
+        self.service_tier = Some(service_tier.into());
+        self
+    }
+
+    /// Sets metadata map.
+    pub fn with_metadata(mut self, metadata: HashMap<String, String>) -> Self {
+        self.metadata = Some(metadata);
         self
     }
 
@@ -687,6 +974,15 @@ pub struct ResponsesApiResponse {
     /// Structured output items.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<Vec<serde_json::Value>>,
+    /// Response lifecycle status (`completed`, `in_progress`, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    /// Error object for failed responses.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<serde_json::Value>,
+    /// Incomplete details payload when response is partial/interrupted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub incomplete_details: Option<serde_json::Value>,
     /// Token usage information.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<ResponsesUsage>,
@@ -1349,6 +1645,7 @@ impl ChatCompletionRequest {
             messages,
             temperature: None,
             max_tokens: None,
+            max_completion_tokens: None,
             top_p: None,
             frequency_penalty: None,
             presence_penalty: None,
@@ -1356,6 +1653,7 @@ impl ChatCompletionRequest {
             user: None,
             provider: None,
             stream: None,
+            stream_options: None,
             logit_bias: None,
             logprobs: None,
             top_logprobs: None,
@@ -1363,6 +1661,24 @@ impl ChatCompletionRequest {
             response_format: None,
             tools: None,
             tool_choice: None,
+            parallel_tool_calls: None,
+            seed: None,
+            prompt_cache_key: None,
+            provider_options: None,
+            prompt_cache_retention: None,
+            reasoning: None,
+            include_reasoning: None,
+            metadata: None,
+            service_tier: None,
+            store: None,
+            safety_identifier: None,
+            modalities: None,
+            audio: None,
+            prediction: None,
+            verbosity: None,
+            web_search_options: None,
+            functions: None,
+            function_call: None,
             thinking_config: None,
         }
     }
@@ -1386,6 +1702,12 @@ impl ChatCompletionRequest {
     /// * `max_tokens` - The maximum number of tokens.
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
+        self
+    }
+
+    /// Sets the maximum number of completion tokens.
+    pub fn with_max_completion_tokens(mut self, max_completion_tokens: u32) -> Self {
+        self.max_completion_tokens = Some(max_completion_tokens);
         self
     }
 
@@ -1416,6 +1738,12 @@ impl ChatCompletionRequest {
     /// * `stream` - `true` to enable streaming, `false` to disable.
     pub fn with_stream(mut self, stream: bool) -> Self {
         self.stream = Some(stream);
+        self
+    }
+
+    /// Sets stream options payload.
+    pub fn with_stream_options(mut self, stream_options: serde_json::Value) -> Self {
+        self.stream_options = Some(stream_options);
         self
     }
 
@@ -1496,6 +1824,30 @@ impl ChatCompletionRequest {
     /// * `thinking_config` - Configuration for thinking capabilities.
     pub fn with_thinking_config(mut self, thinking_config: ThinkingConfig) -> Self {
         self.thinking_config = Some(thinking_config);
+        self
+    }
+
+    /// Sets reasoning configuration object used by modern compat routes.
+    pub fn with_reasoning(mut self, reasoning: serde_json::Value) -> Self {
+        self.reasoning = Some(reasoning);
+        self
+    }
+
+    /// Requests reasoning traces where supported.
+    pub fn with_include_reasoning(mut self, include_reasoning: bool) -> Self {
+        self.include_reasoning = Some(include_reasoning);
+        self
+    }
+
+    /// Sets service tier hint (`auto`, `default`, `flex`, etc.).
+    pub fn with_service_tier(mut self, service_tier: impl Into<String>) -> Self {
+        self.service_tier = Some(service_tier.into());
+        self
+    }
+
+    /// Sets metadata map.
+    pub fn with_metadata(mut self, metadata: HashMap<String, String>) -> Self {
+        self.metadata = Some(metadata);
         self
     }
 
@@ -1585,6 +1937,13 @@ impl ChatCompletionRequest {
         if let Some(mt) = self.max_tokens {
             if mt == 0 {
                 return Err("Max tokens must be greater than 0".to_string());
+            }
+        }
+
+        // Validate max_completion_tokens
+        if let Some(mct) = self.max_completion_tokens {
+            if mct == 0 {
+                return Err("Max completion tokens must be greater than 0".to_string());
             }
         }
 
@@ -1705,6 +2064,7 @@ impl OpenAIChatCompletionRequest {
             messages,
             temperature: None,
             max_tokens: None,
+            max_completion_tokens: None,
             top_p: None,
             frequency_penalty: None,
             presence_penalty: None,
@@ -1712,6 +2072,7 @@ impl OpenAIChatCompletionRequest {
             user: None,
             provider: None,
             stream: None,
+            stream_options: None,
             logit_bias: None,
             logprobs: None,
             top_logprobs: None,
@@ -1719,6 +2080,24 @@ impl OpenAIChatCompletionRequest {
             response_format: None,
             tools: None,
             tool_choice: None,
+            parallel_tool_calls: None,
+            seed: None,
+            prompt_cache_key: None,
+            provider_options: None,
+            prompt_cache_retention: None,
+            reasoning: None,
+            include_reasoning: None,
+            metadata: None,
+            service_tier: None,
+            store: None,
+            safety_identifier: None,
+            modalities: None,
+            audio: None,
+            prediction: None,
+            verbosity: None,
+            web_search_options: None,
+            functions: None,
+            function_call: None,
             thinking_config: None,
             thinking: None,
         }
@@ -1733,6 +2112,12 @@ impl OpenAIChatCompletionRequest {
     /// Sets the maximum number of tokens to generate.
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
+        self
+    }
+
+    /// Sets the maximum number of completion tokens.
+    pub fn with_max_completion_tokens(mut self, max_completion_tokens: u32) -> Self {
+        self.max_completion_tokens = Some(max_completion_tokens);
         self
     }
 
@@ -1751,6 +2136,12 @@ impl OpenAIChatCompletionRequest {
     /// Enables or disables streaming.
     pub fn with_stream(mut self, stream: bool) -> Self {
         self.stream = Some(stream);
+        self
+    }
+
+    /// Sets stream options payload.
+    pub fn with_stream_options(mut self, stream_options: serde_json::Value) -> Self {
+        self.stream_options = Some(stream_options);
         self
     }
 
@@ -1826,6 +2217,30 @@ impl OpenAIChatCompletionRequest {
         self
     }
 
+    /// Sets reasoning configuration object used by modern compat routes.
+    pub fn with_reasoning(mut self, reasoning: serde_json::Value) -> Self {
+        self.reasoning = Some(reasoning);
+        self
+    }
+
+    /// Requests reasoning traces where supported.
+    pub fn with_include_reasoning(mut self, include_reasoning: bool) -> Self {
+        self.include_reasoning = Some(include_reasoning);
+        self
+    }
+
+    /// Sets service tier hint (`auto`, `default`, `flex`, etc.).
+    pub fn with_service_tier(mut self, service_tier: impl Into<String>) -> Self {
+        self.service_tier = Some(service_tier.into());
+        self
+    }
+
+    /// Sets metadata map.
+    pub fn with_metadata(mut self, metadata: HashMap<String, String>) -> Self {
+        self.metadata = Some(metadata);
+        self
+    }
+
     /// Enables or disables thought summaries.
     pub fn with_include_thoughts(mut self, include_thoughts: bool) -> Self {
         let mut config = self.thinking_config.unwrap_or_default();
@@ -1867,6 +2282,7 @@ impl OpenAIChatCompletionRequest {
             messages: vec![],
             temperature: self.temperature,
             max_tokens: self.max_tokens,
+            max_completion_tokens: self.max_completion_tokens,
             top_p: self.top_p,
             frequency_penalty: self.frequency_penalty,
             presence_penalty: self.presence_penalty,
@@ -1874,6 +2290,7 @@ impl OpenAIChatCompletionRequest {
             user: self.user.clone(),
             provider: self.provider.clone(),
             stream: self.stream,
+            stream_options: self.stream_options.clone(),
             logit_bias: self.logit_bias.clone(),
             logprobs: self.logprobs,
             top_logprobs: self.top_logprobs,
@@ -1881,6 +2298,24 @@ impl OpenAIChatCompletionRequest {
             response_format: self.response_format.clone(),
             tools: self.tools.clone(),
             tool_choice: self.tool_choice.clone(),
+            parallel_tool_calls: self.parallel_tool_calls,
+            seed: self.seed,
+            prompt_cache_key: self.prompt_cache_key.clone(),
+            provider_options: self.provider_options.clone(),
+            prompt_cache_retention: self.prompt_cache_retention.clone(),
+            reasoning: self.reasoning.clone(),
+            include_reasoning: self.include_reasoning,
+            metadata: self.metadata.clone(),
+            service_tier: self.service_tier.clone(),
+            store: self.store,
+            safety_identifier: self.safety_identifier.clone(),
+            modalities: self.modalities.clone(),
+            audio: self.audio.clone(),
+            prediction: self.prediction.clone(),
+            verbosity: self.verbosity.clone(),
+            web_search_options: self.web_search_options.clone(),
+            functions: self.functions.clone(),
+            function_call: self.function_call.clone(),
             thinking_config: self.thinking_config.clone(),
         }
         .validate_openai_compatibility()
@@ -2367,6 +2802,68 @@ impl EnhancedChatMessage {
     /// Creates a new enhanced message with multiple content parts.
     pub fn with_parts(role: MessageRole, parts: Vec<ContentPart>) -> Self {
         Self { role, parts }
+    }
+}
+
+/// Billing usage payload emitted via `event: rainy.billing` in chat streams.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct RainyBillingUsage {
+    /// Prompt token count.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens: Option<u32>,
+    /// Completion token count.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<u32>,
+    /// Reasoning token count when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_tokens: Option<u32>,
+    /// Image units when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_units: Option<u32>,
+}
+
+/// Rainy native billing event emitted during chat streaming.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct RainyBillingStreamEvent {
+    /// Billing plan identifier.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_id: Option<String>,
+    /// Charged credits so far.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub charged_credits: Option<f64>,
+    /// Usage snapshot included by the server.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<RainyBillingUsage>,
+}
+
+/// Typed event emitted by chat streaming endpoints.
+#[derive(Debug, Clone)]
+pub enum ChatStreamEvent {
+    /// Standard OpenAI-compatible chat chunk.
+    Chunk(ChatCompletionStreamResponse),
+    /// Rainy native billing event.
+    Billing(RainyBillingStreamEvent),
+    /// Unknown event payload kept verbatim for forward compatibility.
+    Raw(serde_json::Value),
+}
+
+impl ChatStreamEvent {
+    /// Build a typed stream event from a raw JSON value.
+    pub fn from_value(value: serde_json::Value) -> Self {
+        if let Ok(chunk) = serde_json::from_value::<ChatCompletionStreamResponse>(value.clone()) {
+            return Self::Chunk(chunk);
+        }
+
+        if let Ok(billing) = serde_json::from_value::<RainyBillingStreamEvent>(value.clone()) {
+            if billing.plan_id.is_some()
+                || billing.charged_credits.is_some()
+                || billing.usage.is_some()
+            {
+                return Self::Billing(billing);
+            }
+        }
+
+        Self::Raw(value)
     }
 }
 
