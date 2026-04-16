@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["CoworkCapabilities","CoworkFeatures","CoworkModelsResponse","CoworkPlan","CoworkProfile","CoworkUsage"]};
