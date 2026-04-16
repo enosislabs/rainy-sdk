@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 /// A collection of predefined model constants for legacy compatibility.
 ///
 /// Rainy API v3 is catalog-driven (`/api/v1/models` and `/api/v1/models/catalog`), so

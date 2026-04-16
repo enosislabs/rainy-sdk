@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use super::{HealthStatus, MessageRole, Usage};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

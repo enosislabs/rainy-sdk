@@ -1614,6 +1614,9 @@ pub fn build_reasoning_config(
 }
 
 #[cfg(feature = "legacy")]
+/// Legacy static model identifiers kept for backward compatibility.
+///
+/// Rainy API v3 is catalog-driven; prefer dynamic model discovery endpoints.
 pub mod model_constants;
 
 /// A collection of predefined provider name constants for convenience.
