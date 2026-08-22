@@ -11,7 +11,7 @@
 - [`src/search.rs`](src/search.rs): search/research types and compatibility mapping.
 - [`src/endpoints/`](src/endpoints/): endpoint-specific extensions, including chat, search, health, and legacy account helpers.
 
-Keep the client split intact: use `RainyClient` for API-key runtime operations and `RainySessionClient` for JWT/dashboard operations. Do not add new account, usage, or key flows to the API-key client. See [`MIGRATION.md`](MIGRATION.md) for the v2-to-v3 mapping.
+Keep the client split intact: use `RainyClient` for API-key runtime operations and `RainySessionClient` for JWT/dashboard operations. Do not add new account, usage, or key flows to the API-key client.
 
 Route through existing helpers rather than hardcoding URLs:
 
@@ -60,7 +60,7 @@ Link to existing documentation instead of duplicating it:
 
 - [`README.md`](README.md): setup, API examples, features, and architecture overview.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): development workflow, testing, DCO, and pull requests.
-- [`MIGRATION.md`](MIGRATION.md): client split and v2-to-v3 migration.
+- [`README.md`](README.md): current installation, model discovery, runtime, and session usage.
 - [`docs/GEMINI_3_INTEGRATION.md`](docs/GEMINI_3_INTEGRATION.md): Gemini thinking and thought signatures.
 
 Use imperative Conventional Commit subjects and sign commits with DCO (`git commit -s`). User-visible changes should update [`CHANGELOG.md`](CHANGELOG.md), documentation, and tests as appropriate. Report security issues through [`SECURITY.md`](SECURITY.md), not public issues.

@@ -1,6 +1,6 @@
 //! # Rainy SDK
 //!
-//! The official Rust SDK for the Rainy API by Enosis Labs (v3 service).
+//! The official Rust SDK for the Rainy API by Enosis Labs (v3.8.1 service).
 //!
 //! This SDK provides a clean, idiomatic Rust interface for interacting with
 //! the Rainy API, which unifies multiple AI providers under a single API.
@@ -102,4 +102,4 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The default base URL for the Rainy API v3 service.
 ///
 /// Note: the v3 service currently exposes its canonical HTTP API under `/api/v1/*`.
-pub const DEFAULT_BASE_URL: &str = "https://rainy-api-v3-us-179843975974.us-east4.run.app";
+pub const DEFAULT_BASE_URL: &str = "https://rainy-api-v3-us-160298401329.us-east4.run.app";
