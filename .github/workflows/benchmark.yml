@@ -56,10 +56,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build balanced release profile
-        run: cargo build --release --all-features --timings
+        run: /usr/bin/time -p -o release-build-time.txt cargo build --release --all-features --timings
 
       - name: Build maximum-performance profile
-        run: cargo build --profile release-perf --all-features
+        run: /usr/bin/time -p -o release-perf-build-time.txt cargo build --profile release-perf --all-features
 
       - name: Record library sizes and build timings
         run: |
@@ -72,7 +72,11 @@ jobs:
               fi
             done
             echo
-            echo "Cargo build timing report:"
+            echo "Wall-clock release build timing:"
+            cat release-build-time.txt
+            cat release-perf-build-time.txt
+            echo
+            echo "Cargo build timing reports:"
             find target/cargo-timings -maxdepth 1 -type f -name '*.html' -print
           } | tee build-size-report.txt
 
@@ -82,5 +86,7 @@ jobs:
           name: release-build-reports
           path: |
             build-size-report.txt
+            release-build-time.txt
+            release-perf-build-time.txt
             target/cargo-timings/
           retention-days: 30

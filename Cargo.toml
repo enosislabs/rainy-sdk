@@ -36,7 +36,7 @@ include = [
 
 [dependencies]
 # Core dependencies
-reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "http2", "rustls"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "stream", "http2", "rustls"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 tokio = { version = "1.53.1", default-features = false, features = ["time"] }
