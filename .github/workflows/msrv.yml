@@ -40,8 +40,8 @@ jobs:
 
     - name: Verify Cargo.lock compatibility
       run: |
-        # Check that the lockfile is reproducible with the selected toolchain.
-        cargo update --locked
+        # Verify that the committed lockfile is accepted without regeneration.
+        cargo check --locked --all-targets --all-features
 
     - name: Generate MSRV report
       run: |
