@@ -1,5 +1,5 @@
 use crate::error::{RainyError, Result};
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT};
+use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
 use secrecy::{ExposeSecret, SecretString};
 use std::time::Duration;
 

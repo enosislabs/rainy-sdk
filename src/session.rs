@@ -5,10 +5,10 @@
 
 use crate::error::{ApiErrorResponse, RainyError, Result};
 use reqwest::{
-    header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, USER_AGENT},
     Client, Method, Response,
+    header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue, USER_AGENT},
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// Configuration for [`RainySessionClient`].
 #[derive(Debug, Clone)]

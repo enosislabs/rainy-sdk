@@ -69,7 +69,7 @@ pub use auth::AuthConfig;
 pub use client::RainyClient;
 pub use error::{ApiErrorDetails, ApiErrorResponse, RainyError, Result};
 pub use models::*;
-pub use retry::{retry_with_backoff, RetryConfig};
+pub use retry::{RetryConfig, retry_with_backoff};
 pub use session::{
     CreatedApiKey, LoginResponse, OrgProfile, RainySessionClient, RefreshResponse,
     SessionApiKeyListItem, SessionConfig, SessionTokens, SessionUser, UsageCreditsResponse,

@@ -163,19 +163,23 @@ mod tests {
             .with_thinking_level(ThinkingLevel::High)
             .validate_openai_compatibility();
         assert!(invalid_non_gemini.is_err());
-        assert!(invalid_non_gemini
-            .err()
-            .unwrap()
-            .contains("thinking_level is only supported for Gemini 3"));
+        assert!(
+            invalid_non_gemini
+                .err()
+                .unwrap()
+                .contains("thinking_level is only supported for Gemini 3")
+        );
 
         let invalid_gemini3_pro_level = ChatCompletionRequest::new("gemini-3-pro-preview", vec![])
             .with_thinking_level(ThinkingLevel::Minimal)
             .validate_openai_compatibility();
         assert!(invalid_gemini3_pro_level.is_err());
-        assert!(invalid_gemini3_pro_level
-            .err()
-            .unwrap()
-            .contains("Gemini 3 Pro only supports 'low' and 'high'"));
+        assert!(
+            invalid_gemini3_pro_level
+                .err()
+                .unwrap()
+                .contains("Gemini 3 Pro only supports 'low' and 'high'")
+        );
 
         let valid_budget = ChatCompletionRequest::new("gemini-2.5-pro", vec![])
             .with_thinking_budget(1024)
@@ -186,10 +190,12 @@ mod tests {
             .with_thinking_budget(1024)
             .validate_openai_compatibility();
         assert!(invalid_budget_model.is_err());
-        assert!(invalid_budget_model
-            .err()
-            .unwrap()
-            .contains("thinking_budget is only supported for Gemini 2.5"));
+        assert!(
+            invalid_budget_model
+                .err()
+                .unwrap()
+                .contains("thinking_budget is only supported for Gemini 2.5")
+        );
 
         let conflicting = ChatCompletionRequest::new("gemini-3-pro-preview", vec![])
             .with_thinking_level(ThinkingLevel::High)

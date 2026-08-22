@@ -2,24 +2,25 @@ use crate::{
     auth::AuthConfig,
     error::{ApiErrorResponse, RainyError, Result},
     models::*,
-    retry::{retry_with_backoff, RetryConfig},
+    retry::{RetryConfig, retry_with_backoff},
 };
 use eventsource_stream::Eventsource;
 use futures::{Stream, StreamExt};
 use reqwest::{
-    header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT},
-    Client, Response,
+    Client, Method, RequestBuilder, Response,
+    header::{AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
 };
 use secrecy::ExposeSecret;
 use serde::Deserialize;
+use std::future::Future;
 use std::pin::Pin;
 use std::time::Instant;
 
 #[cfg(feature = "rate-limiting")]
 use governor::{
+    Quota, RateLimiter,
     clock::DefaultClock,
     state::{InMemoryState, NotKeyed},
-    Quota, RateLimiter,
 };
 
 /// The main client for interacting with the Rainy API.
@@ -140,7 +141,7 @@ impl RainyClient {
         );
 
         let client = Client::builder()
-            .use_rustls_tls()
+            .tls_backend_rustls()
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
             .https_only(true)
             .timeout(auth_config.timeout())
@@ -182,6 +183,43 @@ impl RainyClient {
     pub fn with_retry_config(mut self, retry_config: RetryConfig) -> Self {
         self.retry_config = retry_config;
         self
+    }
+
+    async fn wait_for_slot(&self) {
+        #[cfg(feature = "rate-limiting")]
+        if let Some(ref limiter) = self.rate_limiter {
+            limiter.until_ready().await;
+        }
+    }
+
+    async fn execute_with_retry<F, Fut, T>(&self, operation: F) -> Result<T>
+    where
+        F: Fn() -> Fut,
+        Fut: Future<Output = Result<T>>,
+    {
+        self.wait_for_slot().await;
+
+        if self.auth_config.enable_retry {
+            retry_with_backoff(&self.retry_config, operation).await
+        } else {
+            operation().await
+        }
+    }
+
+    pub(crate) fn api_request(&self, method: Method, endpoint: &str) -> RequestBuilder {
+        self.client.request(method, self.api_v1_url(endpoint))
+    }
+
+    pub(crate) fn root_request(&self, method: Method, endpoint: &str) -> RequestBuilder {
+        self.client.request(method, self.root_url(endpoint))
+    }
+
+    pub(crate) async fn send_request(&self, request: RequestBuilder) -> Result<Response> {
+        request.send().await.map_err(|e| RainyError::Network {
+            message: format!("Failed to send request: {e}"),
+            retryable: true,
+            source_error: Some(e.to_string()),
+        })
     }
 
     /// Retrieves the list of available models and providers from the API.

@@ -4,7 +4,9 @@ fn maybe_server() -> Option<mockito::ServerGuard> {
     match std::panic::catch_unwind(mockito::Server::new) {
         Ok(server) => Some(server),
         Err(_) => {
-            eprintln!("Skipping session_client_integration_test: mock server unavailable in this environment");
+            eprintln!(
+                "Skipping session_client_integration_test: mock server unavailable in this environment"
+            );
             None
         }
     }

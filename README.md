@@ -1,10 +1,10 @@
-# 🌧️ Rainy SDK v0.6.14
+# 🌧️ Rainy SDK v0.6.15
 
 [![Crates.io](https://img.shields.io/crates/v/rainy-sdk.svg)](https://crates.io/crates/rainy-sdk)
 [![Documentation](https://docs.rs/rainy-sdk/badge.svg)](https://docs.rs/rainy-sdk)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/enosislabs/rainy-sdk)
-[![Rust Version](https://img.shields.io/badge/rust-1.92.0%2B-orange.svg)](https://www.rust-lang.org/)
+[![Rust Version](https://img.shields.io/badge/rust-1.98.0%2B-orange.svg)](https://www.rust-lang.org/)
 
 The official Rust SDK for the **Rainy API by Enosis Labs** - a unified interface for multiple AI providers including OpenAI, Google Gemini, Groq, Cerebras, and Enosis Labs' own Astronomer models. Features advanced thinking capabilities, multimodal support, thought signatures, and full OpenAI compatibility.
 
@@ -32,8 +32,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rainy-sdk = "0.6.14"
-tokio = { version = "1.47", features = ["full"] }
+rainy-sdk = "0.6.15"
+tokio = { version = "1.53", features = ["full"] }
 ```
 
 Or installation with cargo:
@@ -44,7 +44,7 @@ cargo add rainy-sdk
 
 ### Requirements
 
-- **Rust**: 1.92.0 or later
+- **Rust**: 1.98.0 or later
 - **Platform Support**: macOS, Linux, Windows
 
 ### Optional Features
@@ -53,7 +53,7 @@ Enable additional features as needed:
 
 ```toml
 [dependencies]
-rainy-sdk = { version = "0.6.14", features = ["rate-limiting", "tracing"] }
+rainy-sdk = { version = "0.6.15", features = ["rate-limiting", "tracing"] }
 ```
 
 Available features:

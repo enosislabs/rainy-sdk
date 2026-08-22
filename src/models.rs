@@ -1550,10 +1550,10 @@ pub fn build_reasoning_config(
             if !supports_effort {
                 return None;
             }
-            if let Some(efforts) = controls.and_then(|c| c.effort.as_ref()) {
-                if !efforts.iter().any(|v| v.eq_ignore_ascii_case(&value)) {
-                    return None;
-                }
+            if let Some(efforts) = controls.and_then(|c| c.effort.as_ref())
+                && !efforts.iter().any(|v| v.eq_ignore_ascii_case(&value))
+            {
+                return None;
             }
 
             let effort_profile = profiles
@@ -1578,10 +1578,10 @@ pub fn build_reasoning_config(
             let level_profile = profiles
                 .iter()
                 .find(|p| p.parameter_path == "thinking_config.thinking_level")?;
-            if let Some(values) = &level_profile.values {
-                if !values.iter().any(|v| v.eq_ignore_ascii_case(&value)) {
-                    return None;
-                }
+            if let Some(values) = &level_profile.values
+                && !values.iter().any(|v| v.eq_ignore_ascii_case(&value))
+            {
+                return None;
             }
             Some(serde_json::json!({
                 "thinking_config": { "thinking_level": value }
@@ -1900,71 +1900,71 @@ impl ChatCompletionRequest {
     /// A `Result` indicating whether the request is valid for OpenAI compatibility.
     pub fn validate_openai_compatibility(&self) -> Result<(), String> {
         // Validate temperature
-        if let Some(temp) = self.temperature {
-            if !(0.0..=2.0).contains(&temp) {
-                return Err(format!(
-                    "Temperature must be between 0.0 and 2.0, got {}",
-                    temp
-                ));
-            }
+        if let Some(temp) = self.temperature
+            && !(0.0..=2.0).contains(&temp)
+        {
+            return Err(format!(
+                "Temperature must be between 0.0 and 2.0, got {}",
+                temp
+            ));
         }
 
         // Validate top_p
-        if let Some(top_p) = self.top_p {
-            if !(0.0..=1.0).contains(&top_p) {
-                return Err(format!("Top-p must be between 0.0 and 1.0, got {}", top_p));
-            }
+        if let Some(top_p) = self.top_p
+            && !(0.0..=1.0).contains(&top_p)
+        {
+            return Err(format!("Top-p must be between 0.0 and 1.0, got {}", top_p));
         }
 
         // Validate frequency_penalty
-        if let Some(fp) = self.frequency_penalty {
-            if !(-2.0..=2.0).contains(&fp) {
-                return Err(format!(
-                    "Frequency penalty must be between -2.0 and 2.0, got {}",
-                    fp
-                ));
-            }
+        if let Some(fp) = self.frequency_penalty
+            && !(-2.0..=2.0).contains(&fp)
+        {
+            return Err(format!(
+                "Frequency penalty must be between -2.0 and 2.0, got {}",
+                fp
+            ));
         }
 
         // Validate presence_penalty
-        if let Some(pp) = self.presence_penalty {
-            if !(-2.0..=2.0).contains(&pp) {
-                return Err(format!(
-                    "Presence penalty must be between -2.0 and 2.0, got {}",
-                    pp
-                ));
-            }
+        if let Some(pp) = self.presence_penalty
+            && !(-2.0..=2.0).contains(&pp)
+        {
+            return Err(format!(
+                "Presence penalty must be between -2.0 and 2.0, got {}",
+                pp
+            ));
         }
 
         // Validate max_tokens
-        if let Some(mt) = self.max_tokens {
-            if mt == 0 {
-                return Err("Max tokens must be greater than 0".to_string());
-            }
+        if let Some(mt) = self.max_tokens
+            && mt == 0
+        {
+            return Err("Max tokens must be greater than 0".to_string());
         }
 
         // Validate max_completion_tokens
-        if let Some(mct) = self.max_completion_tokens {
-            if mct == 0 {
-                return Err("Max completion tokens must be greater than 0".to_string());
-            }
+        if let Some(mct) = self.max_completion_tokens
+            && mct == 0
+        {
+            return Err("Max completion tokens must be greater than 0".to_string());
         }
 
         // Validate top_logprobs
-        if let Some(tlp) = self.top_logprobs {
-            if !(0..=20).contains(&tlp) {
-                return Err(format!(
-                    "Top logprobs must be between 0 and 20, got {}",
-                    tlp
-                ));
-            }
+        if let Some(tlp) = self.top_logprobs
+            && !(0..=20).contains(&tlp)
+        {
+            return Err(format!(
+                "Top logprobs must be between 0 and 20, got {}",
+                tlp
+            ));
         }
 
         // Validate n
-        if let Some(n) = self.n {
-            if n == 0 {
-                return Err("n must be greater than 0".to_string());
-            }
+        if let Some(n) = self.n
+            && n == 0
+        {
+            return Err("n must be greater than 0".to_string());
         }
 
         // Validate stop sequences
@@ -2857,16 +2857,30 @@ impl ChatStreamEvent {
             return Self::Chunk(chunk);
         }
 
-        if let Ok(billing) = serde_json::from_value::<RainyBillingStreamEvent>(value.clone()) {
-            if billing.plan_id.is_some()
+        if let Ok(billing) = serde_json::from_value::<RainyBillingStreamEvent>(value.clone())
+            && (billing.plan_id.is_some()
                 || billing.charged_credits.is_some()
-                || billing.usage.is_some()
-            {
-                return Self::Billing(billing);
-            }
+                || billing.usage.is_some())
+        {
+            return Self::Billing(billing);
         }
 
         Self::Raw(value)
+    }
+
+    /// Build a typed event from an SSE event name and JSON payload.
+    pub(crate) fn from_sse_event(event_name: Option<&str>, value: serde_json::Value) -> Self {
+        if event_name.is_some_and(|name| name.eq_ignore_ascii_case("rainy.billing"))
+            && let Ok(billing) =
+                serde_json::from_value::<RainyBillingStreamEvent>(value.clone())
+            && (billing.plan_id.is_some()
+                || billing.charged_credits.is_some()
+                || billing.usage.is_some())
+        {
+            return Self::Billing(billing);
+        }
+
+        Self::from_value(value)
     }
 }
 

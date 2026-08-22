@@ -1,7 +1,7 @@
 use rainy_sdk::{
+    RainyClient,
     models::{ResearchDepth, ResearchProvider},
     search::ResearchConfig,
-    RainyClient,
 };
 
 #[tokio::test]

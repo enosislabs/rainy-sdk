@@ -6,7 +6,7 @@
 //! - Error recovery strategies
 
 use rainy_sdk::{
-    retry_with_backoff, ChatCompletionRequest, ChatMessage, RainyClient, RainyError, RetryConfig,
+    ChatCompletionRequest, ChatMessage, RainyClient, RainyError, RetryConfig, retry_with_backoff,
 };
 use std::time::Duration;
 

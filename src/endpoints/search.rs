@@ -3,9 +3,9 @@
 //! This endpoint provides web research capabilities via the Rainy API v3 search API.
 
 use crate::{
+    RainyClient,
     error::{RainyError, Result},
     search::{DeepResearchResponse, ResearchConfig, SearchExtractResponse, SearchResponse},
-    RainyClient,
 };
 use serde_json::json;
 

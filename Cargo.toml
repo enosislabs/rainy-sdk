@@ -1,9 +1,9 @@
 [package]
 name = "rainy-sdk"
-version = "0.6.14"
-edition = "2021"
+version = "0.6.15"
+edition = "2024"
 authors = ["Enosis Labs <hello@enosislabs.com>"]
-description = "Official Rust SDK for Rainy API by Enosis Labs v0.6.14 - OpenAI/GPT-5 parity, native streaming events, and legacy static model cleanup"
+description = "Official Rust SDK for Rainy API by Enosis Labs v0.6.15 - OpenAI/GPT-5 parity, native streaming events, and legacy static model cleanup"
 license = "Apache-2.0"
 repository = "https://github.com/enosislabs/rainy-sdk"
 homepage = "https://github.com/enosislabs/rainy-sdk"
@@ -11,7 +11,7 @@ documentation = "https://docs.rs/rainy-sdk"
 readme = "README.md"
 keywords = ["ai", "api", "openai", "anthropic", "gemini"]
 categories = ["api-bindings", "asynchronous", "web-programming::http-client"]
-rust-version = "1.92.0"
+rust-version = "1.98.0"
 
 # Package metadata for better crates.io presentation
 [package.metadata.docs.rs]
@@ -35,25 +35,23 @@ include = [
 
 [dependencies]
 # Core dependencies
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.149"
-tokio = { version = "1.47", features = ["full"] }
-anyhow = "1.0.102"
-thiserror = "2.0.18"
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "http2", "rustls"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+tokio = { version = "1.53.1", default-features = false, features = ["time"] }
+thiserror = "2.0.20"
 url = "2.5.8"
-uuid = { version = "1.22.0", features = ["v4", "serde"], optional = true }
-chrono = { version = "0.4.41", features = ["serde"] }
-base64 = "0.22.1"
+uuid = { version = "1.24.1", features = ["v4", "serde"], optional = true }
+chrono = { version = "0.4.45", default-features = false, features = ["std", "serde"], optional = true }
 secrecy = { version = "0.10.3", features = ["serde"] }
 
 # Optional dependencies for advanced features
 governor = { version = "0.10.4", optional = true }
-tracing = { version = "0.1.41", optional = true }
-futures = "0.3.32"
+tracing = { version = "0.1.44", optional = true }
+futures = { version = "0.3.34", default-features = false, features = ["std"] }
 
 # Dependencies for retry logic with jitter
-rand = "0.10.0"
+rand = "0.10.2"
 
 # SSE parsing (keep for backward compatibility)
 eventsource-stream = "0.2.3"
@@ -63,22 +61,27 @@ default = ["rate-limiting", "tracing"]
 rate-limiting = ["governor"]
 tracing = ["dep:tracing"]
 cache = []
-legacy = ["dep:uuid"]  # Legacy v2 endpoints/types (opt-in)
+legacy = ["dep:uuid", "dep:chrono"]  # Legacy v2 endpoints/types (opt-in)
 
 # Development dependencies
 [dev-dependencies]
 mockito = "1.7.2"
-tokio-test = "0.4.5"
-env_logger = "0.11.10"
+env_logger = "0.11.11"
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "time"] }
+criterion = { version = "0.8.2", features = ["html_reports"] }
+
+[[bench]]
+name = "client_benchmark"
+harness = false
 
 # Production optimizations
 [profile.release]
 # Enable all optimizations
 opt-level = 3
 # Enable link-time optimization for smaller and faster code
-lto = true
+lto = "thin"
 # Reduce number of codegen units for better optimization
-codegen-units = 1
+codegen-units = 16
 # Remove debug symbols in release builds
 debug = false
 # Panic = abort reduces code size and improves performance
@@ -103,7 +106,11 @@ debug = true
 [profile.bench]
 opt-level = 3
 debug = false
-lto = true
+
+[profile.release-perf]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
 
 # Optimized dependencies
 [profile.dev.package."*"]
