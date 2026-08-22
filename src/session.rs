@@ -275,7 +275,7 @@ impl RainySessionClient {
         );
 
         let client = Client::builder()
-            .use_rustls_tls()
+            .tls_backend_rustls()
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
             .timeout(std::time::Duration::from_secs(config.timeout_seconds))
             .default_headers(headers)
@@ -338,34 +338,36 @@ impl RainySessionClient {
             .get("x-request-id")
             .and_then(|v| v.to_str().ok())
             .map(ToOwned::to_owned);
-        let text = response.text().await.unwrap_or_default();
-
         if status.is_success() {
-            serde_json::from_str::<T>(&text).map_err(|e| RainyError::Serialization {
+            let body = response.bytes().await?;
+            serde_json::from_slice::<T>(&body).map_err(|e| RainyError::Serialization {
                 message: format!("Failed to parse response: {e}"),
                 source_error: Some(e.to_string()),
             })
-        } else if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&text) {
-            let error = error_response.error;
-            Err(RainyError::Api {
-                code: error.code,
-                message: error.message,
-                status_code: status.as_u16(),
-                retryable: status.is_server_error(),
-                request_id,
-            })
         } else {
-            Err(RainyError::Api {
-                code: status.canonical_reason().unwrap_or("UNKNOWN").to_string(),
-                message: if text.is_empty() {
-                    format!("HTTP {}", status.as_u16())
-                } else {
-                    text
-                },
-                status_code: status.as_u16(),
-                retryable: status.is_server_error(),
-                request_id,
-            })
+            let text = response.text().await.unwrap_or_default();
+            if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&text) {
+                let error = error_response.error;
+                Err(RainyError::Api {
+                    code: error.code,
+                    message: error.message,
+                    status_code: status.as_u16(),
+                    retryable: status.is_server_error(),
+                    request_id,
+                })
+            } else {
+                Err(RainyError::Api {
+                    code: status.canonical_reason().unwrap_or("UNKNOWN").to_string(),
+                    message: if text.is_empty() {
+                        format!("HTTP {}", status.as_u16())
+                    } else {
+                        text
+                    },
+                    status_code: status.as_u16(),
+                    retryable: status.is_server_error(),
+                    request_id,
+                })
+            }
         }
     }
 
@@ -394,7 +396,11 @@ impl RainySessionClient {
             request = request.json(body);
         }
 
-        let response = request.send().await?;
+        let response = request.send().await.map_err(|e| RainyError::Network {
+            message: format!("Failed to send request: {e}"),
+            retryable: true,
+            source_error: Some(e.to_string()),
+        })?;
         self.parse_response(response).await
     }
 

@@ -29,7 +29,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: 1.98.0
           components: rustfmt, clippy
 
       - name: Cache dependencies
@@ -84,7 +84,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        rust: [stable]
+        rust: [1.98.0]
 
     steps:
       - name: Checkout repository
@@ -117,7 +117,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: 1.98.0
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
@@ -138,7 +138,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: 1.98.0
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
@@ -164,7 +164,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: 1.98.0
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2

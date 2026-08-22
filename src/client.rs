@@ -185,7 +185,7 @@ impl RainyClient {
         self
     }
 
-    async fn wait_for_slot(&self) {
+    pub(crate) async fn wait_for_slot(&self) {
         #[cfg(feature = "rate-limiting")]
         if let Some(ref limiter) = self.rate_limiter {
             limiter.until_ready().await;
@@ -244,7 +244,7 @@ impl RainyClient {
         let url = self.api_v1_url("/models");
 
         let operation = || async {
-            let response = self.client.get(&url).send().await?;
+            let response = self.send_request(self.client.get(&url)).await?;
             let envelope: Envelope = self.handle_response(response).await?;
 
             let mut providers = std::collections::HashMap::<String, Vec<String>>::new();
@@ -268,11 +268,7 @@ impl RainyClient {
             })
         };
 
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
+        self.execute_with_retry(operation).await
     }
 
     /// Creates a chat completion based on the provided request.
@@ -289,16 +285,13 @@ impl RainyClient {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<(ChatCompletionResponse, RequestMetadata)> {
-        #[cfg(feature = "rate-limiting")]
-        if let Some(ref limiter) = self.rate_limiter {
-            limiter.until_ready().await;
-        }
-
         let url = self.api_v1_url("/chat/completions");
         let start_time = Instant::now();
 
         let operation = || async {
-            let response = self.client.post(&url).json(&request).send().await?;
+            let response = self
+                .send_request(self.client.post(&url).json(&request))
+                .await?;
 
             let metadata = self.extract_metadata(&response, start_time);
             let chat_response: ChatCompletionResponse = self.handle_response(response).await?;
@@ -306,11 +299,7 @@ impl RainyClient {
             Ok((chat_response, metadata))
         };
 
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
+        self.execute_with_retry(operation).await
     }
 
     /// Creates a chat completion in envelope mode (`X-Rainy-Response-Mode: envelope`).
@@ -318,21 +307,17 @@ impl RainyClient {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<(RainyEnvelope<ChatCompletionResponse>, RequestMetadata)> {
-        #[cfg(feature = "rate-limiting")]
-        if let Some(ref limiter) = self.rate_limiter {
-            limiter.until_ready().await;
-        }
-
         let url = self.api_v1_url("/chat/completions");
         let start_time = Instant::now();
 
         let operation = || async {
             let response = self
-                .client
-                .post(&url)
-                .header("X-Rainy-Response-Mode", "envelope")
-                .json(&request)
-                .send()
+                .send_request(
+                    self.client
+                        .post(&url)
+                        .header("X-Rainy-Response-Mode", "envelope")
+                        .json(&request),
+                )
                 .await?;
 
             let metadata = self.extract_metadata(&response, start_time);
@@ -341,11 +326,7 @@ impl RainyClient {
             Ok((chat_response, metadata))
         };
 
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
+        self.execute_with_retry(operation).await
     }
 
     /// Creates an OpenAI-compatible chat completion in envelope mode.
@@ -353,21 +334,17 @@ impl RainyClient {
         &self,
         request: OpenAIChatCompletionRequest,
     ) -> Result<(RainyEnvelope<OpenAIChatCompletionResponse>, RequestMetadata)> {
-        #[cfg(feature = "rate-limiting")]
-        if let Some(ref limiter) = self.rate_limiter {
-            limiter.until_ready().await;
-        }
-
         let url = self.api_v1_url("/chat/completions");
         let start_time = Instant::now();
 
         let operation = || async {
             let response = self
-                .client
-                .post(&url)
-                .header("X-Rainy-Response-Mode", "envelope")
-                .json(&request)
-                .send()
+                .send_request(
+                    self.client
+                        .post(&url)
+                        .header("X-Rainy-Response-Mode", "envelope")
+                        .json(&request),
+                )
                 .await?;
 
             let metadata = self.extract_metadata(&response, start_time);
@@ -376,11 +353,7 @@ impl RainyClient {
             Ok((chat_response, metadata))
         };
 
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
+        self.execute_with_retry(operation).await
     }
 
     /// Creates a streaming chat completion based on the provided request.
@@ -399,11 +372,6 @@ impl RainyClient {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionStreamResponse>> + Send>>> {
         // Ensure stream is set to true
         request.stream = Some(true);
-
-        #[cfg(feature = "rate-limiting")]
-        if let Some(ref limiter) = self.rate_limiter {
-            limiter.until_ready().await;
-        }
 
         let url = self.api_v1_url("/chat/completions");
 
@@ -436,11 +404,7 @@ impl RainyClient {
                 >)
         };
 
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
+        self.execute_with_retry(operation).await
     }
 
     /// Creates a Responses API completion (`POST /api/v1/responses`) in raw mode.
@@ -448,26 +412,19 @@ impl RainyClient {
         &self,
         request: ResponsesRequest,
     ) -> Result<(ResponsesApiResponse, RequestMetadata)> {
-        #[cfg(feature = "rate-limiting")]
-        if let Some(ref limiter) = self.rate_limiter {
-            limiter.until_ready().await;
-        }
-
         let url = self.api_v1_url("/responses");
         let start_time = Instant::now();
 
         let operation = || async {
-            let response = self.client.post(&url).json(&request).send().await?;
+            let response = self
+                .send_request(self.client.post(&url).json(&request))
+                .await?;
             let metadata = self.extract_metadata(&response, start_time);
             let api_response: ResponsesApiResponse = self.handle_response(response).await?;
             Ok((api_response, metadata))
         };
 
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
+        self.execute_with_retry(operation).await
     }
 
     /// Creates a Responses API completion in envelope mode (`X-Rainy-Response-Mode: envelope`).
@@ -475,21 +432,17 @@ impl RainyClient {
         &self,
         request: ResponsesRequest,
     ) -> Result<(RainyEnvelope<ResponsesApiResponse>, RequestMetadata)> {
-        #[cfg(feature = "rate-limiting")]
-        if let Some(ref limiter) = self.rate_limiter {
-            limiter.until_ready().await;
-        }
-
         let url = self.api_v1_url("/responses");
         let start_time = Instant::now();
 
         let operation = || async {
             let response = self
-                .client
-                .post(&url)
-                .header("X-Rainy-Response-Mode", "envelope")
-                .json(&request)
-                .send()
+                .send_request(
+                    self.client
+                        .post(&url)
+                        .header("X-Rainy-Response-Mode", "envelope")
+                        .json(&request),
+                )
                 .await?;
             let metadata = self.extract_metadata(&response, start_time);
             let api_response: RainyEnvelope<ResponsesApiResponse> =
@@ -497,11 +450,7 @@ impl RainyClient {
             Ok((api_response, metadata))
         };
 
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
+        self.execute_with_retry(operation).await
     }
 
     /// Creates a streaming Responses API completion and returns SSE events.
@@ -511,34 +460,17 @@ impl RainyClient {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ResponsesStreamEvent>> + Send>>> {
         request.stream = Some(true);
 
-        #[cfg(feature = "rate-limiting")]
-        if let Some(ref limiter) = self.rate_limiter {
-            limiter.until_ready().await;
-        }
-
         let url = self.api_v1_url("/responses");
 
         let operation = || async {
             let response = self
-                .client
-                .post(&url)
-                .json(&request)
-                .send()
-                .await
-                .map_err(|e| RainyError::Network {
-                    message: format!("Failed to send request: {}", e),
-                    retryable: true,
-                    source_error: Some(e.to_string()),
-                })?;
+                .send_request(self.client.post(&url).json(&request))
+                .await?;
 
             self.handle_stream_response(response).await
         };
 
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
+        self.execute_with_retry(operation).await
     }
 
     /// Creates a chat completion stream returning typed events (OpenAI chunks + Rainy native events).
@@ -548,33 +480,16 @@ impl RainyClient {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatStreamEvent>> + Send>>> {
         request.stream = Some(true);
 
-        #[cfg(feature = "rate-limiting")]
-        if let Some(ref limiter) = self.rate_limiter {
-            limiter.until_ready().await;
-        }
-
         let url = self.api_v1_url("/chat/completions");
         let operation = || async {
             let response = self
-                .client
-                .post(&url)
-                .json(&request)
-                .send()
-                .await
-                .map_err(|e| RainyError::Network {
-                    message: format!("Failed to send request: {}", e),
-                    retryable: true,
-                    source_error: Some(e.to_string()),
-                })?;
+                .send_request(self.client.post(&url).json(&request))
+                .await?;
 
             self.handle_chat_stream_response(response).await
         };
 
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
+        self.execute_with_retry(operation).await
     }
 
     /// Retrieves `/api/v1/models/catalog` entries including `rainy_capabilities` metadata.
@@ -590,16 +505,12 @@ impl RainyClient {
 
         let url = self.api_v1_url("/models/catalog");
         let operation = || async {
-            let response = self.client.get(&url).send().await?;
+            let response = self.send_request(self.client.get(&url)).await?;
             let envelope: Envelope = self.handle_response(response).await?;
             Ok(envelope.data.data)
         };
 
-        if self.auth_config.enable_retry {
-            retry_with_backoff(&self.retry_config, operation).await
-        } else {
-            operation().await
-        }
+        self.execute_with_retry(operation).await
     }
 
     /// Retrieves catalog and filters/sorts models using SDK selector criteria.
@@ -659,8 +570,8 @@ impl RainyClient {
         T: serde::de::DeserializeOwned,
     {
         let status = response.status();
-        let headers = response.headers().clone();
-        let request_id = headers
+        let request_id = response
+            .headers()
             .get("x-request-id")
             .and_then(|v| v.to_str().ok())
             .map(String::from);
@@ -754,8 +665,13 @@ impl RainyClient {
                             return None;
                         }
 
+                        let event_name = event.event.trim();
+                        let event_name = (!event_name.is_empty()).then_some(event_name);
+
                         match serde_json::from_str::<serde_json::Value>(payload) {
-                            Ok(value) => Some(Ok(ChatStreamEvent::from_value(value))),
+                            Ok(value) => {
+                                Some(Ok(ChatStreamEvent::from_sse_event(event_name, value)))
+                            }
                             Err(e) => Some(Err(RainyError::Serialization {
                                 message: format!("Failed to parse stream chunk: {}", e),
                                 source_error: Some(e.to_string()),
@@ -965,13 +881,6 @@ impl RainyClient {
         &self.auth_config.base_url
     }
 
-    /// Returns a reference to the underlying `reqwest::Client`.
-    ///
-    /// This is intended for internal use by the endpoint modules.
-    pub(crate) fn http_client(&self) -> &Client {
-        &self.client
-    }
-
     /// Retrieves the list of available models from the API.
     ///
     /// This method returns information about all models that are currently available
@@ -1011,19 +920,14 @@ impl RainyClient {
         endpoint: &str,
         body: Option<serde_json::Value>,
     ) -> Result<T> {
-        #[cfg(feature = "rate-limiting")]
-        if let Some(ref limiter) = self.rate_limiter {
-            limiter.until_ready().await;
-        }
-
-        let url = self.api_v1_url(endpoint);
-        let mut request = self.client.request(method, &url);
+        self.wait_for_slot().await;
+        let mut request = self.api_request(method, endpoint);
 
         if let Some(body) = body {
             request = request.json(&body);
         }
 
-        let response = request.send().await?;
+        let response = self.send_request(request).await?;
         self.handle_response(response).await
     }
 }

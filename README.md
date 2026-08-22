@@ -33,7 +33,7 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 rainy-sdk = "0.6.15"
-tokio = { version = "1.53", features = ["full"] }
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
 ```
 
 Or installation with cargo:

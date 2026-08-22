@@ -16,7 +16,7 @@ Thank you for your interest in contributing to the Rainy SDK! We welcome contrib
 
 ### Prerequisites
 
-- **Rust**: Install the latest stable version from [rustup.rs](https://rustup.rs/)
+- **Rust/Cargo**: Install the pinned Rust 1.98.0 toolchain from [rustup.rs](https://rustup.rs/)
 - **Git**: Version control system
 - **Optional**: IDE with Rust support (VS Code with rust-analyzer, CLion, etc.)
 

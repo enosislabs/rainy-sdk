@@ -2003,13 +2003,10 @@ impl ChatCompletionRequest {
             }
 
             match level {
-                ThinkingLevel::Minimal | ThinkingLevel::Medium => {
-                    if is_gemini_3_pro {
-                        return Err(
-                            "Gemini 3 Pro only supports 'low' and 'high' thinking levels"
-                                .to_string(),
-                        );
-                    }
+                ThinkingLevel::Minimal | ThinkingLevel::Medium if is_gemini_3_pro => {
+                    return Err(
+                        "Gemini 3 Pro only supports 'low' and 'high' thinking levels".to_string(),
+                    );
                 }
                 _ => {}
             }
@@ -2869,10 +2866,9 @@ impl ChatStreamEvent {
     }
 
     /// Build a typed event from an SSE event name and JSON payload.
-    pub(crate) fn from_sse_event(event_name: Option<&str>, value: serde_json::Value) -> Self {
+    pub fn from_sse_event(event_name: Option<&str>, value: serde_json::Value) -> Self {
         if event_name.is_some_and(|name| name.eq_ignore_ascii_case("rainy.billing"))
-            && let Ok(billing) =
-                serde_json::from_value::<RainyBillingStreamEvent>(value.clone())
+            && let Ok(billing) = serde_json::from_value::<RainyBillingStreamEvent>(value.clone())
             && (billing.plan_id.is_some()
                 || billing.charged_credits.is_some()
                 || billing.usage.is_some())

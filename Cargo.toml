@@ -27,6 +27,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 # Include specific files for packaging
 include = [
     "src/**/*",
+    "benches/**/*",
     "Cargo.toml",
     "README.md",
     "LICENSE",
@@ -58,7 +59,7 @@ eventsource-stream = "0.2.3"
 
 [features]
 default = ["rate-limiting", "tracing"]
-rate-limiting = ["governor"]
+rate-limiting = ["dep:governor"]
 tracing = ["dep:tracing"]
 cache = []
 legacy = ["dep:uuid", "dep:chrono"]  # Legacy v2 endpoints/types (opt-in)

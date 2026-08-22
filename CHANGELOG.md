@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.15] - 2026-08-21
+
+### ⚡ Performance and Dependency Refresh
+
+- Pinned the SDK and CI toolchain to Rust/Cargo 1.98.0 with Edition 2024.
+- Migrated the HTTP transport to Reqwest 0.13 with explicit Rustls and HTTP/2 support.
+- Reduced default dependency features and kept legacy Chrono/UUID support opt-in.
+- Added native `rainy.billing` SSE classification while preserving OpenAI-compatible stream events.
+- Added tracked client, serialization, and SSE parsing benchmarks with balanced and maximum-performance release profiles.
+
+### ✅ Validation
+
+- Restored reasoning, thinking-level, token-count, and billing-event validation paths removed during the release preparation changes.
+- Updated CI, documentation, and release checks for the Rust 1.98 toolchain.
+
 ## [0.6.14] - 2026-04-08
 
 ### ⚠️ Breaking Change: Cowork Deprecated and Removed

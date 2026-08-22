@@ -149,13 +149,13 @@ impl RainyClient {
         let mut request_with_stream = request;
         request_with_stream.stream = Some(true);
 
-        let url = self.api_v1_url("/chat/completions");
+        self.wait_for_slot().await;
 
         let response = self
-            .http_client()
-            .post(&url)
-            .json(&request_with_stream)
-            .send()
+            .send_request(
+                self.api_request(reqwest::Method::POST, "/chat/completions")
+                    .json(&request_with_stream),
+            )
             .await?;
 
         let events = self.handle_chat_stream_response(response).await?;
@@ -185,12 +185,12 @@ impl RainyClient {
         let mut request_with_stream = request;
         request_with_stream.stream = Some(true);
 
-        let url = self.api_v1_url("/chat/completions");
+        self.wait_for_slot().await;
         let response = self
-            .http_client()
-            .post(&url)
-            .json(&request_with_stream)
-            .send()
+            .send_request(
+                self.api_request(reqwest::Method::POST, "/chat/completions")
+                    .json(&request_with_stream),
+            )
             .await?;
 
         self.handle_chat_stream_response(response).await

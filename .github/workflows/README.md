@@ -9,7 +9,7 @@ This directory contains GitHub Actions workflows for the Rainy SDK project.
 **Triggers:** Push/PR to main/develop branches
 
 - **Multi-platform testing:** Ubuntu, Windows, macOS
-- **Multi-Rust version testing:** Stable, beta, nightly, MSRV (1.70.0)
+- **Rust toolchain:** Pinned Rust/Cargo 1.98.0 across build and release workflows
 - **Quality checks:** Format, clippy, documentation
 - **Coverage:** Code coverage reporting with Codecov
 
@@ -29,13 +29,13 @@ This directory contains GitHub Actions workflows for the Rainy SDK project.
 - **Automated issues:** Creates GitHub issues for vulnerabilities
 - **Report generation:** Detailed security reports
 
-### 📏 MSRV (`msrv.yml`)
+### 📏 Rust 1.98 Compatibility (`msrv.yml`)
 
 **Triggers:** Push/PR to main, manual trigger
 
-- **Version compatibility:** Tests against minimum supported Rust version
-- **Automated updates:** Can update MSRV badges
-- **Compatibility reports:** Detailed MSRV compatibility reports
+- **Version compatibility:** Tests against the pinned Rust 1.98 toolchain
+- **Manual overrides:** Supports compatibility checks against a selected toolchain
+- **Compatibility reports:** Detailed Rust toolchain reports
 
 ### 📦 Dependencies (`dependencies.yml`)
 
@@ -119,8 +119,8 @@ Add these badges to your README.md:
    - Check cargo-audit documentation for overrides
 
 4. **MSRV Compatibility**
-   - Update MSRV in workflow file if needed
-   - Check dependency MSRV requirements
+   - Update the pinned Rust version in `rust-toolchain.toml` and workflows together
+   - Check dependency Rust-version requirements
 
 5. **Sign-off Verification**
    - Contributors must use `git commit -s`

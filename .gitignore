@@ -54,8 +54,7 @@ scripts/local/
 # Cargo registry cache (optional - speeds up CI)
 .cargo/
 
-# Rust toolchain override
-rust-toolchain.toml
+# Rust toolchain override is checked in so local and CI builds use the same version.
 
 .kilocode
 

@@ -30,10 +30,9 @@ impl RainyClient {
             timestamp: String,
         }
 
+        self.wait_for_slot().await;
         let response = self
-            .http_client()
-            .get(self.root_url("/health"))
-            .send()
+            .send_request(self.root_request(reqwest::Method::GET, "/health"))
             .await?;
         let payload: RootHealthResponse = self.handle_response(response).await?;
 
@@ -87,10 +86,9 @@ impl RainyClient {
             dependencies: DependencyFlags,
         }
 
+        self.wait_for_slot().await;
         let response = self
-            .http_client()
-            .get(self.root_url("/health/dependencies"))
-            .send()
+            .send_request(self.root_request(reqwest::Method::GET, "/health/dependencies"))
             .await?;
         let payload: DependenciesHealthResponse = self.handle_response(response).await?;
 

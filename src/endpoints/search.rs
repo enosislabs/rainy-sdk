@@ -4,7 +4,7 @@
 
 use crate::{
     RainyClient,
-    error::{RainyError, Result},
+    error::Result,
     search::{DeepResearchResponse, ResearchConfig, SearchExtractResponse, SearchResponse},
 };
 use serde_json::json;
@@ -112,7 +112,6 @@ impl RainyClient {
             data: SearchResponse,
         }
 
-        let url = self.api_v1_url("/search");
         let search_depth = match depth.unwrap_or(crate::models::ResearchDepth::Basic) {
             crate::models::ResearchDepth::Advanced => "advanced",
             _ => "basic",
@@ -124,17 +123,13 @@ impl RainyClient {
             "maxResults": max_results.unwrap_or(10).clamp(1, 20),
         });
 
+        self.wait_for_slot().await;
         let response = self
-            .http_client()
-            .post(&url)
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| RainyError::Network {
-                message: e.to_string(),
-                retryable: true,
-                source_error: Some(e.to_string()),
-            })?;
+            .send_request(
+                self.api_request(reqwest::Method::POST, "/search")
+                    .json(&request),
+            )
+            .await?;
 
         let envelope: SearchEnvelope = self.handle_response(response).await?;
         Ok(envelope.data)
@@ -147,22 +142,17 @@ impl RainyClient {
             data: SearchExtractResponse,
         }
 
-        let url = self.api_v1_url("/search/extract");
         let request = json!({
             "urls": urls,
         });
 
+        self.wait_for_slot().await;
         let response = self
-            .http_client()
-            .post(&url)
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| RainyError::Network {
-                message: e.to_string(),
-                retryable: true,
-                source_error: Some(e.to_string()),
-            })?;
+            .send_request(
+                self.api_request(reqwest::Method::POST, "/search/extract")
+                    .json(&request),
+            )
+            .await?;
 
         let envelope: ExtractEnvelope = self.handle_response(response).await?;
         Ok(envelope.data)

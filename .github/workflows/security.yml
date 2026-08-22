@@ -23,7 +23,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: stable
+        toolchain: 1.98.0
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2

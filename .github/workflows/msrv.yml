@@ -1,4 +1,4 @@
-name: MSRV
+name: Rust 1.98 Compatibility
 
 on:
   push:
@@ -8,16 +8,16 @@ on:
   workflow_dispatch:
     inputs:
       msrv:
-        description: 'Minimum Supported Rust Version to test against'
+        description: 'Rust toolchain to test against'
         required: false
-        default: '1.92.0'
+        default: '1.98.0'
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   msrv:
-    name: Check MSRV
+    name: Check Rust 1.98
     runs-on: ubuntu-latest
 
     steps:
@@ -27,32 +27,32 @@ jobs:
     - name: Install specified Rust version
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: ${{ github.event.inputs.msrv || '1.92.0' }}
+        toolchain: ${{ github.event.inputs.msrv || '1.98.0' }}
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
 
-    - name: Check if project builds with MSRV
-      run: cargo check --all-targets
+    - name: Check if project builds with selected Rust toolchain
+      run: cargo check --all-targets --all-features
 
-    - name: Run tests with MSRV
-      run: cargo test --lib
+    - name: Run tests with selected Rust toolchain
+      run: cargo test --all-features --lib
 
     - name: Verify Cargo.lock compatibility
       run: |
-        # Check that all dependencies support the MSRV
+        # Check that the lockfile is reproducible with the selected toolchain.
         cargo update --locked
 
     - name: Generate MSRV report
       run: |
-        echo "## MSRV Compatibility Report" > msrv_report.md
+        echo "## Rust Toolchain Compatibility Report" > msrv_report.md
         echo "" >> msrv_report.md
-        echo "**Tested Rust Version:** ${{ github.event.inputs.msrv || '1.92.0' }}" >> msrv_report.md
+        echo "**Tested Rust Version:** ${{ github.event.inputs.msrv || '1.98.0' }}" >> msrv_report.md
         echo "" >> msrv_report.md
         echo "### Build Status: ✅ PASSED" >> msrv_report.md
         echo "### Test Status: ✅ PASSED" >> msrv_report.md
         echo "" >> msrv_report.md
-        echo "**Note:** This confirms the project is compatible with Rust ${{ github.event.inputs.msrv || '1.92.0' }} or later." >> msrv_report.md
+        echo "**Note:** The SDK is pinned to Rust ${{ github.event.inputs.msrv || '1.98.0' }}." >> msrv_report.md
 
     - name: Upload MSRV report
       uses: actions/upload-artifact@v4
@@ -61,7 +61,7 @@ jobs:
         path: msrv_report.md
 
   update-msrv:
-    name: Update MSRV Badge
+    name: Report Rust Toolchain Badge
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     needs: msrv
@@ -74,7 +74,7 @@ jobs:
 
     - name: Update README with MSRV badge
       run: |
-        MSRV="${{ github.event.inputs.msrv || '1.92.0' }}"
+        MSRV="${{ github.event.inputs.msrv || '1.98.0' }}"
         # This would update a badge in README.md if it exists
         # For now, just output the badge URL
         echo "MSRV Badge URL: https://img.shields.io/badge/msrv-${MSRV//./_}-orange"

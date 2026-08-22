@@ -250,3 +250,23 @@ fn test_chat_stream_event_parsing_chunk_and_billing() {
         other => panic!("expected billing event, got {other:?}"),
     }
 }
+
+#[test]
+fn test_chat_stream_event_parsing_honors_native_billing_event_name() {
+    let billing_payload = serde_json::json!({
+        "usage": {
+            "prompt_tokens": 12,
+            "completion_tokens": 7
+        }
+    });
+
+    let event = ChatStreamEvent::from_sse_event(Some("rainy.billing"), billing_payload);
+
+    match event {
+        ChatStreamEvent::Billing(billing) => {
+            assert_eq!(billing.plan_id, None);
+            assert_eq!(billing.usage.unwrap().prompt_tokens, Some(12));
+        }
+        other => panic!("expected native billing event, got {other:?}"),
+    }
+}

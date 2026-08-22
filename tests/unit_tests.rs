@@ -209,6 +209,15 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_openai_validation_rejects_zero_choices() {
+        let result = ChatCompletionRequest::new("gpt-5", vec![])
+            .with_n(0)
+            .validate_openai_compatibility();
+
+        assert_eq!(result, Err("n must be greater than 0".to_string()));
+    }
+
     #[cfg(feature = "legacy")]
     #[test]
     fn test_model_constants() {
