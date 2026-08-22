@@ -188,7 +188,7 @@ jobs:
         # Create src/main.rs with the README example
         mkdir -p src
         cat > src/main.rs << 'EOF'
-        use rainy_sdk::{RainyClient, ChatCompletionRequest, ChatMessage, ChatRole};
+        use rainy_sdk::{RainyClient, ChatCompletionRequest, ChatMessage, MessageRole};
         use std::error::Error;
 
         // This function contains the example from README
@@ -200,7 +200,7 @@ jobs:
             // Create a simple chat completion
             let messages = vec![
                 ChatMessage {
-                    role: ChatRole::User,
+                    role: MessageRole::User,
                     content: "Hello! Tell me a joke.".to_string(),
                 }
             ];

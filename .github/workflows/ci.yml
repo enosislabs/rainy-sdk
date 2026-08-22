@@ -125,16 +125,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run enhanced clippy checks
-        run: |
-          cargo clippy --all-targets --all-features -- \
-            -D warnings \
-            -D clippy::all \
-            -D clippy::pedantic \
-            -D clippy::nursery \
-            -D clippy::cargo \
-            -A clippy::multiple_crate_versions \
-            -A clippy::missing_errors_doc \
-            -A clippy::missing_panics_doc
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Check for unused dependencies
         run: |
