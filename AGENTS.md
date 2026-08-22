@@ -1,82 +1,66 @@
 # Repository Guidelines
 
-## Project Structure & Architecture
+## Project Shape and Boundaries
 
-This repository is a single Rust library crate, `rainy-sdk`. Public exports are assembled in `src/lib.rs`. The core transport layer lives in `src/client.rs` and `src/session.rs`:
+`rainy-sdk` is a single Rust library crate using edition 2024 and the pinned Rust 1.98.0 toolchain in [`rust-toolchain.toml`](rust-toolchain.toml). Public exports are assembled in [`src/lib.rs`](src/lib.rs).
 
-- `RainyClient`: API-key client for model, chat, responses, search, and health endpoints.
-- `RainySessionClient`: JWT/session client for dashboard-style endpoints such as auth, orgs, usage, and keys.
+- [`src/client.rs`](src/client.rs): `RainyClient`, API-key inference, shared HTTP/SSE transport, models, chat, responses, search, and health.
+- [`src/session.rs`](src/session.rs): `RainySessionClient`, JWT authentication, account/org, usage, and key management.
+- [`src/models.rs`](src/models.rs): public request/response and compatibility types.
+- [`src/auth.rs`](src/auth.rs), [`src/error.rs`](src/error.rs), [`src/retry.rs`](src/retry.rs): API-key validation, error taxonomy, and backoff.
+- [`src/search.rs`](src/search.rs): search/research types and compatibility mapping.
+- [`src/endpoints/`](src/endpoints/): endpoint-specific extensions, including chat, search, health, and legacy account helpers.
 
-Domain types live in `src/models.rs`, authentication setup in `src/auth.rs`, retry behavior in `src/retry.rs`, and search/research types in `src/search.rs`. Endpoint-specific request methods are split under `src/endpoints/` (`chat.rs`, `search.rs`, `health.rs`, `keys.rs`, `usage.rs`, and `user.rs`).
+Keep the client split intact: use `RainyClient` for API-key runtime operations and `RainySessionClient` for JWT/dashboard operations. Do not add new account, usage, or key flows to the API-key client. See [`MIGRATION.md`](MIGRATION.md) for the v2-to-v3 mapping.
 
-Routing is centralized through helper methods on `RainyClient`:
+Route through existing helpers rather than hardcoding URLs:
 
-- `root_url(...)` targets host-level routes such as `/health`
-- `api_v1_url(...)` targets versioned API routes such as `/api/v1/chat/completions`
+- `root_url(...)` / `root_request(...)` for host-level routes such as `/health`.
+- `api_v1_url(...)` / `api_request(...)` for `/api/v1/*` routes.
+- Session routes independently use the `/api/v1/*` namespace.
 
-Keep new endpoint methods consistent with that split instead of hardcoding URLs in multiple places.
+## Build and Validation
 
-## Build, Test, and Dev Commands
+Run focused tests while iterating, then the relevant full checks before finishing:
 
-- `cargo build`: compile the crate with default features.
-- `cargo build --all-features`: verify optional surfaces such as `legacy` endpoints.
-- `cargo test`: run unit, integration, and doc tests.
-- `cargo test --test session_client_integration_test -- --nocapture`: run one suite with visible output.
-- `cargo fmt --check`: enforce formatting.
-- `cargo clippy --all-targets --all-features`: catch lint and API consistency issues.
-- `cargo doc --no-deps`: build public docs locally.
+- `cargo build` and `cargo test`
+- `cargo build --all-features` and `cargo test --all-features`
+- `cargo fmt --all -- --check`
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo doc --all-features --no-deps`
+- For public API changes, `cargo test --doc --all-features`
 
-Useful env vars for tests:
+CI also checks missing docs and broken intra-doc links, unused dependencies, security audit, and release builds. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and [`.github/workflows/README.md`](.github/workflows/README.md) for the authoritative workflow details.
 
-- `RAINY_TEST_API_KEY`: test API key for client integration flows.
-- `RAINY_TEST_BASE_URL`: override base URL, usually `http://localhost:3000`.
+Useful test configuration:
 
-## Coding Style & Naming Conventions
+- `RAINY_TEST_API_KEY`: API key for live/integration flows.
+- `RAINY_TEST_BASE_URL`: test server override, commonly `http://localhost:3000`.
+- Examples may also require `RAINY_EMAIL` and `RAINY_PASSWORD`.
 
-Use Rust 2021 idioms and `rustfmt` defaults with 4-space indentation. Follow these naming rules:
+The contributor guide references `.env.example`, but that file is not currently present. Never commit `.env`, credentials, API keys, refresh tokens, or session tokens.
 
-- modules, functions, and tests: `snake_case`
-- structs, enums, and traits: `PascalCase`
-- constants: `SCREAMING_SNAKE_CASE`
+## Implementation Conventions
 
-Prefer builder-style APIs for request types, matching existing patterns like `ChatCompletionRequest::new(...).with_temperature(...)`. Public methods should return `Result<T, RainyError>` and keep serialization details encapsulated inside the client layer. Document public API surfaces with `///` doc comments and add `rust,no_run` examples where the behavior is user-facing.
+- Use standard Rust naming: `snake_case` for modules/functions/tests, `PascalCase` for types, and `SCREAMING_SNAKE_CASE` for constants.
+- Prefer consuming builder APIs such as `ChatCompletionRequest::new(...).with_temperature(...)`.
+- Public fallible methods return `Result<T, RainyError>` and public APIs need `///` documentation; use `rust,no_run` examples for user-facing async APIs.
+- Preserve serde aliases, `skip_serializing_if`, flattened forward-compatible fields, and provider-specific JSON shapes when extending models.
+- Keep API keys in `secrecy::SecretString`; never log or expose secrets.
+- Use Tokio async tests and `mockito` for HTTP mocking. Name tests after observable behavior.
+- Streaming methods force `stream = true`; retries cover only the initial connection, not partial streams. Preserve typed chunk, billing, and raw SSE event handling.
+- The `legacy` feature is opt-in and gates legacy types/model constants and old key/usage/user helpers. When changing feature-sensitive code, validate both default and `--no-default-features` builds where practical.
+- The crate metadata says edition 2024; do not “fix” the existing `.rustfmt.toml` edition setting without checking toolchain and CI implications.
 
-## Testing Guidelines
+When changing an endpoint, cover successful canonical/alias deserialization, request serialization, an error or fallback path, and feature-gated behavior where applicable. Add focused tests near the matching suite in [`tests/`](tests/): unit behavior, OpenAI chat/SSE, Responses/catalog, session auth, or search/research.
 
-The repository uses:
+## Documentation and Contributions
 
-- inline/unit coverage in `tests/unit_tests.rs`
-- integration coverage in `tests/*.rs`
-- async tests with `#[tokio::test]`
-- HTTP mocking with `mockito`
+Link to existing documentation instead of duplicating it:
 
-Name tests after observable behavior, for example `session_org_and_usage_calls_send_bearer_token`. When adding or changing endpoints, cover:
+- [`README.md`](README.md): setup, API examples, features, and architecture overview.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): development workflow, testing, DCO, and pull requests.
+- [`MIGRATION.md`](MIGRATION.md): client split and v2-to-v3 migration.
+- [`docs/GEMINI_3_INTEGRATION.md`](docs/GEMINI_3_INTEGRATION.md): Gemini thinking and thought signatures.
 
-- successful deserialization of canonical and alias payloads
-- request serialization for new fields
-- at least one error or fallback path
-- feature-gated behavior where applicable
-
-If you add public request/response types, also add a focused serialization test similar to `tests/responses_api_test.rs`.
-
-## Commit & Pull Request Guidelines
-
-Recent history uses Conventional Commits, including scoped forms:
-
-- `feat: add responses api compatibility for rainy v3`
-- `feat(api): migrate to Rainy API v3 with session-based authentication`
-- `chore: release v0.6.9`
-
-Use imperative subjects, add scope when it clarifies the subsystem, and sign commits with DCO: `git commit -s -m "feat(api): ..."`.
-
-Pull requests should include:
-
-- a short summary of behavior changes
-- the exact commands run (`cargo test`, `cargo clippy`, etc.)
-- documentation updates when public APIs or examples changed
-- `CHANGELOG.md` updates for user-visible changes
-- sample request/response notes when API contracts changed
-
-## Security & Configuration Tips
-
-Do not commit real API keys, refresh tokens, or session tokens. Keep secrets in environment variables and prefer mock servers for endpoint tests. For security issues, follow the private reporting path in `SECURITY.md` instead of opening a public issue.
+Use imperative Conventional Commit subjects and sign commits with DCO (`git commit -s`). User-visible changes should update [`CHANGELOG.md`](CHANGELOG.md), documentation, and tests as appropriate. Report security issues through [`SECURITY.md`](SECURITY.md), not public issues.

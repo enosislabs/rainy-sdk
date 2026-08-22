@@ -375,7 +375,6 @@ This release fixes missing documentation that caused CI failures with `cargo doc
 - Added doc comment to `ResponseFormat::JsonSchema` variant's `json_schema` field
 - Added doc comments to `ToolChoice::Tool` variant's `r#type` and `function` fields
 
-
 ## [0.5.0] - 2025-01-19
 
 ### 🚀 Major Feature: Gemini 3 Models with Advanced Thinking Capabilities
