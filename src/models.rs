@@ -811,6 +811,10 @@ pub struct ResponsesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<u32>,
 
+    /// Maximum number of built-in tool calls processed for this response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tool_calls: Option<u32>,
+
     /// End-user identifier (legacy fallback accepted by Rainy).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
@@ -818,6 +822,10 @@ pub struct ResponsesRequest {
     /// Prompt cache key for routing/cache optimization.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
+
+    /// Modern prompt-cache options (`mode` and `ttl`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_options: Option<serde_json::Value>,
 
     /// Reasoning configuration object (provider/model dependent).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -830,6 +838,10 @@ pub struct ResponsesRequest {
     /// Whether multiple tool calls may be emitted in parallel.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parallel_tool_calls: Option<bool>,
+
+    /// Streaming controls, such as `include_obfuscation`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_options: Option<serde_json::Value>,
 
     /// Arbitrary request metadata.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -909,11 +921,14 @@ impl ResponsesRequest {
             temperature: None,
             top_p: None,
             max_output_tokens: None,
+            max_tool_calls: None,
             user: None,
             prompt_cache_key: None,
+            prompt_cache_options: None,
             reasoning: None,
             include_reasoning: None,
             parallel_tool_calls: None,
+            stream_options: None,
             metadata: None,
             service_tier: None,
             store: None,
@@ -958,7 +973,28 @@ impl ResponsesRequest {
 
     /// Convenience helper to set reasoning effort (`low`, `medium`, `high`).
     pub fn with_reasoning_effort(mut self, effort: impl Into<String>) -> Self {
-        self.reasoning = Some(serde_json::json!({ "effort": effort.into() }));
+        self.set_reasoning_option("effort", serde_json::Value::String(effort.into()));
+        self
+    }
+
+    /// Sets the reasoning context policy (`auto`, `all_turns`, or `current_turn`).
+    pub fn with_reasoning_context(mut self, context: impl Into<String>) -> Self {
+        self.set_reasoning_option("context", serde_json::Value::String(context.into()));
+        self
+    }
+
+    /// Sets the reasoning execution mode, such as `pro`.
+    pub fn with_reasoning_mode(mut self, mode: impl Into<String>) -> Self {
+        self.set_reasoning_option("mode", serde_json::Value::String(mode.into()));
+        self
+    }
+
+    /// Requests a generated reasoning summary (`auto`, `concise`, or `detailed`).
+    pub fn with_reasoning_summary(mut self, summary: impl Into<String>) -> Self {
+        self.set_reasoning_option(
+            "generate_summary",
+            serde_json::Value::String(summary.into()),
+        );
         self
     }
 
@@ -968,9 +1004,21 @@ impl ResponsesRequest {
         self
     }
 
+    /// Limits the total number of built-in tool calls processed in the response.
+    pub fn with_max_tool_calls(mut self, max_tool_calls: u32) -> Self {
+        self.max_tool_calls = Some(max_tool_calls);
+        self
+    }
+
     /// Sets prompt cache key.
     pub fn with_prompt_cache_key(mut self, prompt_cache_key: impl Into<String>) -> Self {
         self.prompt_cache_key = Some(prompt_cache_key.into());
+        self
+    }
+
+    /// Sets modern prompt-cache options, such as `mode` and `ttl`.
+    pub fn with_prompt_cache_options(mut self, prompt_cache_options: serde_json::Value) -> Self {
+        self.prompt_cache_options = Some(prompt_cache_options);
         self
     }
 
@@ -995,6 +1043,42 @@ impl ResponsesRequest {
     /// Sets previous response identifier for stateful continuation.
     pub fn with_previous_response_id(mut self, previous_response_id: impl Into<String>) -> Self {
         self.previous_response_id = Some(previous_response_id.into());
+        self
+    }
+
+    /// Controls how the model selects tools (`auto`, `none`, `required`, or an object).
+    pub fn with_tool_choice(mut self, tool_choice: impl Into<serde_json::Value>) -> Self {
+        self.tool_choice = Some(tool_choice.into());
+        self
+    }
+
+    /// Enables or disables parallel tool calls.
+    pub fn with_parallel_tool_calls(mut self, parallel_tool_calls: bool) -> Self {
+        self.parallel_tool_calls = Some(parallel_tool_calls);
+        self
+    }
+
+    /// Sets streaming options. This is used only when streaming is enabled.
+    pub fn with_stream_options(mut self, stream_options: serde_json::Value) -> Self {
+        self.stream_options = Some(stream_options);
+        self
+    }
+
+    /// Controls whether the response is stored for later retrieval.
+    pub fn with_store(mut self, store: bool) -> Self {
+        self.store = Some(store);
+        self
+    }
+
+    /// Enables or disables background response generation.
+    pub fn with_background(mut self, background: bool) -> Self {
+        self.background = Some(background);
+        self
+    }
+
+    /// Selects additional response data to include.
+    pub fn with_include(mut self, include: Vec<String>) -> Self {
+        self.include = Some(include);
         self
     }
 
@@ -1034,10 +1118,82 @@ impl ResponsesRequest {
         self
     }
 
+    /// Adds a strict function tool using the native Responses API shape.
+    pub fn add_strict_function_tool(
+        mut self,
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: serde_json::Value,
+    ) -> Self {
+        self.push_tool(serde_json::json!({
+            "type": "function",
+            "name": name.into(),
+            "description": description.into(),
+            "parameters": parameters,
+            "strict": true
+        }));
+        self
+    }
+
+    /// Adds the hosted web-search tool.
+    pub fn add_web_search_tool(mut self) -> Self {
+        self.push_tool(serde_json::json!({ "type": "web_search" }));
+        self
+    }
+
+    /// Adds the hosted file-search tool for the supplied vector stores.
+    pub fn add_file_search_tool<I, S>(mut self, vector_store_ids: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let vector_store_ids: Vec<String> = vector_store_ids.into_iter().map(Into::into).collect();
+        self.push_tool(serde_json::json!({
+            "type": "file_search",
+            "vector_store_ids": vector_store_ids
+        }));
+        self
+    }
+
+    /// Adds an arbitrary built-in or MCP tool definition.
+    pub fn add_tool(mut self, tool: serde_json::Value) -> Self {
+        self.push_tool(tool);
+        self
+    }
+
+    /// Builds a function-call output item for the next Responses API turn.
+    pub fn function_call_output(
+        call_id: impl Into<String>,
+        output: impl Into<String>,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "type": "function_call_output",
+            "call_id": call_id.into(),
+            "output": output.into()
+        })
+    }
+
     /// Adds a custom extra parameter for forward compatibility.
     pub fn with_extra(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.extra.insert(key.into(), value);
         self
+    }
+
+    fn push_tool(&mut self, tool: serde_json::Value) {
+        self.tools.get_or_insert_with(Vec::new).push(tool);
+    }
+
+    fn set_reasoning_option(&mut self, key: &str, value: serde_json::Value) {
+        let reasoning = self
+            .reasoning
+            .get_or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        if !reasoning.is_object() {
+            *reasoning = serde_json::Value::Object(serde_json::Map::new());
+        }
+        reasoning
+            .as_object_mut()
+            .expect("reasoning was normalized to an object")
+            .insert(key.to_string(), value);
     }
 }
 
@@ -1100,6 +1256,42 @@ pub struct ResponsesApiResponse {
     /// Additional provider-specific response fields.
     #[serde(flatten, default)]
     pub extra: HashMap<String, serde_json::Value>,
+}
+
+impl ResponsesApiResponse {
+    /// Returns all function-call output items emitted by the model.
+    pub fn function_calls(&self) -> Vec<&serde_json::Value> {
+        self.output
+            .iter()
+            .flatten()
+            .filter(|item| {
+                item.get("type").and_then(serde_json::Value::as_str) == Some("function_call")
+            })
+            .collect()
+    }
+
+    /// Returns concatenated output text, including nested message content.
+    pub fn text(&self) -> Option<String> {
+        if let Some(output_text) = &self.output_text {
+            return Some(output_text.clone());
+        }
+
+        let parts: Vec<&str> = self
+            .output
+            .iter()
+            .flatten()
+            .filter_map(|item| item.get("content"))
+            .filter_map(serde_json::Value::as_array)
+            .flatten()
+            .filter(|content| {
+                content.get("type").and_then(serde_json::Value::as_str) == Some("output_text")
+            })
+            .filter_map(|content| content.get("text"))
+            .filter_map(serde_json::Value::as_str)
+            .collect();
+
+        (!parts.is_empty()).then(|| parts.join(""))
+    }
 }
 
 /// Non-blocking compatibility warning emitted by Rainy in envelope mode.

@@ -42,6 +42,85 @@ fn test_responses_request_accepts_gpt_5_6_model_family() {
 }
 
 #[test]
+fn test_responses_request_supports_modern_reasoning_and_hosted_tools() {
+    let request = ResponsesRequest::text("gpt-5.6-sol", "Research this")
+        .with_reasoning_effort("high")
+        .with_reasoning_context("all_turns")
+        .with_reasoning_mode("pro")
+        .with_reasoning_summary("auto")
+        .with_tool_choice("auto")
+        .with_parallel_tool_calls(true)
+        .with_max_tool_calls(4)
+        .add_web_search_tool()
+        .add_file_search_tool(["vs_123"])
+        .with_include(vec![
+            "web_search_call.action.sources".to_string(),
+            "file_search_call.results".to_string(),
+        ])
+        .with_prompt_cache_options(serde_json::json!({
+            "mode": "explicit",
+            "ttl": "30m"
+        }))
+        .with_store(true);
+
+    let json = serde_json::to_value(request).expect("serialize modern Responses request");
+    assert_eq!(json["reasoning"]["effort"], "high");
+    assert_eq!(json["reasoning"]["context"], "all_turns");
+    assert_eq!(json["reasoning"]["mode"], "pro");
+    assert_eq!(json["reasoning"]["generate_summary"], "auto");
+    assert_eq!(json["tool_choice"], "auto");
+    assert_eq!(json["parallel_tool_calls"], true);
+    assert_eq!(json["max_tool_calls"], 4);
+    assert_eq!(json["tools"][0]["type"], "web_search");
+    assert_eq!(json["tools"][1]["type"], "file_search");
+    assert_eq!(json["tools"][1]["vector_store_ids"][0], "vs_123");
+    assert_eq!(json["prompt_cache_options"]["mode"], "explicit");
+}
+
+#[test]
+fn test_responses_function_tool_continuation_flow() {
+    let tool_output = ResponsesRequest::function_call_output("call_123", r#"{"temp":21}"#);
+    let request = ResponsesRequest::new("gpt-5.6-terra", serde_json::json!([tool_output]))
+        .with_previous_response_id("resp_123")
+        .add_strict_function_tool(
+            "get_weather",
+            "Get current weather",
+            serde_json::json!({
+                "type": "object",
+                "properties": { "city": { "type": "string" } },
+                "required": ["city"],
+                "additionalProperties": false
+            }),
+        );
+
+    let json = serde_json::to_value(request).expect("serialize tool continuation");
+    assert_eq!(json["input"][0]["type"], "function_call_output");
+    assert_eq!(json["input"][0]["call_id"], "call_123");
+    assert_eq!(json["previous_response_id"], "resp_123");
+    assert_eq!(json["tools"][0]["strict"], true);
+}
+
+#[test]
+fn test_responses_response_extracts_function_calls_and_nested_text() {
+    let response: rainy_sdk::ResponsesApiResponse = serde_json::from_value(serde_json::json!({
+        "output": [
+            { "type": "function_call", "call_id": "call_123", "name": "lookup" },
+            {
+                "type": "message",
+                "content": [
+                    { "type": "output_text", "text": "hello " },
+                    { "type": "output_text", "text": "world" }
+                ]
+            }
+        ]
+    }))
+    .expect("deserialize response output");
+
+    assert_eq!(response.function_calls().len(), 1);
+    assert_eq!(response.text().as_deref(), Some("hello world"));
+}
+
+#[test]
 fn test_embeddings_contract_serialization_and_deserialization() {
     let mut request = EmbeddingsRequest::text("openai/text-embedding-3-small", "hello");
     request.encoding_format = Some(EmbeddingEncodingFormat::Float);

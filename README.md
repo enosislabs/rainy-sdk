@@ -95,6 +95,39 @@ println!("{response:?}");
 # }
 ```
 
+Native tools, reasoning, and multi-turn function results can be composed directly:
+
+```rust,no_run
+use rainy_sdk::{RainyClient, ResponsesRequest};
+
+# async fn example(client: &RainyClient) -> rainy_sdk::Result<()> {
+let request = ResponsesRequest::text("gpt-5.6-sol", "Find the latest release notes")
+    .with_reasoning_effort("high")
+    .with_reasoning_summary("auto")
+    .with_tool_choice("auto")
+    .with_parallel_tool_calls(true)
+    .with_max_tool_calls(3)
+    .add_web_search_tool();
+
+let (response, _) = client.create_response(request).await?;
+for function_call in response.function_calls() {
+    println!("tool call: {function_call}");
+}
+# Ok(())
+# }
+```
+
+After executing a custom function, continue using the returned `call_id`:
+
+```rust,no_run
+use rainy_sdk::ResponsesRequest;
+
+let output = ResponsesRequest::function_call_output("call_123", r#"{"temperature":21}"#);
+let next = ResponsesRequest::new("gpt-5.6-terra", serde_json::json!([output]))
+    .with_previous_response_id("resp_123");
+# Ok::<(), rainy_sdk::RainyError>(())
+```
+
 To use a compatible deployment with a different API prefix, configure the root
 URL and the complete API base independently:
 
