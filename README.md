@@ -76,6 +76,9 @@ For OpenAI-compatible tool-call history and multimodal messages, use `OpenAIChat
 
 ## Responses API
 
+`ResponsesRequest` accepts model IDs dynamically, including `gpt-5.6-sol`,
+`gpt-5.6-terra`, and `gpt-5.6-luna` when exposed by the configured service.
+
 ```rust,no_run
 use rainy_sdk::{RainyClient, ResponsesRequest};
 
@@ -90,6 +93,19 @@ let response = client
 println!("{response:?}");
 # Ok(())
 # }
+```
+
+To use a compatible deployment with a different API prefix, configure the root
+URL and the complete API base independently:
+
+```rust,no_run
+use rainy_sdk::{AuthConfig, RainyClient};
+
+let config = AuthConfig::new("your-rainy-api-key")
+    .with_base_url("https://gateway.example.com")
+    .with_api_base_url("https://gateway.example.com/openai/v1");
+let client = RainyClient::with_config(config)?;
+# Ok::<(), rainy_sdk::RainyError>(())
 ```
 
 ## Embeddings

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Configurable Responses endpoints
+
+- Added an optional full API base URL so compatible deployments can expose Responses and other versioned endpoints under `/v1`, `/openai/v1`, or another prefix without changing Rainy's root routes.
+- Documented and tested dynamic Responses API model IDs for GPT-5.6 Sol, Terra, and Luna.
+
 ### Rainy API v3.8 model contract
 
 - Added typed model tier, billing class, provider data-policy, organization-policy, privacy, and effective-context metadata returned by `/api/v1/models/catalog`.

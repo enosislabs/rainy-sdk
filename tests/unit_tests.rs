@@ -28,12 +28,28 @@ mod tests {
         // Use valid 51-char key format
         let valid_key = format!("ra-{}", "c".repeat(48));
         let config = AuthConfig::new(&valid_key)
+            .with_api_base_url("https://gateway.example.com/openai/v1/")
             .with_timeout(60)
             .with_max_retries(5);
 
         assert_eq!(config.timeout_seconds, 60);
         assert_eq!(config.max_retries, 5);
+        assert_eq!(
+            config.api_base_url.as_deref(),
+            Some("https://gateway.example.com/openai/v1/")
+        );
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_auth_config_rejects_invalid_api_base_url() {
+        let valid_key = format!("ra-{}", "c".repeat(48));
+        let config = AuthConfig::new(valid_key).with_api_base_url("not a URL");
+
+        assert!(matches!(
+            config.validate(),
+            Err(RainyError::InvalidRequest { ref code, .. }) if code == "INVALID_API_BASE_URL"
+        ));
     }
 
     #[test]

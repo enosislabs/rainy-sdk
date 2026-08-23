@@ -31,6 +31,17 @@ fn test_responses_request_serialization_supports_reasoning_and_responses_tools()
 }
 
 #[test]
+fn test_responses_request_accepts_gpt_5_6_model_family() {
+    for model in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
+        let request = ResponsesRequest::text(model, "hello").with_reasoning_effort("max");
+        let json = serde_json::to_value(request).expect("serialize GPT-5.6 request");
+
+        assert_eq!(json["model"], model);
+        assert_eq!(json["reasoning"]["effort"], "max");
+    }
+}
+
+#[test]
 fn test_embeddings_contract_serialization_and_deserialization() {
     let mut request = EmbeddingsRequest::text("openai/text-embedding-3-small", "hello");
     request.encoding_format = Some(EmbeddingEncodingFormat::Float);

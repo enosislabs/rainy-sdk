@@ -15,6 +15,7 @@ use std::time::Duration;
 ///
 /// let config = AuthConfig::new("your-api-key")
 ///     .with_base_url("https://api.example.com")
+///     .with_api_base_url("https://api.example.com/openai/v1")
 ///     .with_timeout(60)
 ///     .with_max_retries(5);
 ///
@@ -29,6 +30,12 @@ pub struct AuthConfig {
 
     /// The base URL of the Rainy API. Defaults to the official endpoint.
     pub base_url: String,
+
+    /// Optional base URL for versioned API endpoints.
+    ///
+    /// When unset, endpoints use `{base_url}/api/v1`. Set this when a compatible
+    /// deployment exposes the API under another prefix, such as `/v1`.
+    pub api_base_url: Option<String>,
 
     /// The timeout for HTTP requests, in seconds.
     pub timeout_seconds: u64,
@@ -53,6 +60,7 @@ impl AuthConfig {
         Self {
             api_key: SecretString::from(api_key.into()),
             base_url: crate::DEFAULT_BASE_URL.to_string(),
+            api_base_url: None,
             timeout_seconds: 30,
             max_retries: 3,
             enable_retry: true,
@@ -67,6 +75,15 @@ impl AuthConfig {
     /// * `base_url` - The new base URL to use.
     pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = base_url.into();
+        self
+    }
+
+    /// Sets the complete base URL used for versioned API endpoints.
+    ///
+    /// Endpoint paths are appended directly to this value. Root-level routes,
+    /// such as `/health`, continue to use [`Self::with_base_url`].
+    pub fn with_api_base_url(mut self, api_base_url: impl Into<String>) -> Self {
+        self.api_base_url = Some(api_base_url.into());
         self
     }
 
@@ -153,6 +170,18 @@ impl AuthConfig {
             return Err(RainyError::InvalidRequest {
                 code: "INVALID_BASE_URL".to_string(),
                 message: "Base URL is not a valid URL".to_string(),
+                details: None,
+            });
+        }
+
+        if self
+            .api_base_url
+            .as_ref()
+            .is_some_and(|api_base_url| url::Url::parse(api_base_url).is_err())
+        {
+            return Err(RainyError::InvalidRequest {
+                code: "INVALID_API_BASE_URL".to_string(),
+                message: "API base URL is not a valid URL".to_string(),
                 details: None,
             });
         }

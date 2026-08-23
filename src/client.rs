@@ -81,11 +81,16 @@ impl RainyClient {
         } else {
             format!("/{path}")
         };
-        format!(
-            "{}/api/v1{}",
-            self.auth_config.base_url.trim_end_matches('/'),
-            normalized
-        )
+        match self.auth_config.api_base_url.as_deref() {
+            Some(api_base_url) => {
+                format!("{}{}", api_base_url.trim_end_matches('/'), normalized)
+            }
+            None => format!(
+                "{}/api/v1{}",
+                self.auth_config.base_url.trim_end_matches('/'),
+                normalized
+            ),
+        }
     }
 
     /// Creates a new `RainyClient` with the given API key.
@@ -891,6 +896,13 @@ impl RainyClient {
         &self.auth_config.base_url
     }
 
+    /// Returns the effective base URL used for versioned API endpoints.
+    pub fn api_base_url(&self) -> String {
+        self.auth_config.api_base_url.clone().unwrap_or_else(|| {
+            format!("{}/api/v1", self.auth_config.base_url.trim_end_matches('/'))
+        })
+    }
+
     /// Retrieves the list of available models from the API.
     ///
     /// This method returns information about all models that are currently available
@@ -949,5 +961,46 @@ impl std::fmt::Debug for RainyClient {
             .field("timeout", &self.auth_config.timeout_seconds)
             .field("max_retries", &self.retry_config.max_retries)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_api_key() -> String {
+        format!("ra-{}", "a".repeat(48))
+    }
+
+    #[test]
+    fn versioned_routes_use_the_rainy_prefix_by_default() {
+        let client = RainyClient::with_config(
+            AuthConfig::new(valid_api_key()).with_base_url("https://gateway.example.com/"),
+        )
+        .expect("build client");
+
+        assert_eq!(
+            client.api_v1_url("responses"),
+            "https://gateway.example.com/api/v1/responses"
+        );
+    }
+
+    #[test]
+    fn versioned_routes_use_the_configured_api_base_url() {
+        let client = RainyClient::with_config(
+            AuthConfig::new(valid_api_key())
+                .with_base_url("https://gateway.example.com")
+                .with_api_base_url("https://responses.example.com/openai/v1/"),
+        )
+        .expect("build client");
+
+        assert_eq!(
+            client.api_v1_url("/responses"),
+            "https://responses.example.com/openai/v1/responses"
+        );
+        assert_eq!(
+            client.root_url("/health"),
+            "https://gateway.example.com/health"
+        );
     }
 }
