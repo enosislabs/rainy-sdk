@@ -1,34 +1,93 @@
 # Rainy SDK
 
-Rust SDK for the Rainy API v3.8.1 service. It separates API-key runtime operations (`RainyClient`) from JWT dashboard/account operations (`RainySessionClient`).
+[![Crates.io](https://img.shields.io/crates/v/rainy-sdk.svg)](https://crates.io/crates/rainy-sdk)
+[![Documentation](https://docs.rs/rainy-sdk/badge.svg)](https://docs.rs/rainy-sdk)
+[![CI](https://github.com/enosislabs/rainy-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/enosislabs/rainy-sdk/actions/workflows/ci.yml)
+[![Security](https://github.com/enosislabs/rainy-sdk/actions/workflows/security.yml/badge.svg)](https://github.com/enosislabs/rainy-sdk/actions/workflows/security.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+Rust SDK for the Rainy API. It provides a typed, asynchronous client for chat, Responses, embeddings, model discovery, web search, health checks, and account operations.
 
 ## Installation
 
-```toml
-[dependencies]
-rainy-sdk = "0.6.15"
+```bash
+cargo add rainy-sdk@0.6.16
 ```
 
-The crate uses Rust 1.98.0 and Rustls. The optional `legacy` feature exposes compatibility types and older account helpers.
+Or add it to `Cargo.toml`:
 
-## Authentication
+```toml
+[dependencies]
+rainy-sdk = "0.6.16"
+tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
+```
+
+The crate requires Rust 1.98.0 or newer and uses Tokio for asynchronous operations. HTTPS is handled with Rustls.
+
+Optional features:
+
+| Feature | Purpose |
+| --- | --- |
+| `rate-limiting` | Built-in request limiting, enabled by default. |
+| `tracing` | Optional tracing integration, enabled by default. |
+| `legacy` | Compatibility types and older helper methods. |
+| `cache` | Compatibility feature for cache integrations. |
+
+## Quick start
+
+Keep your API key in an environment variable and create a `RainyClient`:
 
 ```rust,no_run
-use rainy_sdk::RainyClient;
+use rainy_sdk::{ChatCompletionRequest, ChatMessage, RainyClient};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = RainyClient::with_api_key(std::env::var("RAINY_API_KEY")?)?;
+    let request = ChatCompletionRequest::new(
+        "provider/model-id",
+        vec![ChatMessage::user("Explain ownership in Rust")],
+    )
+    .with_max_tokens(300)
+    .with_temperature(0.2);
+
+    let (response, _) = client.chat_completion(request).await?;
+    if let Some(choice) = response.choices.first() {
+        println!("{}", choice.message.content);
+    }
+    Ok(())
+}
+```
+
+## Which client should I use?
+
+| Need | Client |
+| --- | --- |
+| Chat, Responses, embeddings, search, health, and model discovery | `RainyClient` |
+| Login, registration, token refresh, profiles, usage, and API-key management | `RainySessionClient` |
+
+`RainyClient` uses an API key. `RainySessionClient` uses a user session. Keeping these clients separate makes it clear which credential a feature requires.
+
+## Configuration
+
+Use `AuthConfig` when you need a custom timeout, retry policy, user agent, or compatible service URL:
+
+```rust,no_run
+use rainy_sdk::{AuthConfig, RainyClient};
 
 # fn example() -> Result<(), Box<dyn std::error::Error>> {
-let client = RainyClient::with_api_key(std::env::var("RAINY_API_KEY")?)?;
+let config = AuthConfig::new(std::env::var("RAINY_API_KEY")?)
+    .with_base_url("https://api.example.com")
+    .with_timeout(60)
+    .with_max_retries(3);
+let client = RainyClient::with_config(config)?;
+# let _ = client;
 # Ok(())
 # }
 ```
 
-Use `RainyClient` for chat, Responses, embeddings, search, health, and model discovery. Use `RainySessionClient` with a JWT for account, organization, usage, and API-key management.
+## Model discovery
 
-## Model discovery and access
-
-Do not hardcode a model inventory: the catalog changes independently of the crate. Catalog presence does not guarantee that an organization can call a model. Effective access can depend on model tier, plan, purchased credits, model allowlists, organization policy, privacy, capability entitlements, and context limits.
-
-Request the catalog with an API key so organization-specific fields are populated:
+Model availability can change independently of the SDK. Use the catalog instead of maintaining a hardcoded list:
 
 ```rust,no_run
 use rainy_sdk::{ModelSelectionCriteria, ModelTier, RainyClient};
@@ -38,21 +97,22 @@ let models = client
     .select_models(ModelSelectionCriteria {
         allowed_tiers: vec![ModelTier::Core, ModelTier::Standard],
         require_tools: Some(true),
-        require_organization_access: true,
         ..Default::default()
     })
     .await?;
 
 for model in models {
-    println!("{}: {:?}", model.id, model.rainy_model_tier);
+    println!("{}", model.id);
 }
 # Ok(())
 # }
 ```
 
-`require_organization_access` checks organization-enabled and privacy-compatible flags. Anonymous catalog entries are excluded because their usability cannot be determined accurately.
+Use `get_models_catalog` when you need the complete typed catalog response.
 
 ## Chat completions
+
+`ChatCompletionRequest` covers the common chat flow. For full OpenAI-compatible message history, tool calls, tool results, and multimodal content, use `OpenAIChatCompletionRequest`.
 
 ```rust,no_run
 use rainy_sdk::{ChatCompletionRequest, ChatMessage, RainyClient};
@@ -60,99 +120,79 @@ use rainy_sdk::{ChatCompletionRequest, ChatMessage, RainyClient};
 # async fn example(client: &RainyClient) -> rainy_sdk::Result<()> {
 let request = ChatCompletionRequest::new(
     "provider/model-id",
-    vec![ChatMessage::user("Explain ownership in Rust")],
+    vec![
+        ChatMessage::system("You are a concise assistant."),
+        ChatMessage::user("Summarize this paragraph."),
+    ],
 )
-.with_max_tokens(500)
+.with_max_completion_tokens(500)
 .with_temperature(0.2);
 
 let (response, metadata) = client.chat_completion(request).await?;
 println!("{}", response.choices[0].message.content);
-println!("request metadata: {metadata:?}");
+println!("request id: {:?}", metadata.request_id);
 # Ok(())
 # }
 ```
 
-For OpenAI-compatible tool-call history and multimodal messages, use `OpenAIChatCompletionRequest`. Streaming exposes typed chunk, billing, and raw SSE events.
+## Streaming
 
-## Responses API
-
-`ResponsesRequest` accepts model IDs dynamically, including `gpt-5.6-sol`,
-`gpt-5.6-terra`, and `gpt-5.6-luna` when exposed by the configured service.
+Streaming methods return asynchronous streams of response chunks. Add `futures = "0.3"` to your application to use `StreamExt`:
 
 ```rust,no_run
-use rainy_sdk::{RainyClient, ResponsesRequest};
+use futures::StreamExt;
+use rainy_sdk::{ChatCompletionRequest, ChatMessage, RainyClient};
 
 # async fn example(client: &RainyClient) -> rainy_sdk::Result<()> {
-let response = client
-    .create_response(
-        ResponsesRequest::text("provider/model-id", "Summarize this document")
-            .with_reasoning_effort("medium")
-            .with_max_output_tokens(800),
-    )
-    .await?;
-println!("{response:?}");
-# Ok(())
-# }
-```
+let request = ChatCompletionRequest::new(
+    "provider/model-id",
+    vec![ChatMessage::user("Write a short haiku about Rust")],
+);
+let mut stream = client.chat_completion_stream(request).await?;
 
-Native tools, reasoning, and multi-turn function results can be composed directly:
-
-```rust,no_run
-use rainy_sdk::{RainyClient, ResponsesRequest};
-
-# async fn example(client: &RainyClient) -> rainy_sdk::Result<()> {
-let request = ResponsesRequest::text("gpt-5.6-sol", "Find the latest release notes")
-    .with_reasoning_effort("high")
-    .with_reasoning_summary("auto")
-    .with_tool_choice("auto")
-    .with_parallel_tool_calls(true)
-    .with_max_tool_calls(3)
-    .add_web_search_tool();
-
-let (response, _) = client.create_response(request).await?;
-for function_call in response.function_calls() {
-    println!("tool call: {function_call}");
+while let Some(chunk) = stream.next().await {
+    if let Some(choice) = chunk?.choices.first()
+        && let Some(content) = &choice.delta.content
+    {
+        print!("{content}");
+    }
 }
 # Ok(())
 # }
 ```
 
-After executing a custom function, continue using the returned `call_id`:
+The SDK also exposes typed stream-event methods for applications that need more than standard response chunks.
+
+## Responses API
+
+`ResponsesRequest` supports text input, reasoning controls, hosted tools, function tools, tool limits, metadata, streaming, and multi-turn continuation:
 
 ```rust,no_run
-use rainy_sdk::ResponsesRequest;
+use rainy_sdk::{RainyClient, ResponsesRequest};
 
-let output = ResponsesRequest::function_call_output("call_123", r#"{"temperature":21}"#);
-let next = ResponsesRequest::new("gpt-5.6-terra", serde_json::json!([output]))
-    .with_previous_response_id("resp_123");
-# Ok::<(), rainy_sdk::RainyError>(())
+# async fn example(client: &RainyClient) -> rainy_sdk::Result<()> {
+let request = ResponsesRequest::text("provider/model-id", "Summarize this document")
+    .with_reasoning_effort("medium")
+    .with_max_output_tokens(800)
+    .add_web_search_tool();
+
+let (response, _) = client.create_response(request).await?;
+println!("{}", response.text().unwrap_or_default());
+# Ok(())
+# }
 ```
 
-To use a compatible deployment with a different API prefix, configure the root
-URL and the complete API base independently:
-
-```rust,no_run
-use rainy_sdk::{AuthConfig, RainyClient};
-
-let config = AuthConfig::new("your-rainy-api-key")
-    .with_base_url("https://gateway.example.com")
-    .with_api_base_url("https://gateway.example.com/openai/v1");
-let client = RainyClient::with_config(config)?;
-# Ok::<(), rainy_sdk::RainyError>(())
-```
+For custom function workflows, use `ResponsesRequest::function_call_output` and `with_previous_response_id` to continue a response.
 
 ## Embeddings
 
-The embeddings surface accepts strings or token arrays, optional dimensions, and float or base64 output.
+The embeddings API accepts text or token inputs and can return floating-point or base64 values:
 
 ```rust,no_run
 use rainy_sdk::{EmbeddingEncodingFormat, EmbeddingsRequest, RainyClient};
 
 # async fn example(client: &RainyClient) -> rainy_sdk::Result<()> {
-let mut request = EmbeddingsRequest::text(
-    "provider/embedding-model-id",
-    "Rainy embeddings",
-);
+let mut request = EmbeddingsRequest::text("provider/embedding-model-id", "Rainy embeddings");
 request.encoding_format = Some(EmbeddingEncodingFormat::Float);
 request.dimensions = Some(768);
 
@@ -162,13 +202,71 @@ println!("{} embedding(s)", response.data.len());
 # }
 ```
 
-The model must declare embedding output support and the organization must have embedding and model access. Entitlement failures are returned as `RainyError::AccessDenied` with the original code and structured details.
+## Search
+
+Use `search` for typed web results and `search_extract` for content from a list of URLs. `research` remains available for compatible research workflows.
+
+```rust,no_run
+use rainy_sdk::{RainyClient, ResearchDepth};
+
+# async fn example(client: &RainyClient) -> rainy_sdk::Result<()> {
+let results = client
+    .search("Rust release notes", Some(ResearchDepth::Basic), Some(10))
+    .await?;
+
+for result in results.results {
+    println!("{:?}: {:?}", result.title, result.url);
+}
+# Ok(())
+# }
+```
+
+## User sessions
+
+Use `RainySessionClient` for user and account workflows. Login keeps the access token in memory for subsequent calls:
+
+```rust,no_run
+use rainy_sdk::RainySessionClient;
+
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
+let mut session = RainySessionClient::new()?;
+session
+    .login(
+        &std::env::var("RAINY_EMAIL")?,
+        &std::env::var("RAINY_PASSWORD")?,
+    )
+    .await?;
+
+let profile = session.me().await?;
+println!("{}", profile.email);
+# Ok(())
+# }
+```
+
+Keep session and refresh tokens private. Do not log or commit credentials.
+
+## Errors and retries
+
+Fallible methods return `Result<T, RainyError>`. The error provides a stable SDK type, a machine-readable code where available, and helper methods such as `is_retryable` and `retry_after`:
+
+```rust,no_run
+use rainy_sdk::{RainyClient, RainyError};
+
+# async fn example(client: &RainyClient, request: rainy_sdk::ChatCompletionRequest) {
+match client.chat_completion(request).await {
+    Ok((response, _)) => println!("{}", response.choices[0].message.content),
+    Err(RainyError::AccessDenied { message, .. }) => eprintln!("access denied: {message}"),
+    Err(error) if error.is_retryable() => eprintln!("retryable error: {error}"),
+    Err(error) => eprintln!("request failed: {error}"),
+}
+# }
+```
 
 ## Development
 
-The pinned toolchain and committed lockfile are authoritative. See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and [SECURITY.md](SECURITY.md).
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contributor workflow, [`CHANGELOG.md`](CHANGELOG.md) for release history, and [`SECURITY.md`](SECURITY.md) for security reports.
 
-```text
+```bash
 cargo fmt --all -- --check
 cargo check --locked --all-targets --all-features
 cargo test --locked --all-features
@@ -178,4 +276,4 @@ cargo doc --locked --all-features --no-deps
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0. See [`LICENSE`](LICENSE).

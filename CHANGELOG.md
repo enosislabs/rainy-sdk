@@ -9,19 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Configurable Responses endpoints
+## [0.6.16] - 2026-08-23
 
-- Added an optional full API base URL so compatible deployments can expose Responses and other versioned endpoints under `/v1`, `/openai/v1`, or another prefix without changing Rainy's root routes.
-- Documented and tested dynamic Responses API model IDs for GPT-5.6 Sol, Terra, and Luna.
-- Expanded the modern Responses workflow with reasoning composition, hosted and strict function tools, tool selection/limits, prompt-cache and streaming options, function-call continuation items, and response output helpers.
+### Added
 
-### Rainy API v3.8 model contract
+- Added configurable versioned API URLs for compatible deployments that expose routes under `/v1`, `/openai/v1`, or another prefix.
+- Added a typed OpenAI-compatible embeddings API with text and token batches, float or base64 output, dimensions, metadata, and forward-compatible fields.
+- Added model catalog metadata and selectors for Rainy tiers, modalities, tools, structured output, reasoning, and organization/privacy access.
+- Expanded the Responses workflow with reasoning composition, hosted and strict function tools, tool limits, prompt-cache and streaming options, function-call continuation items, and response output helpers.
 
-- Added typed model tier, billing class, provider data-policy, organization-policy, privacy, and effective-context metadata returned by `/api/v1/models/catalog`.
-- Extended model selection to filter by tier and to require authenticated organization/privacy compatibility without incorrectly treating anonymous catalog entries as usable.
-- Preserved unknown catalog fields through the existing flattened metadata map.
-- Added the OpenAI-compatible `/api/v1/embeddings` request/response surface, including text/token batches, float/base64 output, dimensions, metadata, and forward-compatible fields.
-- Added `RainyError::AccessDenied` mapping for current model-tier, organization, privacy, tool, and reasoning entitlement failures while retaining structured API details.
+### Changed
+
+- Responses examples and model selection now support dynamic IDs such as `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` when the configured service exposes them.
+- Unknown catalog fields remain available through flattened metadata for forward compatibility.
+
+### Fixed
+
+- Model-tier, organization, privacy, tool, and reasoning entitlement failures now map to `RainyError::AccessDenied` with structured API details.
 
 ## [0.6.15] - 2026-08-21
 
