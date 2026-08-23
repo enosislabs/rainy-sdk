@@ -6,6 +6,117 @@ fn map_is_empty(value: &HashMap<String, serde_json::Value>) -> bool {
     value.is_empty()
 }
 
+/// Input accepted by the OpenAI-compatible embeddings endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum EmbeddingInput {
+    /// One input string.
+    Text(String),
+    /// Multiple input strings.
+    Texts(Vec<String>),
+    /// One tokenized input.
+    Tokens(Vec<u32>),
+    /// Multiple tokenized inputs.
+    TokenBatches(Vec<Vec<u32>>),
+}
+
+/// Requested representation for returned embeddings.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum EmbeddingEncodingFormat {
+    /// JSON array of floating-point values.
+    Float,
+    /// Base64-encoded embedding bytes.
+    Base64,
+}
+
+/// OpenAI-compatible embeddings request accepted by `/embeddings`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EmbeddingsRequest {
+    /// Embedding-capable model identifier.
+    pub model: String,
+    /// Text or token input.
+    pub input: EmbeddingInput,
+    /// Output encoding.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoding_format: Option<EmbeddingEncodingFormat>,
+    /// Requested output dimensions when supported by the model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dimensions: Option<u32>,
+    /// End-user identifier.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    /// String metadata forwarded with the request.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<HashMap<String, String>>,
+    /// Forward-compatible provider parameters.
+    #[serde(flatten, default, skip_serializing_if = "map_is_empty")]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+impl EmbeddingsRequest {
+    /// Create an embeddings request for a single text input.
+    pub fn text(model: impl Into<String>, input: impl Into<String>) -> Self {
+        Self {
+            model: model.into(),
+            input: EmbeddingInput::Text(input.into()),
+            encoding_format: None,
+            dimensions: None,
+            user: None,
+            metadata: None,
+            extra: HashMap::new(),
+        }
+    }
+}
+
+/// Embedding value returned by the provider.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum EmbeddingValue {
+    /// Floating-point embedding vector.
+    Float(Vec<f32>),
+    /// Base64-encoded embedding bytes.
+    Base64(String),
+}
+
+/// One embedding result.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EmbeddingData {
+    /// Object type, normally `embedding`.
+    pub object: String,
+    /// Result position corresponding to the input position.
+    pub index: u32,
+    /// Embedding vector or base64 value.
+    pub embedding: EmbeddingValue,
+}
+
+/// Token usage for an embeddings request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct EmbeddingsUsage {
+    /// Tokens consumed by the input.
+    #[serde(default, alias = "input_tokens")]
+    pub prompt_tokens: u64,
+    /// Total tokens consumed.
+    #[serde(default)]
+    pub total_tokens: u64,
+}
+
+/// OpenAI-compatible embeddings response.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EmbeddingsResponse {
+    /// Object type, normally `list`.
+    pub object: String,
+    /// Embedding results.
+    pub data: Vec<EmbeddingData>,
+    /// Model used by the provider.
+    pub model: String,
+    /// Token usage.
+    pub usage: EmbeddingsUsage,
+    /// Forward-compatible provider metadata.
+    #[serde(flatten, default)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
 /// Represents a single message in a chat conversation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChatMessage {
@@ -1277,6 +1388,79 @@ pub struct ModelPricing {
     pub completion: Option<String>,
 }
 
+/// Product tier assigned to a model by Rainy.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelTier {
+    /// Lowest-cost models available to every plan.
+    Core,
+    /// Standard models available from Starter plans.
+    Standard,
+    /// Premium models available from Pro or purchased-credit access.
+    Premium,
+    /// Frontier models requiring elevated or purchased-credit access.
+    Frontier,
+    /// Experimental models requiring elevated or purchased-credit access.
+    Experimental,
+}
+
+/// Billing-cost class assigned by the Rainy model registry.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelBillingClass {
+    /// Very low-cost model.
+    Cheap,
+    /// Normal-cost model.
+    Normal,
+    /// High-cost model.
+    Expensive,
+    /// Extremely high-cost model.
+    Extreme,
+}
+
+/// Verification state of the provider data-handling policy.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelDataPolicyStatus {
+    /// Policy was verified and is current.
+    Verified,
+    /// No verified policy is available.
+    Unknown,
+    /// Policy verification has expired.
+    Stale,
+    /// Providers or endpoints have different policies.
+    Mixed,
+}
+
+/// Public provider data-handling metadata returned by `/models/catalog`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelDataPolicy {
+    /// Policy verification state.
+    pub status: Option<ModelDataPolicyStatus>,
+    /// Whether use of the model requires a data-disclosure notice.
+    #[serde(default)]
+    pub requires_data_disclosure: bool,
+    /// Human-readable disclosure notice.
+    pub notice: Option<String>,
+    /// Whether provider policy permits training with submitted inputs.
+    pub training_with_inputs: Option<bool>,
+    /// Whether zero-data-retention routing is available.
+    pub zdr_available: Option<bool>,
+    /// Declared retention duration.
+    pub retention_days: Option<u32>,
+    /// Whether the precise model is covered by the policy source.
+    pub covered_model: Option<bool>,
+    /// Policy source identifier or URL.
+    pub source: Option<String>,
+    /// ISO-8601 verification timestamp.
+    pub verified_at: Option<String>,
+    /// ISO-8601 policy expiry timestamp.
+    pub expires_at: Option<String>,
+    /// Provider endpoint to which the policy applies.
+    pub effective_endpoint: Option<String>,
+}
+
 /// Model entry returned by `/models/catalog`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ModelCatalogItem {
@@ -1303,6 +1487,32 @@ pub struct ModelCatalogItem {
     /// Rainy capability hints (v2).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rainy_capabilities_v2: Option<RainyCapabilitiesV2>,
+    /// Product tier used by Rainy's entitlement enforcement.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rainy_model_tier: Option<ModelTier>,
+    /// Billing-cost class assigned by the Rainy registry.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rainy_billing_class: Option<ModelBillingClass>,
+    /// Maximum context allowed by the authenticated organization's plan.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rainy_plan_context_length: Option<u64>,
+    /// Effective context limit after applying both plan and model limits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rainy_effective_context_length: Option<u64>,
+    /// Public provider data-handling policy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rainy_data_policy: Option<ModelDataPolicy>,
+    /// Whether this model is enabled by the authenticated organization's policy.
+    /// `None` means the catalog request was anonymous.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rainy_organization_enabled: Option<bool>,
+    /// Active organization privacy mode, when authenticated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rainy_privacy_mode: Option<String>,
+    /// Whether the model satisfies the authenticated organization's privacy mode.
+    /// `None` means the catalog request was anonymous.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rainy_privacy_compatible: Option<bool>,
     /// Additional model metadata.
     #[serde(flatten, default)]
     pub extra: HashMap<String, serde_json::Value>,
@@ -1341,6 +1551,13 @@ pub struct ModelSelectionCriteria {
     /// Reasoning value to match.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_value: Option<String>,
+    /// Restrict results to these Rainy product tiers.
+    #[serde(default)]
+    pub allowed_tiers: Vec<ModelTier>,
+    /// Require authenticated organization-policy and privacy compatibility.
+    /// Anonymous catalog entries are excluded when this is `true`.
+    #[serde(default)]
+    pub require_organization_access: bool,
 }
 
 /// Builder preference for reasoning payload generation.
@@ -1494,6 +1711,22 @@ pub fn select_models(
                 if !supports_reasoning_preference(v2, mode, reasoning_value) {
                     return false;
                 }
+            }
+
+            if !criteria.allowed_tiers.is_empty()
+                && !item
+                    .rainy_model_tier
+                    .as_ref()
+                    .is_some_and(|tier| criteria.allowed_tiers.contains(tier))
+            {
+                return false;
+            }
+
+            if criteria.require_organization_access
+                && (item.rainy_organization_enabled != Some(true)
+                    || item.rainy_privacy_compatible != Some(true))
+            {
+                return false;
             }
 
             true

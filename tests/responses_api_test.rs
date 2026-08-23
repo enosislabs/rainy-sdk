@@ -1,7 +1,8 @@
 use rainy_sdk::{
-    CapabilityFlag, ModelCatalogItem, ModelPricing, ModelSelectionCriteria, RainyCapabilities,
-    RainyCapabilitiesV2, RainyClient, ReasoningMode, ReasoningPreference, ResponsesRequest,
-    build_reasoning_config, select_models,
+    CapabilityFlag, EmbeddingEncodingFormat, EmbeddingValue, EmbeddingsRequest, EmbeddingsResponse,
+    ModelBillingClass, ModelCatalogItem, ModelDataPolicyStatus, ModelPricing,
+    ModelSelectionCriteria, ModelTier, RainyCapabilities, RainyCapabilitiesV2, RainyClient,
+    ReasoningMode, ReasoningPreference, ResponsesRequest, build_reasoning_config, select_models,
 };
 
 #[test]
@@ -27,6 +28,29 @@ fn test_responses_request_serialization_supports_reasoning_and_responses_tools()
     assert_eq!(json["max_output_tokens"], 512);
     assert_eq!(json["tools"][0]["type"], "function");
     assert_eq!(json["tools"][0]["name"], "web_search");
+}
+
+#[test]
+fn test_embeddings_contract_serialization_and_deserialization() {
+    let mut request = EmbeddingsRequest::text("openai/text-embedding-3-small", "hello");
+    request.encoding_format = Some(EmbeddingEncodingFormat::Float);
+    request.dimensions = Some(256);
+    let value = serde_json::to_value(request).expect("serialize embeddings request");
+    assert_eq!(value["input"], "hello");
+    assert_eq!(value["encoding_format"], "float");
+    assert_eq!(value["dimensions"], 256);
+
+    let response: EmbeddingsResponse = serde_json::from_value(serde_json::json!({
+        "object": "list",
+        "data": [{"object": "embedding", "index": 0, "embedding": [0.25, -0.5]}],
+        "model": "openai/text-embedding-3-small",
+        "usage": {"prompt_tokens": 1, "total_tokens": 1}
+    }))
+    .expect("deserialize embeddings response");
+    assert!(matches!(
+        response.data[0].embedding,
+        EmbeddingValue::Float(_)
+    ));
 }
 
 #[test]
@@ -150,6 +174,82 @@ fn test_models_catalog_capabilities_v2_deserialization() {
         caps.multimodal.input,
         vec!["text".to_string(), "image".to_string()]
     );
+}
+
+#[test]
+fn test_models_catalog_deserializes_entitlement_and_policy_metadata() {
+    let payload = serde_json::json!({
+        "id": "provider/frontier-model",
+        "rainy_model_tier": "frontier",
+        "rainy_billing_class": "extreme",
+        "rainy_plan_context_length": 1000000,
+        "rainy_effective_context_length": 262144,
+        "rainy_organization_enabled": true,
+        "rainy_privacy_mode": "strict",
+        "rainy_privacy_compatible": false,
+        "rainy_data_policy": {
+            "status": "verified",
+            "requiresDataDisclosure": true,
+            "notice": "Provider retains prompts",
+            "trainingWithInputs": false,
+            "zdrAvailable": false,
+            "retentionDays": 30,
+            "coveredModel": true,
+            "source": "provider-policy",
+            "verifiedAt": "2026-08-01T00:00:00Z",
+            "expiresAt": "2026-11-01T00:00:00Z",
+            "effectiveEndpoint": "provider/default"
+        }
+    });
+
+    let item: ModelCatalogItem = serde_json::from_value(payload).expect("catalog metadata");
+    assert_eq!(item.rainy_model_tier, Some(ModelTier::Frontier));
+    assert_eq!(item.rainy_billing_class, Some(ModelBillingClass::Extreme));
+    assert_eq!(item.rainy_effective_context_length, Some(262_144));
+    assert_eq!(item.rainy_organization_enabled, Some(true));
+    assert_eq!(item.rainy_privacy_compatible, Some(false));
+    let policy = item.rainy_data_policy.expect("data policy");
+    assert_eq!(policy.status, Some(ModelDataPolicyStatus::Verified));
+    assert!(policy.requires_data_disclosure);
+    assert_eq!(policy.retention_days, Some(30));
+}
+
+#[test]
+fn test_select_models_filters_tier_and_authenticated_access() {
+    let accessible = ModelCatalogItem {
+        id: "model/accessible".to_string(),
+        rainy_model_tier: Some(ModelTier::Premium),
+        rainy_organization_enabled: Some(true),
+        rainy_privacy_compatible: Some(true),
+        rainy_capabilities_v2: Some(RainyCapabilitiesV2::default()),
+        ..Default::default()
+    };
+    let privacy_blocked = ModelCatalogItem {
+        id: "model/privacy-blocked".to_string(),
+        rainy_model_tier: Some(ModelTier::Premium),
+        rainy_organization_enabled: Some(true),
+        rainy_privacy_compatible: Some(false),
+        rainy_capabilities_v2: Some(RainyCapabilitiesV2::default()),
+        ..Default::default()
+    };
+    let anonymous = ModelCatalogItem {
+        id: "model/anonymous".to_string(),
+        rainy_model_tier: Some(ModelTier::Premium),
+        rainy_capabilities_v2: Some(RainyCapabilitiesV2::default()),
+        ..Default::default()
+    };
+
+    let selected = select_models(
+        &[accessible, privacy_blocked, anonymous],
+        &ModelSelectionCriteria {
+            allowed_tiers: vec![ModelTier::Premium],
+            require_organization_access: true,
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(selected.len(), 1);
+    assert_eq!(selected[0].id, "model/accessible");
 }
 
 #[test]

@@ -843,6 +843,16 @@ impl RainyClient {
                     details: error.details,
                 }
             }
+            "MODEL_TIER_NOT_ALLOWED"
+            | "MODEL_NOT_ALLOWED"
+            | "MODEL_DISABLED_FOR_ORGANIZATION"
+            | "MODEL_PRIVACY_POLICY_INCOMPATIBLE"
+            | "TOOLS_NOT_ALLOWED"
+            | "REASONING_NOT_ALLOWED" => RainyError::AccessDenied {
+                code: error.code,
+                message: error.message,
+                details: error.details,
+            },
             "PROVIDER_ERROR" | "PROVIDER_UNAVAILABLE" => {
                 let provider = error
                     .details

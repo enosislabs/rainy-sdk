@@ -5,6 +5,7 @@
 
 /// Endpoint for chat completions.
 pub mod chat;
+pub mod embeddings;
 /// Endpoint for checking the health of the API.
 pub mod health;
 /// Endpoint for managing API keys.

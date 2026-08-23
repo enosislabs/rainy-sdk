@@ -123,6 +123,17 @@ pub enum RainyError {
         message: String,
     },
 
+    /// A model or capability rejected by plan, organization, or privacy policy.
+    #[error("Access denied ({code}): {message}")]
+    AccessDenied {
+        /// Machine-readable Rainy API error code.
+        code: String,
+        /// Human-readable explanation from the API.
+        message: String,
+        /// Structured plan, tier, model, or policy context.
+        details: Option<serde_json::Value>,
+    },
+
     /// A generic network error.
     #[error("Network error: {0}")]
     NetworkError(String),
@@ -175,6 +186,7 @@ impl RainyError {
             | RainyError::Provider { code, .. }
             | RainyError::RateLimit { code, .. }
             | RainyError::InsufficientCredits { code, .. }
+            | RainyError::AccessDenied { code, .. }
             | RainyError::Api { code, .. } => Some(code),
             _ => None,
         }

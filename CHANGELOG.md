@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Rainy API v3.8 model contract
+
+- Added typed model tier, billing class, provider data-policy, organization-policy, privacy, and effective-context metadata returned by `/api/v1/models/catalog`.
+- Extended model selection to filter by tier and to require authenticated organization/privacy compatibility without incorrectly treating anonymous catalog entries as usable.
+- Preserved unknown catalog fields through the existing flattened metadata map.
+- Added the OpenAI-compatible `/api/v1/embeddings` request/response surface, including text/token batches, float/base64 output, dimensions, metadata, and forward-compatible fields.
+- Added `RainyError::AccessDenied` mapping for current model-tier, organization, privacy, tool, and reasoning entitlement failures while retaining structured API details.
+
 ## [0.6.15] - 2026-08-21
 
 ### ⚡ Performance and Dependency Refresh
