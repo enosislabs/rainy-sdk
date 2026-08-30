@@ -59,22 +59,22 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy (strict)
-        run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings -D clippy::all
 
       - name: Run tests (all features)
-        run: cargo test --all-features --verbose
+        run: cargo test --locked --all-features --verbose
 
       - name: Run integration tests
-        run: cargo test --test integration_test --all-features --verbose
+        run: cargo test --locked --all-features --test integration_test --verbose
 
       - name: Test documentation
-        run: cargo test --doc --all-features
+        run: cargo test --locked --doc --all-features
 
       - name: Build release mode
-        run: cargo build --release --all-features
+        run: cargo build --locked --release --all-features
 
       - name: Verify package can be built
-        run: cargo package --allow-dirty --no-verify
+        run: cargo package --locked --no-verify
 
   # Multi-platform builds for validation
   build-matrix:
@@ -99,10 +99,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --release
+        run: cargo build --locked --release --all-features
 
       - name: Test
-        run: cargo test --release
+        run: cargo test --locked --release --all-features
 
   # Security audit
   security-audit:
@@ -147,7 +147,7 @@ jobs:
         run: cargo login ${{ secrets.CRATES_IO_TOKEN }}
 
       - name: Publish to crates.io
-        run: cargo publish --allow-dirty
+        run: cargo publish --locked
 
   # Create GitHub release
   github-release:
@@ -186,7 +186,7 @@ jobs:
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
           echo "Generating crate package for version $VERSION"
-          cargo package --allow-dirty
+          cargo package --locked
           ls -la target/package/
 
       - name: Verify crate file exists

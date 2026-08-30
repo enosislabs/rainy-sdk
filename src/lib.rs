@@ -8,7 +8,8 @@
 //! ## Features
 //!
 //! - **Idiomatic Rust API**: Clean, type-safe interfaces
-//! - **Automatic Authentication**: API key and admin key management
+//! - **Separated authentication**: API-key inference plus a JWT/session client
+//!   for account, organization, billing, and key-management workflows
 //! - **Rate Limiting**: Built-in rate limit handling
 //! - **Error Handling**: Comprehensive error types and handling
 //! - **Async Support**: Full async/await support with Tokio
@@ -64,16 +65,21 @@ pub mod search;
 pub mod session;
 
 mod endpoints;
+mod sse;
 
 pub use auth::AuthConfig;
 pub use client::RainyClient;
+pub use endpoints::messages::DEFAULT_ANTHROPIC_VERSION;
 pub use error::{ApiErrorDetails, ApiErrorResponse, RainyError, Result};
 pub use models::*;
 pub use retry::{RetryConfig, retry_with_backoff};
 pub use session::{
-    CreatedApiKey, LoginResponse, OrgProfile, RainySessionClient, RefreshResponse,
-    SessionApiKeyListItem, SessionConfig, SessionTokens, SessionUser, UsageCreditsResponse,
-    UsageStatsResponse,
+    ApiKeyValidationResponse, BillingActionResponse, CheckoutRequest, CreatedApiKey, LoginResponse,
+    OrgModelAccess, OrgProfile, OrgSettings, PlanChangeRequest, PlanCheckoutRequest,
+    PortalSessionRequest, RainySessionClient, RefreshResponse, SessionApiKeyListItem,
+    SessionConfig, SessionInvitation, SessionMembership, SessionTokens, SessionUser,
+    SessionUserSummary, UsageCreditsResponse, UsageStatsResponse, UserInviteRequest,
+    UserRoleRequest,
 };
 
 // Re-export Research types for convenience

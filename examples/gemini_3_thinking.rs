@@ -3,7 +3,7 @@ use rainy_sdk::{
     error::RainyError,
     models::{
         ChatCompletionRequest, ChatMessage, ContentPart, EnhancedChatMessage, FunctionDefinition,
-        ThinkingConfig, ThinkingLevel, Tool, ToolType,
+        ReasoningEffort, Tool, ToolType,
     },
 };
 use serde_json::json;
@@ -25,7 +25,8 @@ async fn main() -> Result<(), RainyError> {
              including impacts on employment, inflation, government finances, and social welfare.",
         )],
     )
-    .with_thinking_config(ThinkingConfig::high_reasoning())
+    .with_reasoning_effort(ReasoningEffort::High)
+    .with_include_reasoning(true)
     .with_max_tokens(2000);
 
     match client.create_chat_completion(request).await {
@@ -48,8 +49,8 @@ async fn main() -> Result<(), RainyError> {
             "List 5 programming languages and their primary use cases.",
         )],
     )
-    .with_thinking_level(ThinkingLevel::Low)
-    .with_include_thoughts(false);
+    .with_reasoning_effort(ReasoningEffort::Low)
+    .with_include_reasoning(false);
 
     match client.create_chat_completion(request).await {
         Ok(response) => {
@@ -105,7 +106,8 @@ async fn main() -> Result<(), RainyError> {
             "Check the weather in Paris and if it's nice, book a table for 2 at Le Bernardin for 7 PM tonight."
         )]
     )
-    .with_thinking_config(ThinkingConfig::gemini_3(ThinkingLevel::High, true))
+    .with_reasoning_effort(ReasoningEffort::High)
+    .with_include_reasoning(true)
     .with_tools(tools);
 
     match client.create_chat_completion(request).await {
@@ -159,8 +161,8 @@ async fn main() -> Result<(), RainyError> {
 
     // Validate configuration
     let thinking_request = gemini_3_request
-        .with_thinking_level(ThinkingLevel::High)
-        .with_include_thoughts(true);
+        .with_reasoning_effort(ReasoningEffort::High)
+        .with_include_reasoning(true);
 
     match thinking_request.validate_openai_compatibility() {
         Ok(()) => println!("✅ Configuration is valid"),

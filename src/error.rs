@@ -114,6 +114,15 @@ pub enum RainyError {
         source_error: Option<String>,
     },
 
+    /// A response or stream frame exceeded the SDK safety bound.
+    #[error("Payload too large: {message} (maximum {max_bytes} bytes)")]
+    PayloadTooLarge {
+        /// A safe explanation of which payload crossed the bound.
+        message: String,
+        /// Maximum number of bytes accepted by the relevant parser.
+        max_bytes: usize,
+    },
+
     /// An error indicating that a feature is not available for the current plan.
     #[error("Feature not available: {feature} - {message}")]
     FeatureNotAvailable {
@@ -247,15 +256,15 @@ impl From<reqwest::Error> for RainyError {
             }
         } else if err.is_connect() || err.is_request() {
             RainyError::Network {
-                message: err.to_string(),
+                message: "Request failed while connecting to the Rainy service".to_string(),
                 retryable: true,
-                source_error: Some(err.to_string()),
+                source_error: None,
             }
         } else {
             RainyError::Network {
-                message: err.to_string(),
+                message: "HTTP request failed".to_string(),
                 retryable: false,
-                source_error: Some(err.to_string()),
+                source_error: None,
             }
         }
     }

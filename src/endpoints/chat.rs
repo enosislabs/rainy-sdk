@@ -152,17 +152,20 @@ impl RainyClient {
         self.wait_for_slot().await;
 
         let response = self
-            .send_request(
-                self.api_request(reqwest::Method::POST, "/chat/completions")
-                    .json(&request_with_stream),
-            )
+            .send_request(self.json_request(
+                reqwest::Method::POST,
+                "/chat/completions",
+                &request_with_stream,
+            )?)
             .await?;
 
         let events = self.handle_chat_stream_response(response).await?;
         let stream = events.filter_map(|event| async move {
             match event {
                 Ok(ChatStreamEvent::Chunk(chunk)) => Some(Ok(chunk)),
-                Ok(ChatStreamEvent::Billing(_)) | Ok(ChatStreamEvent::Raw(_)) => None,
+                Ok(ChatStreamEvent::Billing(_))
+                | Ok(ChatStreamEvent::Unknown { .. })
+                | Ok(ChatStreamEvent::Raw(_)) => None,
                 Err(error) => Some(Err(error)),
             }
         });
@@ -187,10 +190,11 @@ impl RainyClient {
 
         self.wait_for_slot().await;
         let response = self
-            .send_request(
-                self.api_request(reqwest::Method::POST, "/chat/completions")
-                    .json(&request_with_stream),
-            )
+            .send_request(self.json_request(
+                reqwest::Method::POST,
+                "/chat/completions",
+                &request_with_stream,
+            )?)
             .await?;
 
         self.handle_chat_stream_response(response).await

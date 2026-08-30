@@ -3,6 +3,14 @@ use crate::error::Result;
 use crate::models::{HealthStatus, ServiceStatus};
 use serde::Deserialize;
 
+#[derive(Deserialize)]
+struct RootHealthResponse {
+    status: String,
+    #[serde(default)]
+    version: Option<String>,
+    timestamp: String,
+}
+
 impl RainyClient {
     /// Performs a basic health check on the Rainy API.
     ///
@@ -24,12 +32,6 @@ impl RainyClient {
     /// # }
     /// ```
     pub async fn health_check(&self) -> Result<HealthStatus> {
-        #[derive(Deserialize)]
-        struct RootHealthResponse {
-            status: String,
-            timestamp: String,
-        }
-
         self.wait_for_slot().await;
         let response = self
             .send_request(self.root_request(reqwest::Method::GET, "/health"))
@@ -38,6 +40,44 @@ impl RainyClient {
 
         Ok(HealthStatus {
             status: payload.status,
+            version: payload.version,
+            timestamp: payload.timestamp,
+            uptime: 0.0,
+            services: ServiceStatus {
+                database: false,
+                redis: None,
+                providers: false,
+            },
+        })
+    }
+
+    /// Performs the API readiness check exposed by the Rainy service.
+    ///
+    /// Readiness is distinct from [`Self::health_check`]: it is intended for
+    /// load balancers and startup probes and reports whether the service is
+    /// ready to accept traffic.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use rainy_sdk::RainyClient;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = RainyClient::with_api_key("user-api-key")?;
+    /// let readiness = client.readiness_check().await?;
+    /// println!("Readiness: {}", readiness.status);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn readiness_check(&self) -> Result<HealthStatus> {
+        self.wait_for_slot().await;
+        let response = self
+            .send_request(self.root_request(reqwest::Method::GET, "/ready"))
+            .await?;
+        let payload: RootHealthResponse = self.handle_response(response).await?;
+
+        Ok(HealthStatus {
+            status: payload.status,
+            version: payload.version,
             timestamp: payload.timestamp,
             uptime: 0.0,
             services: ServiceStatus {
@@ -94,6 +134,7 @@ impl RainyClient {
 
         Ok(HealthStatus {
             status: payload.status,
+            version: None,
             timestamp: payload.timestamp,
             uptime: 0.0,
             services: ServiceStatus {

@@ -79,7 +79,7 @@ impl RetryConfig {
 
         // Add jitter if enabled (±25%)
         if self.jitter && attempt > 0 {
-            use rand::RngExt;
+            use rand::Rng;
             let mut rng = rand::rng();
             let jitter_factor = rng.random_range(0.75..=1.25);
             delay *= jitter_factor;
@@ -128,8 +128,17 @@ where
                     return Err(error);
                 }
 
-                // Calculate delay for next attempt
-                let delay = config.delay_for_attempt(attempt);
+                // Prefer an explicitly supplied server delay, but always cap
+                // it using the client's retry policy.  A malformed or absent
+                // header falls back to exponential backoff.
+                let delay = error
+                    .retry_after()
+                    .map(|seconds| {
+                        std::time::Duration::from_millis(
+                            seconds.saturating_mul(1_000).min(config.max_delay_ms),
+                        )
+                    })
+                    .unwrap_or_else(|| config.delay_for_attempt(attempt));
 
                 #[cfg(feature = "tracing")]
                 tracing::warn!(

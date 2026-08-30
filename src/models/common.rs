@@ -1,0 +1,754 @@
+//! Contract metadata shared by endpoint and capability discovery.
+
+use serde::{Deserialize, Serialize};
+
+/// Authentication/ownership classification for a Rainy route.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiRouteClass {
+    /// Public API-key runtime route.
+    Public,
+    /// JWT/session route used by dashboard/account clients.
+    Session,
+    /// Dashboard/admin route that is not part of the stable SDK client surface.
+    Dashboard,
+    /// Internal service route; intentionally not exposed by the SDK.
+    Internal,
+    /// Route known to be unsupported by Rainy.
+    Unsupported,
+}
+
+/// Implementation status for a route in the capability matrix.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiSupport {
+    /// The SDK exposes a typed operation for this route.
+    Implemented,
+    /// The route is known, but the API contract intentionally rejects or
+    /// deprecates it for current clients.
+    KnownUnsupported,
+    /// The route exists in the service but is outside the stable SDK surface.
+    NotExposed,
+}
+
+/// A machine-readable description of one API route or route family.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CapabilityRoute {
+    /// HTTP method. `ALL` is used only for an explicitly unsupported route
+    /// family or a service-owned route family, never for an SDK operation.
+    pub method: &'static str,
+    /// Route path. `*` denotes a service-owned route family that is not
+    /// individually represented by the stable SDK.
+    pub path: &'static str,
+    /// Route ownership/authentication class.
+    pub class: ApiRouteClass,
+    /// Implementation status in this SDK.
+    pub support: ApiSupport,
+    /// Authentication scheme, if any.
+    pub auth: &'static str,
+    /// Whether the route supports SSE.
+    pub streaming: bool,
+}
+
+impl CapabilityRoute {
+    /// Returns whether this route has a typed SDK operation.
+    pub const fn is_implemented(self) -> bool {
+        matches!(self.support, ApiSupport::Implemented)
+    }
+}
+
+const fn route(
+    method: &'static str,
+    path: &'static str,
+    class: ApiRouteClass,
+    support: ApiSupport,
+    auth: &'static str,
+    streaming: bool,
+) -> CapabilityRoute {
+    CapabilityRoute {
+        method,
+        path,
+        class,
+        support,
+        auth,
+        streaming,
+    }
+}
+
+/// Stable API routes and explicitly classified service routes.
+///
+/// This table is intentionally part of the public SDK. It lets applications,
+/// generated documentation, and tests distinguish a typed operation from a
+/// dashboard/internal route or a route that the API is known not to support.
+pub const RAINY_API_CAPABILITY_MATRIX: &[CapabilityRoute] = &[
+    // Root and health.
+    route(
+        "GET",
+        "/",
+        ApiRouteClass::Public,
+        ApiSupport::NotExposed,
+        "none",
+        false,
+    ),
+    route(
+        "GET",
+        "/health",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "none",
+        false,
+    ),
+    route(
+        "GET",
+        "/ready",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "none",
+        false,
+    ),
+    route(
+        "GET",
+        "/health/dependencies",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "none",
+        false,
+    ),
+    // API-key runtime and discovery.
+    route(
+        "GET",
+        "/api/v1/models",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "optional_api_key",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/models/catalog",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "optional_api_key",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/models/launches",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "optional_api_key",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/models/:model",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "optional_api_key",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/chat/completions",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "api_key",
+        true,
+    ),
+    route(
+        "POST",
+        "/api/v1/responses",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "api_key",
+        true,
+    ),
+    route(
+        "POST",
+        "/api/v1/messages",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "api_key",
+        true,
+    ),
+    route(
+        "POST",
+        "/api/v1/embeddings",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "api_key",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/search",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "api_key",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/search/extract",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "api_key",
+        false,
+    ),
+    // Session and account operations.
+    route(
+        "POST",
+        "/api/v1/auth/register",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "none",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/auth/login",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "none",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/auth/register-with-invite",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "none",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/auth/refresh",
+        ApiRouteClass::Session,
+        ApiSupport::KnownUnsupported,
+        "none",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/auth/me",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/auth/logout",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "DELETE",
+        "/api/v1/auth/account",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/keys",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/keys",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/keys/platform",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "DELETE",
+        "/api/v1/keys/:id",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/keys/validate",
+        ApiRouteClass::Public,
+        ApiSupport::Implemented,
+        "none",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/usage/credits",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/usage/stats",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/orgs/me",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "PATCH",
+        "/api/v1/orgs/me/region",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/orgs/me/settings",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "PATCH",
+        "/api/v1/orgs/me/settings/telemetry",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "PATCH",
+        "/api/v1/orgs/me/settings/privacy",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/orgs/me/models",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "PATCH",
+        "/api/v1/orgs/me/models/:modelId",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    // Organization users and invitations.
+    route(
+        "GET",
+        "/api/v1/users",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt_admin",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/users/invite",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt_admin",
+        false,
+    ),
+    route(
+        "PATCH",
+        "/api/v1/users/:userId/role",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt_admin",
+        false,
+    ),
+    route(
+        "DELETE",
+        "/api/v1/users/:userId",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt_admin",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/users/invitations",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt_admin",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/users/invitations",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt_admin",
+        false,
+    ),
+    route(
+        "DELETE",
+        "/api/v1/users/invitations/:id",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt_admin",
+        false,
+    ),
+    // Registered tools and billing/dashboard surfaces.
+    route(
+        "GET",
+        "/api/v1/tools",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/tools/catalog",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/tools",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/tools/:id",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "PATCH",
+        "/api/v1/tools/:id",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "DELETE",
+        "/api/v1/tools/:id",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/billing/plans",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/billing/overview",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/billing/summary",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/billing/checkout-session/status",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/billing/checkout-session",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/billing/plan-checkout",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/billing/plan-change",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/billing/portal-session",
+        ApiRouteClass::Session,
+        ApiSupport::Implemented,
+        "jwt",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/billing/webhooks",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "provider_signature",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/billing/webhooks/process",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "internal_secret",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/dashboard/models",
+        ApiRouteClass::Dashboard,
+        ApiSupport::NotExposed,
+        "jwt_admin",
+        false,
+    ),
+    // Better Auth is the service-owned browser/session protocol. The stable
+    // SDK uses the typed `/auth/*` session routes above instead.
+    route(
+        "ALL",
+        "/api/v1/better-auth",
+        ApiRouteClass::Session,
+        ApiSupport::NotExposed,
+        "cookie_or_jwt",
+        false,
+    ),
+    route(
+        "ALL",
+        "/api/v1/better-auth/*",
+        ApiRouteClass::Session,
+        ApiSupport::NotExposed,
+        "cookie_or_jwt",
+        false,
+    ),
+    // Service-owned surfaces intentionally kept outside the stable SDK.
+    route(
+        "POST",
+        "/api/v1/support/tickets",
+        ApiRouteClass::Dashboard,
+        ApiSupport::NotExposed,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/support/tickets",
+        ApiRouteClass::Dashboard,
+        ApiSupport::NotExposed,
+        "jwt",
+        false,
+    ),
+    route(
+        "PATCH",
+        "/api/v1/support/tickets/:id",
+        ApiRouteClass::Dashboard,
+        ApiSupport::NotExposed,
+        "jwt_admin",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/telemetry/public/errors",
+        ApiRouteClass::Public,
+        ApiSupport::NotExposed,
+        "none",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/telemetry/public/batches",
+        ApiRouteClass::Public,
+        ApiSupport::NotExposed,
+        "none",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/telemetry/public/sessions",
+        ApiRouteClass::Public,
+        ApiSupport::NotExposed,
+        "none",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/telemetry/public/feedback",
+        ApiRouteClass::Public,
+        ApiSupport::NotExposed,
+        "none",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/telemetry/customer/summary",
+        ApiRouteClass::Session,
+        ApiSupport::NotExposed,
+        "jwt",
+        false,
+    ),
+    route(
+        "GET",
+        "/api/v1/telemetry/customer/activity",
+        ApiRouteClass::Session,
+        ApiSupport::NotExposed,
+        "jwt",
+        false,
+    ),
+    route(
+        "ALL",
+        "/api/v1/internal/enosis/telemetry/*",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "service_or_jwt_admin",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/training/consents",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "jwt",
+        false,
+    ),
+    route(
+        "DELETE",
+        "/api/v1/training/consents/:id",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "jwt",
+        false,
+    ),
+    route(
+        "POST",
+        "/api/v1/training/captures",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "jwt",
+        false,
+    ),
+    route(
+        "DELETE",
+        "/api/v1/training/captures/:id",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "jwt",
+        false,
+    ),
+    route(
+        "ALL",
+        "/v1/integrations/linear",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "linear_signature_or_jwt",
+        false,
+    ),
+    route(
+        "ALL",
+        "/v1/integrations/linear/*",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "linear_signature_or_jwt",
+        false,
+    ),
+    route(
+        "ALL",
+        "/api/v1/telemetry/*",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "service_or_jwt",
+        false,
+    ),
+    route(
+        "ALL",
+        "/api/v1/training/*",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "jwt_admin",
+        false,
+    ),
+    route(
+        "ALL",
+        "/api/v1/billing/webhooks/*",
+        ApiRouteClass::Internal,
+        ApiSupport::NotExposed,
+        "provider_signature",
+        false,
+    ),
+    // The API explicitly has no agents route; use Responses and tools.
+    route(
+        "ALL",
+        "/api/v1/agents",
+        ApiRouteClass::Unsupported,
+        ApiSupport::KnownUnsupported,
+        "none",
+        false,
+    ),
+    route(
+        "ALL",
+        "/api/v1/agents/*",
+        ApiRouteClass::Unsupported,
+        ApiSupport::KnownUnsupported,
+        "none",
+        false,
+    ),
+];
+
+/// Returns the immutable SDK/API capability matrix.
+pub const fn capability_matrix() -> &'static [CapabilityRoute] {
+    RAINY_API_CAPABILITY_MATRIX
+}

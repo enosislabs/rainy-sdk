@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added typed reasoning controls (`ReasoningEffort`, adaptive/manual budgets, provider profiles, and capability-declared route selection) without silently remapping unsupported controls.
+- Added a public, machine-readable API capability matrix covering implemented, known-unsupported, dashboard, session, internal, and unsupported routes.
+- Added typed Anthropic Messages requests, responses, native stream events, and required header handling.
+- Added the root `/ready` probe, bounded request/response/SSE payload handling, Retry-After propagation, redirect protection, and safer authenticated URL validation.
+
+### Changed
+
+- Unified JSON request serialization and SSE parsing across Chat, Responses, Messages, embeddings, and search.
+- Removed the unused `eventsource-stream` dependency and documented that `/auth/refresh` is currently unsupported by the API.
+- Legacy Gemini thinking builders now map their configured value to Rainy's reasoning wire shape without emitting contradictory effort and budget controls.
+- Removed obsolete Responses-only `max_tool_calls` and prompt-cache-options builders that were not present in the API source contract; migrate to `tools`, `previous_response_id`, and explicit extension fields where a deployment adds a documented extension.
+- Documented the intentional all-features `rlib` size increase from the pre-typed baseline of 8,574,912 bytes to the measured 14,154,112 bytes and raised the CI hard budget to 16 MiB to retain bounded growth while carrying the expanded typed public API.
+
 ## [0.6.16] - 2026-08-23
 
 ### Added

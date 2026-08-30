@@ -6,7 +6,7 @@
 [![Security](https://github.com/enosislabs/rainy-sdk/actions/workflows/security.yml/badge.svg)](https://github.com/enosislabs/rainy-sdk/actions/workflows/security.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Rust SDK for the Rainy API. It provides a typed, asynchronous client for chat, Responses, embeddings, model discovery, web search, health checks, and account operations.
+Rust SDK for the Rainy API. It provides typed, asynchronous clients for OpenAI-compatible Chat and Responses, Anthropic Messages, embeddings, model discovery, web search, health probes, and JWT-backed account operations.
 
 ## Installation
 
@@ -62,10 +62,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | Need | Client |
 | --- | --- |
-| Chat, Responses, embeddings, search, health, and model discovery | `RainyClient` |
-| Login, registration, token refresh, profiles, usage, and API-key management | `RainySessionClient` |
+| Chat, Responses, Anthropic Messages, embeddings, search, health/readiness, and model discovery | `RainyClient` |
+| Login, registration, profiles, usage, billing, organization, and API-key management | `RainySessionClient` |
 
 `RainyClient` uses an API key. `RainySessionClient` uses a user session. Keeping these clients separate makes it clear which credential a feature requires.
+
+The session client intentionally does not send refresh tokens to `/auth/refresh`: the current API returns `REFRESH_UNSUPPORTED` because Better Auth manages refresh behavior separately. Re-authenticate with `login` or `register` when an access session is no longer valid.
 
 ## Configuration
 
@@ -163,9 +165,52 @@ while let Some(chunk) = stream.next().await {
 
 The SDK also exposes typed stream-event methods for applications that need more than standard response chunks.
 
+## Reasoning and capabilities
+
+Reasoning controls are typed and preserve the wire form accepted by Rainy. Use an effort control, an adaptive control, or a numeric budget only when the selected model's catalog metadata declares it:
+
+```rust,no_run
+use rainy_sdk::{ChatCompletionRequest, ChatMessage, RainyClient, ReasoningEffort};
+
+# async fn example(client: &RainyClient) -> rainy_sdk::Result<()> {
+let request = ChatCompletionRequest::new(
+    "provider/model-id",
+    vec![ChatMessage::user("Compare these two designs")],
+)
+.with_reasoning_effort(ReasoningEffort::High)
+.with_include_reasoning(true);
+
+let (response, _) = client.chat_completion(request).await?;
+println!("{}", response.choices[0].message.content);
+# Ok(())
+# }
+```
+
+`RainyClient::get_models_catalog` returns `rainy_capabilities_v2`, including accepted parameters, provider profiles, effort values, and numeric budget sentinels. `RainyClient::build_reasoning_config` uses that metadata to construct an exact nested request and returns no configuration when the capability is not declared. The complete API-to-SDK route classification is available as the machine-readable [`docs/API_CAPABILITY_MATRIX.json`](docs/API_CAPABILITY_MATRIX.json).
+
+## Anthropic Messages API
+
+Use the typed Messages surface when an Anthropic-compatible request or native Messages stream is required. It sends `anthropic-version: 2023-06-01` by default and preserves native event names such as `message_start`, `content_block_delta`, and `message_stop`:
+
+```rust,no_run
+use rainy_sdk::{AnthropicMessage, AnthropicMessageRequest, RainyClient};
+
+# async fn example(client: &RainyClient) -> rainy_sdk::Result<()> {
+let request = AnthropicMessageRequest::new(
+    "provider/model-id",
+    vec![AnthropicMessage::user("Explain Rust lifetimes")],
+    600,
+);
+
+let response = client.create_message(request).await?;
+println!("{}", response.text());
+# Ok(())
+# }
+```
+
 ## Responses API
 
-`ResponsesRequest` supports text input, reasoning controls, hosted tools, function tools, tool limits, metadata, streaming, and multi-turn continuation:
+`ResponsesRequest` supports text and structured input, reasoning controls, hosted tools, function tools, metadata, streaming, and multi-turn continuation:
 
 ```rust,no_run
 use rainy_sdk::{RainyClient, ResponsesRequest};
@@ -183,6 +228,8 @@ println!("{}", response.text().unwrap_or_default());
 ```
 
 For custom function workflows, use `ResponsesRequest::function_call_output` and `with_previous_response_id` to continue a response.
+
+The current API does not expose the former `max_tool_calls`, prompt-cache-options, or standalone Agents contract. Use the Responses `tools`/continuation fields and the explicit capability metadata instead; the SDK preserves unknown fields only through documented extension maps.
 
 ## Embeddings
 
@@ -243,7 +290,7 @@ println!("{}", profile.email);
 # }
 ```
 
-Keep session and refresh tokens private. Do not log or commit credentials.
+The API's `/auth/refresh` route currently returns `REFRESH_UNSUPPORTED`; the SDK reports that as `RainyError::FeatureNotAvailable` and does not transmit the supplied refresh token. Keep session tokens private and do not log or commit credentials.
 
 ## Errors and retries
 

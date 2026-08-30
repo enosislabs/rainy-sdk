@@ -10,7 +10,7 @@ impl RainyClient {
     ) -> Result<EmbeddingsResponse> {
         self.make_request(
             reqwest::Method::POST,
-            "embeddings",
+            "/embeddings",
             Some(serde_json::to_value(request)?),
         )
         .await

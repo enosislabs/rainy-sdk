@@ -1,6 +1,38 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+
+/// Stable, domain-oriented model modules.
+///
+/// The original v0.x API keeps its compatibility types in this module. New
+/// contract-facing types live in these smaller modules and are re-exported
+/// below so applications can migrate without losing the ergonomic root API.
+pub mod catalog;
+pub mod chat;
+pub mod common;
+pub mod embeddings;
+pub mod messages;
+pub mod reasoning;
+pub mod responses;
+pub mod streaming;
+pub mod tools;
+
+pub use chat::{ChatImageConfig, ChatModality, ChatStreamOptions, ProviderOptions, StopSequences};
+pub use common::{
+    ApiRouteClass, ApiSupport, CapabilityRoute, RAINY_API_CAPABILITY_MATRIX, capability_matrix,
+};
+pub use messages::{
+    AnthropicContent, AnthropicContentBlock, AnthropicImageSource, AnthropicMessage,
+    AnthropicMessageRequest, AnthropicMessageResponse, AnthropicMessageStreamEvent,
+    AnthropicMessageStreamEventType, AnthropicServiceTier, AnthropicThinking, AnthropicTool,
+    AnthropicToolChoice, AnthropicUsage,
+};
+pub use reasoning::{
+    ReasoningBudget, ReasoningConfig, ReasoningControl, ReasoningEffort, ReasoningRequest,
+};
+pub use responses::{ResponsesEvent, ResponsesEventType, ResponsesInputItem};
+pub use tools::{RegisteredTool, ToolAuthType, ToolDefinition, ToolUpdate};
 
 fn map_is_empty(value: &HashMap<String, serde_json::Value>) -> bool {
     value.is_empty()
@@ -148,8 +180,12 @@ pub enum OpenAIMessageRole {
     User,
     /// A message from the assistant.
     Assistant,
+    /// A developer instruction message.
+    Developer,
     /// A tool result message.
     Tool,
+    /// A legacy function result message.
+    Function,
 }
 
 /// OpenAI-compatible chat message content.
@@ -176,6 +212,21 @@ pub enum OpenAIContentPart {
         /// Image URL payload.
         image_url: OpenAIImageUrl,
     },
+    /// Inline audio input.
+    InputAudio {
+        /// Audio payload.
+        input_audio: OpenAIInputAudio,
+    },
+    /// Audio URL input.
+    AudioUrl {
+        /// Audio URL payload.
+        audio_url: OpenAIAudioUrl,
+    },
+    /// File input accepted by compatible providers.
+    File {
+        /// File payload.
+        file: OpenAIFile,
+    },
 }
 
 /// OpenAI-compatible image URL payload.
@@ -186,6 +237,36 @@ pub struct OpenAIImageUrl {
     /// Optional detail level hint.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+}
+
+/// Inline audio content payload.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OpenAIInputAudio {
+    /// Base64-encoded audio data.
+    pub data: String,
+    /// Audio format, such as `wav` or `mp3`.
+    pub format: String,
+}
+
+/// Audio URL content payload.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OpenAIAudioUrl {
+    /// Remote audio URL.
+    pub url: String,
+}
+
+/// File content payload.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OpenAIFile {
+    /// File identifier or data URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_id: Option<String>,
+    /// File data.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_data: Option<String>,
+    /// Optional file name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
 }
 
 /// OpenAI-compatible function call payload.
@@ -228,6 +309,21 @@ pub struct OpenAIChatMessage {
     /// Tool call ID associated with a `tool` role message.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    /// Provider reasoning field preserved for assistant replay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<serde_json::Value>,
+    /// Provider reasoning content preserved for assistant replay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
+    /// Structured provider reasoning details preserved for replay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_details: Option<Vec<serde_json::Value>>,
+    /// Refusal text returned by some compatible providers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refusal: Option<String>,
+    /// Explicit message extension fields.
+    #[serde(flatten, default, skip_serializing_if = "map_is_empty")]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// The search provider to use for web research.
@@ -293,7 +389,7 @@ pub struct ChatCompletionRequest {
 
     /// A list of sequences that will cause the model to stop generating further tokens.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub stop: Option<Vec<String>>,
+    pub stop: Option<StopSequences>,
 
     /// A unique identifier representing your end-user, which can help in monitoring and
     /// tracking conversations.
@@ -302,7 +398,7 @@ pub struct ChatCompletionRequest {
 
     /// A hint to the router about which provider to use for the model.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
+    pub provider: Option<ProviderOptions>,
 
     /// If set to `true`, the response will be streamed as a series of events.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -311,6 +407,10 @@ pub struct ChatCompletionRequest {
     /// Stream behavior options (`include_usage`, etc.).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream_options: Option<serde_json::Value>,
+
+    /// Provider cache-control object forwarded by Rainy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<serde_json::Value>,
 
     /// Modify the likelihood of specified tokens appearing in the completion.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -362,7 +462,11 @@ pub struct ChatCompletionRequest {
 
     /// Reasoning settings (bool/object depending on provider).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub reasoning: Option<serde_json::Value>,
+    pub reasoning: Option<ReasoningRequest>,
+
+    /// Top-level canonical reasoning-effort parameter.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<ReasoningEffort>,
 
     /// Include reasoning traces where supported.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -404,6 +508,26 @@ pub struct ChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub web_search_options: Option<serde_json::Value>,
 
+    /// Image-generation controls used with `modalities: ["image", ...]`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_config: Option<ChatImageConfig>,
+
+    /// Additional model-declared parameters such as `top_k` or `min_p`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<f32>,
+
+    /// Minimum probability threshold when declared by the model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_p: Option<f32>,
+
+    /// Repetition penalty when declared by the model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repetition_penalty: Option<f32>,
+
+    /// Explicit structured-output compatibility flag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structured_outputs: Option<bool>,
+
     /// Legacy functions field accepted by compat layers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub functions: Option<Vec<serde_json::Value>>,
@@ -412,9 +536,15 @@ pub struct ChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub function_call: Option<serde_json::Value>,
 
-    /// Configuration for thinking capabilities (Gemini 3 and 2.5 series).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Legacy in-memory thinking configuration. Use the modern `reasoning`
+    /// fields; the builder maps this value to Rainy's provider-neutral wire
+    /// shape and does not serialize a hallucinated `thinking_config` field.
+    #[serde(skip)]
     pub thinking_config: Option<ThinkingConfig>,
+
+    /// Explicit extension fields for forward-compatible request parameters.
+    #[serde(flatten, default, skip_serializing_if = "map_is_empty")]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// OpenAI-compatible request payload with full message replay support.
@@ -452,7 +582,7 @@ pub struct OpenAIChatCompletionRequest {
 
     /// Stop sequences.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub stop: Option<Vec<String>>,
+    pub stop: Option<StopSequences>,
 
     /// End-user identifier.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -460,7 +590,7 @@ pub struct OpenAIChatCompletionRequest {
 
     /// Router/provider hint.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
+    pub provider: Option<ProviderOptions>,
 
     /// If true, the response will be streamed as SSE events.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -469,6 +599,10 @@ pub struct OpenAIChatCompletionRequest {
     /// Stream behavior options (`include_usage`, etc.).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream_options: Option<serde_json::Value>,
+
+    /// Provider cache-control object forwarded by Rainy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<serde_json::Value>,
 
     /// Logit bias map.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -520,7 +654,11 @@ pub struct OpenAIChatCompletionRequest {
 
     /// Reasoning settings (bool/object depending on provider).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub reasoning: Option<serde_json::Value>,
+    pub reasoning: Option<ReasoningRequest>,
+
+    /// Top-level canonical reasoning-effort parameter.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<ReasoningEffort>,
 
     /// Include reasoning traces where supported.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -562,6 +700,26 @@ pub struct OpenAIChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub web_search_options: Option<serde_json::Value>,
 
+    /// Image-generation controls used with `modalities: ["image", ...]`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_config: Option<ChatImageConfig>,
+
+    /// Additional model-declared parameters such as `top_k` or `min_p`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<f32>,
+
+    /// Minimum probability threshold when declared by the model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_p: Option<f32>,
+
+    /// Repetition penalty when declared by the model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repetition_penalty: Option<f32>,
+
+    /// Explicit structured-output compatibility flag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structured_outputs: Option<bool>,
+
     /// Legacy functions field accepted by compat layers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub functions: Option<Vec<serde_json::Value>>,
@@ -570,15 +728,22 @@ pub struct OpenAIChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub function_call: Option<serde_json::Value>,
 
-    /// Gemini thinking configuration.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Legacy in-memory Gemini thinking configuration. The builder maps this
+    /// value to Rainy's `reasoning` wire shape rather than serializing a
+    /// provider-specific `thinking_config` field.
+    #[serde(skip)]
     pub thinking_config: Option<ThinkingConfig>,
 
-    /// Anthropic extended-thinking configuration (`thinking.budget_tokens`).
-    /// Serialised as the `thinking` top-level field so it is passed through to
-    /// OpenRouter/Anthropic as `{"type":"enabled","budget_tokens":N}`.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Legacy in-memory Anthropic thinking configuration. Use
+    /// [`AnthropicMessageRequest::with_thinking`] for the typed Messages
+    /// endpoint; the compatibility builder maps this value into Rainy's
+    /// provider-neutral `reasoning` object.
+    #[serde(skip)]
     pub thinking: Option<serde_json::Value>,
+
+    /// Explicit extension fields for forward-compatible request parameters.
+    #[serde(flatten, default, skip_serializing_if = "map_is_empty")]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// Represents the response from a chat completion request.
@@ -672,6 +837,10 @@ pub struct HealthStatus {
     /// The overall status of the API (e.g., "healthy", "degraded").
     pub status: String,
 
+    /// Service version reported by the root health endpoint, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+
     /// The timestamp of when the health check was performed.
     pub timestamp: String,
 
@@ -710,6 +879,281 @@ pub struct AvailableModels {
     /// A list of provider names that are currently active and available.
     #[serde(default)]
     pub active_providers: Vec<String>,
+}
+
+/// OpenAI-compatible model item returned by `/api/v1/models` and
+/// `/api/v1/models/:model`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelListItem {
+    /// Stable model identifier.
+    pub id: String,
+    /// OpenAI object kind, normally `model`.
+    pub object: String,
+    /// Provider registry creation timestamp.
+    #[serde(default)]
+    pub created: u64,
+    /// Provider owner derived by the API.
+    #[serde(default)]
+    pub owned_by: String,
+    /// Human-readable model name.
+    #[serde(default)]
+    pub name: String,
+    /// Human-readable provider description.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Maximum context length.
+    #[serde(default)]
+    pub context_length: Option<u64>,
+    /// Provider architecture metadata.
+    #[serde(default)]
+    pub architecture: Option<ModelArchitecture>,
+    /// Provider-declared parameter names.
+    #[serde(default)]
+    pub supported_parameters: Vec<String>,
+    /// Provider capability metadata.
+    #[serde(default)]
+    pub capabilities: Option<serde_json::Value>,
+    /// Public data-policy metadata.
+    #[serde(default)]
+    pub rainy_data_policy: Option<ModelDataPolicy>,
+    /// OpenAI permission list.
+    #[serde(default)]
+    pub permission: Vec<serde_json::Value>,
+    /// Root model identifier.
+    #[serde(default)]
+    pub root: Option<String>,
+    /// Parent model identifier.
+    #[serde(default)]
+    pub parent: Option<String>,
+    /// Future model fields.
+    #[serde(flatten, default)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+/// Model list envelope payload.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelList {
+    /// OpenAI object kind, normally `list`.
+    #[serde(default)]
+    pub object: String,
+    /// Available model items.
+    #[serde(default)]
+    pub data: Vec<ModelListItem>,
+}
+
+/// Model-launch gradient metadata.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunchGradient {
+    /// Gradient colors.
+    #[serde(default)]
+    pub colors: Vec<String>,
+    /// Gradient angle in degrees.
+    #[serde(default)]
+    pub angle_degrees: f64,
+}
+
+/// Presentation metadata for a model-launch variant.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunchVariantPresentation {
+    /// Accent color.
+    #[serde(default)]
+    pub accent: String,
+    /// Gradient definition.
+    #[serde(default)]
+    pub gradient: ModelLaunchGradient,
+}
+
+/// One model variant in the launch feed.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunchVariant {
+    /// Callable or staged model identifier.
+    pub model_id: String,
+    /// User-facing variant label.
+    pub label: String,
+    /// Optional model family label.
+    #[serde(default)]
+    pub family: Option<String>,
+    /// Optional visual presentation metadata.
+    #[serde(default)]
+    pub presentation: Option<ModelLaunchVariantPresentation>,
+}
+
+/// Automatic model-selection policy for a launch.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunchSelection {
+    /// Selection mode, currently `auto`.
+    #[serde(default)]
+    pub mode: String,
+    /// Variant grouping mode.
+    #[serde(default)]
+    pub group_by: String,
+    /// Whether preview variants can be selected.
+    #[serde(default)]
+    pub allow_preview_selection: bool,
+    /// CTA label when a launch is available.
+    #[serde(default)]
+    pub available_cta_label: String,
+    /// CTA label when a launch is staged.
+    #[serde(default)]
+    pub staged_cta_label: String,
+}
+
+/// One application control exposed by a model launch.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunchControl {
+    /// Stable control identifier.
+    pub id: String,
+    /// Control kind (`toggle`, `select`, or `model_variant`).
+    pub kind: String,
+    /// User-facing label.
+    pub label: String,
+    /// Availability state.
+    pub availability: String,
+    /// Request fields affected by this control.
+    #[serde(default)]
+    pub request_fields: Vec<String>,
+    /// Selectable values.
+    #[serde(default)]
+    pub values: Vec<String>,
+    /// Optional variant suffix.
+    #[serde(default)]
+    pub variant_suffix: Option<String>,
+}
+
+/// Pricing metadata included in the model-launch feed.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunchPricing {
+    /// Pricing basis, currently `prompt_tokens`.
+    #[serde(default)]
+    pub basis: String,
+    /// Prompt-token threshold for high-context pricing.
+    #[serde(default)]
+    pub high_context_threshold: u64,
+    /// Human-readable pricing note.
+    #[serde(default)]
+    pub note: String,
+}
+
+/// Animation metadata in launch presentation data.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunchAnimation {
+    /// Animation kind.
+    #[serde(default)]
+    pub kind: String,
+    /// Animation duration in milliseconds.
+    #[serde(default)]
+    pub duration_ms: u64,
+    /// Reduced-motion rendering mode.
+    #[serde(default)]
+    pub reduced_motion: String,
+}
+
+/// Full presentation metadata for a model launch.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunchPresentation {
+    /// Theme identifier.
+    #[serde(default)]
+    pub theme_id: String,
+    /// Accent color.
+    #[serde(default)]
+    pub accent: String,
+    /// Gradient definition.
+    #[serde(default)]
+    pub gradient: ModelLaunchGradient,
+    /// Surface color.
+    #[serde(default)]
+    pub surface: String,
+    /// Foreground color.
+    #[serde(default)]
+    pub on_surface: String,
+    /// Muted text color.
+    #[serde(default)]
+    pub muted: String,
+    /// Animation metadata.
+    #[serde(default)]
+    pub animation: ModelLaunchAnimation,
+}
+
+/// Primary action generated by the API for a resolved launch.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunchAction {
+    /// Action kind (`start_chat` or `disabled`).
+    #[serde(default)]
+    pub kind: String,
+    /// User-facing action label.
+    #[serde(default)]
+    pub label: String,
+    /// Model identifier for the action, when callable.
+    #[serde(default)]
+    pub model_id: Option<String>,
+}
+
+/// Resolved launch variant used by the API UI contract.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunchUiVariant {
+    /// Variant identifier.
+    pub id: String,
+    /// User-facing label.
+    pub label: String,
+    /// Optional family label.
+    #[serde(default)]
+    pub family: Option<String>,
+    /// Availability after server-side model resolution.
+    pub availability: String,
+    /// Whether the variant can be selected.
+    pub selectable: bool,
+    /// Presentation data.
+    pub presentation: ModelLaunchPresentation,
+    /// Primary action for the variant.
+    pub primary_action: ModelLaunchAction,
+}
+
+/// Resolved UI metadata in a model-launch response.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunchUi {
+    /// Selector mode.
+    pub selector: String,
+    /// Initially selected model identifier.
+    #[serde(default)]
+    pub initial_model_id: Option<String>,
+    /// Launch-level primary action.
+    pub primary_action: ModelLaunchAction,
+    /// Resolved UI variants.
+    #[serde(default)]
+    pub variants: Vec<ModelLaunchUiVariant>,
+}
+
+/// One curated model launch returned by `/api/v1/models/launches`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelLaunch {
+    /// Stable launch identifier.
+    pub id: String,
+    /// Launch lifecycle status.
+    pub status: String,
+    /// Publication timestamp.
+    pub published_at: String,
+    /// User-facing title.
+    pub title: String,
+    /// User-facing summary.
+    pub summary: String,
+    /// Model variants included in the launch.
+    #[serde(default)]
+    pub variants: Vec<ModelLaunchVariant>,
+    /// Automatic selection policy.
+    pub selection: ModelLaunchSelection,
+    /// App controls attached to the launch.
+    #[serde(default)]
+    pub app_controls: Vec<ModelLaunchControl>,
+    /// Pricing information.
+    pub pricing: ModelLaunchPricing,
+    /// Presentation information.
+    pub presentation: ModelLaunchPresentation,
+    /// Server-resolved UI metadata, present in API responses.
+    #[serde(default)]
+    pub ui: Option<ModelLaunchUi>,
+    /// Future launch fields.
+    #[serde(flatten, default)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// Represents information about credit usage for a request.
@@ -811,25 +1255,29 @@ pub struct ResponsesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<u32>,
 
-    /// Maximum number of built-in tool calls processed for this response.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_tool_calls: Option<u32>,
-
     /// End-user identifier (legacy fallback accepted by Rainy).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
+
+    /// Provider routing object forwarded by Rainy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<ProviderOptions>,
+
+    /// Provider cache-control object forwarded by Rainy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<serde_json::Value>,
 
     /// Prompt cache key for routing/cache optimization.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
 
-    /// Modern prompt-cache options (`mode` and `ttl`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt_cache_options: Option<serde_json::Value>,
-
     /// Reasoning configuration object (provider/model dependent).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub reasoning: Option<serde_json::Value>,
+    pub reasoning: Option<ReasoningRequest>,
+
+    /// Top-level canonical reasoning-effort parameter.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<ReasoningEffort>,
 
     /// Include reasoning traces where supported.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -921,11 +1369,12 @@ impl ResponsesRequest {
             temperature: None,
             top_p: None,
             max_output_tokens: None,
-            max_tool_calls: None,
             user: None,
+            provider: None,
+            cache_control: None,
             prompt_cache_key: None,
-            prompt_cache_options: None,
             reasoning: None,
+            reasoning_effort: None,
             include_reasoning: None,
             parallel_tool_calls: None,
             stream_options: None,
@@ -960,8 +1409,34 @@ impl ResponsesRequest {
     }
 
     /// Sets reasoning configuration object.
-    pub fn with_reasoning(mut self, reasoning: serde_json::Value) -> Self {
-        self.reasoning = Some(reasoning);
+    pub fn with_reasoning(mut self, reasoning: impl Into<ReasoningRequest>) -> Self {
+        self.reasoning = Some(reasoning.into());
+        self
+    }
+
+    /// Sets the typed reasoning configuration object.
+    pub fn with_reasoning_config(mut self, reasoning: ReasoningConfig) -> Self {
+        self.reasoning = Some(ReasoningRequest::Config(reasoning));
+        self
+    }
+
+    /// Enables adaptive/default reasoning for the selected model.
+    pub fn with_adaptive_reasoning(mut self) -> Self {
+        self.reasoning = Some(ReasoningRequest::Config(ReasoningConfig::adaptive()));
+        self
+    }
+
+    /// Sets a manual reasoning-token budget. The selected model must declare this control.
+    pub fn with_reasoning_budget(mut self, max_tokens: u32) -> Self {
+        self.reasoning = Some(ReasoningRequest::Config(ReasoningConfig::manual_budget(
+            max_tokens,
+        )));
+        self
+    }
+
+    /// Sets the top-level canonical `reasoning_effort` parameter.
+    pub fn with_top_level_reasoning_effort(mut self, effort: impl Into<ReasoningEffort>) -> Self {
+        self.reasoning_effort = Some(effort.into());
         self
     }
 
@@ -972,28 +1447,10 @@ impl ResponsesRequest {
     }
 
     /// Convenience helper to set reasoning effort (`low`, `medium`, `high`).
-    pub fn with_reasoning_effort(mut self, effort: impl Into<String>) -> Self {
-        self.set_reasoning_option("effort", serde_json::Value::String(effort.into()));
-        self
-    }
-
-    /// Sets the reasoning context policy (`auto`, `all_turns`, or `current_turn`).
-    pub fn with_reasoning_context(mut self, context: impl Into<String>) -> Self {
-        self.set_reasoning_option("context", serde_json::Value::String(context.into()));
-        self
-    }
-
-    /// Sets the reasoning execution mode, such as `pro`.
-    pub fn with_reasoning_mode(mut self, mode: impl Into<String>) -> Self {
-        self.set_reasoning_option("mode", serde_json::Value::String(mode.into()));
-        self
-    }
-
-    /// Requests a generated reasoning summary (`auto`, `concise`, or `detailed`).
-    pub fn with_reasoning_summary(mut self, summary: impl Into<String>) -> Self {
+    pub fn with_reasoning_effort(mut self, effort: impl Into<ReasoningEffort>) -> Self {
         self.set_reasoning_option(
-            "generate_summary",
-            serde_json::Value::String(summary.into()),
+            "effort",
+            serde_json::to_value(effort.into()).expect("reasoning effort serializes"),
         );
         self
     }
@@ -1004,27 +1461,27 @@ impl ResponsesRequest {
         self
     }
 
-    /// Limits the total number of built-in tool calls processed in the response.
-    pub fn with_max_tool_calls(mut self, max_tool_calls: u32) -> Self {
-        self.max_tool_calls = Some(max_tool_calls);
-        self
-    }
-
     /// Sets prompt cache key.
     pub fn with_prompt_cache_key(mut self, prompt_cache_key: impl Into<String>) -> Self {
         self.prompt_cache_key = Some(prompt_cache_key.into());
         self
     }
 
-    /// Sets modern prompt-cache options, such as `mode` and `ttl`.
-    pub fn with_prompt_cache_options(mut self, prompt_cache_options: serde_json::Value) -> Self {
-        self.prompt_cache_options = Some(prompt_cache_options);
-        self
-    }
-
     /// Sets user identifier.
     pub fn with_user(mut self, user: impl Into<String>) -> Self {
         self.user = Some(user.into());
+        self
+    }
+
+    /// Sets typed provider routing options.
+    pub fn with_provider(mut self, provider: impl Into<ProviderOptions>) -> Self {
+        self.provider = Some(provider.into());
+        self
+    }
+
+    /// Sets the provider cache-control object.
+    pub fn with_cache_control(mut self, cache_control: serde_json::Value) -> Self {
+        self.cache_control = Some(cache_control);
         self
     }
 
@@ -1184,16 +1641,27 @@ impl ResponsesRequest {
     }
 
     fn set_reasoning_option(&mut self, key: &str, value: serde_json::Value) {
-        let reasoning = self
-            .reasoning
-            .get_or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-        if !reasoning.is_object() {
-            *reasoning = serde_json::Value::Object(serde_json::Map::new());
+        let mut config = match self.reasoning.take() {
+            Some(ReasoningRequest::Config(config)) => config,
+            Some(ReasoningRequest::Raw(raw)) => serde_json::from_value(raw).unwrap_or_default(),
+            Some(ReasoningRequest::Enabled(enabled)) => {
+                ReasoningConfig::default().with_enabled(enabled)
+            }
+            None => ReasoningConfig::default(),
+        };
+
+        match key {
+            "effort" => {
+                config.effort = serde_json::from_value(value).ok();
+            }
+            "max_tokens" => {
+                config.max_tokens = value.as_u64().and_then(|value| u32::try_from(value).ok());
+            }
+            _ => {
+                config.extra.insert(key.to_string(), value);
+            }
         }
-        reasoning
-            .as_object_mut()
-            .expect("reasoning was normalized to an object")
-            .insert(key.to_string(), value);
+        self.reasoning = Some(ReasoningRequest::Config(config));
     }
 }
 
@@ -1398,8 +1866,8 @@ pub struct RainyEnvelope<T> {
     pub meta: Option<RainyEnvelopeMeta>,
 }
 
-/// Response stream SSE event payload (dynamic by design).
-pub type ResponsesStreamEvent = serde_json::Value;
+/// Typed Responses SSE event payload.
+pub type ResponsesStreamEvent = ResponsesEvent;
 
 /// Model architecture metadata returned by `/models/catalog`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1437,6 +1905,9 @@ pub struct RainyCapabilities {
     /// Whether the model supports image input.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_input: Option<CapabilityFlag>,
+    /// Whether the model supports image output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_output: Option<CapabilityFlag>,
     /// Whether the model supports tool calling.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<CapabilityFlag>,
@@ -1446,8 +1917,7 @@ pub struct RainyCapabilities {
 }
 
 /// Provider-specific reasoning profile.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReasoningProvider {
     /// OpenAI provider.
     Openai,
@@ -1457,6 +1927,40 @@ pub enum ReasoningProvider {
     Anthropic,
     /// Other providers.
     Other,
+    /// A provider name added by the API after this SDK was released.
+    Custom(String),
+}
+
+impl Serialize for ReasoningProvider {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let value = match self {
+            Self::Openai => "openai",
+            Self::Google => "google",
+            Self::Anthropic => "anthropic",
+            Self::Other => "other",
+            Self::Custom(value) => value,
+        };
+        serializer.serialize_str(value)
+    }
+}
+
+impl<'de> Deserialize<'de> for ReasoningProvider {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Ok(match value.as_str() {
+            "openai" => Self::Openai,
+            "google" => Self::Google,
+            "anthropic" => Self::Anthropic,
+            "other" => Self::Other,
+            _ => Self::Custom(value),
+        })
+    }
 }
 
 /// Thinking budget range metadata.
@@ -1489,6 +1993,9 @@ pub struct ReasoningControls {
     /// Available effort levels.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<Vec<String>>,
+    /// Catalog-declared default effort.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_effort: Option<String>,
     /// Available thinking levels.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_level: Option<Vec<String>>,
@@ -1527,7 +2034,14 @@ pub struct ReasoningToggle {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RainyReasoningCapabilitiesV2 {
     /// Whether reasoning is supported.
+    #[serde(default)]
     pub supported: bool,
+    /// Whether the model normally enables reasoning by default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_enabled: Option<bool>,
+    /// Whether the model requires reasoning for this route.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mandatory: Option<bool>,
     /// Available reasoning controls.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controls: Option<ReasoningControls>,
@@ -1537,6 +2051,197 @@ pub struct RainyReasoningCapabilitiesV2 {
     /// Reasoning toggle configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub toggle: Option<ReasoningToggle>,
+}
+
+impl RainyReasoningCapabilitiesV2 {
+    /// Returns whether this catalog entry declares effort control.
+    pub fn supports_effort(&self, effort: Option<&ReasoningEffort>) -> bool {
+        if !self.supported {
+            return false;
+        }
+        let Some(controls) = self.controls.as_ref() else {
+            return false;
+        };
+        let has_control = controls.reasoning_effort == Some(true)
+            || controls
+                .effort
+                .as_ref()
+                .is_some_and(|values| !values.is_empty());
+        if !has_control {
+            return false;
+        }
+        effort.is_none_or(|requested| {
+            controls.effort.as_ref().is_none_or(|values| {
+                values
+                    .iter()
+                    .any(|value| value.eq_ignore_ascii_case(requested.as_str()))
+            })
+        })
+    }
+
+    /// Returns whether this catalog entry declares a numeric budget range.
+    pub fn supports_budget(&self, budget: u32) -> bool {
+        self.supported
+            && self
+                .controls
+                .as_ref()
+                .and_then(|controls| controls.thinking_budget.as_ref())
+                .is_some_and(|range| {
+                    i64::from(budget) >= i64::from(range.min)
+                        && i64::from(budget) <= i64::from(range.max)
+                })
+    }
+
+    /// Returns whether a profile uses a route-safe Rainy reasoning path.
+    pub fn has_route_safe_profile(&self, mode: ReasoningMode) -> bool {
+        let expected = match mode {
+            ReasoningMode::Effort => ["reasoning.effort", "reasoning.thinking_level"].as_slice(),
+            ReasoningMode::ThinkingLevel => {
+                ["reasoning.thinking_level", "reasoning.effort"].as_slice()
+            }
+            ReasoningMode::ThinkingBudget => {
+                ["reasoning.max_tokens", "reasoning.thinking_budget"].as_slice()
+            }
+        };
+        self.profiles
+            .iter()
+            .any(|profile| expected.contains(&profile.parameter_path.as_str()))
+    }
+
+    /// Builds an exact typed reasoning object from a capability-declared
+    /// control. The selected profile determines the nested wire key; the SDK
+    /// never substitutes a model-name heuristic or silently changes effort to
+    /// a token budget.
+    pub fn reasoning_config(&self, control: &ReasoningControl) -> Result<ReasoningConfig, String> {
+        if !self.supported {
+            return Err("the selected model does not support reasoning".to_string());
+        }
+
+        match control {
+            ReasoningControl::Adaptive => Ok(ReasoningConfig::adaptive()),
+            ReasoningControl::Disabled => {
+                let toggle_supported = self
+                    .controls
+                    .as_ref()
+                    .and_then(|controls| controls.reasoning_toggle)
+                    .unwrap_or(false)
+                    || self.toggle.is_some();
+                if !toggle_supported {
+                    return Err(
+                        "the selected model does not declare a reasoning toggle".to_string()
+                    );
+                }
+                Ok(ReasoningConfig::excluded())
+            }
+            ReasoningControl::Effort(effort) => {
+                if !self.supports_effort(Some(effort)) {
+                    return Err(format!(
+                        "reasoning effort '{}' is not declared by the selected model",
+                        effort
+                    ));
+                }
+                let profile = self
+                    .profiles
+                    .iter()
+                    .find(|profile| {
+                        matches!(
+                            profile.parameter_path.as_str(),
+                            "reasoning.effort" | "reasoning.thinking_level"
+                        ) && profile.values.as_ref().is_none_or(|values| {
+                            values
+                                .iter()
+                                .any(|value| value.eq_ignore_ascii_case(effort.as_str()))
+                        })
+                    })
+                    .ok_or_else(|| {
+                        "the selected model does not declare a route-safe effort profile"
+                            .to_string()
+                    })?;
+                if profile.parameter_path == "reasoning.effort" {
+                    Ok(ReasoningConfig::effort(effort.clone()))
+                } else {
+                    Ok(ReasoningConfig::default()
+                        .with_extra("thinking_level", Value::String(effort.to_string())))
+                }
+            }
+            ReasoningControl::ManualBudget(budget) => {
+                if !self.supports_budget(*budget) {
+                    return Err(format!(
+                        "reasoning budget '{}' is not declared by the selected model",
+                        budget
+                    ));
+                }
+                let profile = self
+                    .profiles
+                    .iter()
+                    .find(|profile| {
+                        matches!(
+                            profile.parameter_path.as_str(),
+                            "reasoning.max_tokens" | "reasoning.thinking_budget"
+                        )
+                    })
+                    .ok_or_else(|| {
+                        "the selected model does not declare a route-safe budget profile"
+                            .to_string()
+                    })?;
+                if profile.parameter_path == "reasoning.max_tokens" {
+                    Ok(ReasoningConfig::manual_budget(*budget))
+                } else {
+                    Ok(ReasoningConfig::default()
+                        .with_extra("thinking_budget", Value::from(*budget)))
+                }
+            }
+        }
+    }
+
+    /// Builds an exact budget payload for a catalog-declared dynamic or
+    /// disabled sentinel as well as a concrete budget.
+    pub fn reasoning_budget_config(
+        &self,
+        budget: ReasoningBudget,
+    ) -> Result<ReasoningConfig, String> {
+        if !self.supported {
+            return Err("the selected model does not support reasoning".to_string());
+        }
+        let range = self
+            .controls
+            .as_ref()
+            .and_then(|controls| controls.thinking_budget.as_ref())
+            .ok_or_else(|| "the selected model does not declare a budget control".to_string())?;
+        let value: i32 = match budget {
+            ReasoningBudget::Tokens(value) => i32::try_from(value).map_err(|_| {
+                "the reasoning budget exceeds the catalog integer range".to_string()
+            })?,
+            ReasoningBudget::Dynamic => range
+                .dynamic_value
+                .ok_or_else(|| "the selected model has no dynamic budget value".to_string())?,
+            ReasoningBudget::Disabled => range
+                .disable_value
+                .ok_or_else(|| "the selected model has no disabled budget value".to_string())?,
+        };
+        let profile = self
+            .profiles
+            .iter()
+            .find(|profile| {
+                matches!(
+                    profile.parameter_path.as_str(),
+                    "reasoning.max_tokens" | "reasoning.thinking_budget"
+                )
+            })
+            .ok_or_else(|| "the selected model has no route-safe budget profile".to_string())?;
+        if profile.parameter_path == "reasoning.max_tokens" && value >= 0 {
+            Ok(ReasoningConfig::manual_budget(value as u32))
+        } else {
+            Ok(ReasoningConfig::default().with_extra(
+                profile
+                    .parameter_path
+                    .rsplit('.')
+                    .next()
+                    .unwrap_or("max_tokens"),
+                Value::from(value),
+            ))
+        }
+    }
 }
 
 /// Multimodal capability block in `rainy_capabilities_v2`.
@@ -1562,10 +2267,13 @@ pub struct RainyParametersCapabilitiesV2 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RainyCapabilitiesV2 {
     /// Multimodal capabilities.
+    #[serde(default)]
     pub multimodal: RainyMultimodalCapabilitiesV2,
     /// Reasoning capabilities.
+    #[serde(default)]
     pub reasoning: RainyReasoningCapabilitiesV2,
     /// Parameter capabilities.
+    #[serde(default)]
     pub parameters: RainyParametersCapabilitiesV2,
 }
 
@@ -1578,6 +2286,86 @@ pub struct ModelPricing {
     /// Completion token pricing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completion: Option<String>,
+    /// Fixed request price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request: Option<String>,
+    /// Image input/output unit price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    /// Audio unit price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<String>,
+    /// Web-search request price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub web_search: Option<String>,
+    /// Provider-internal reasoning token price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub internal_reasoning: Option<String>,
+    /// Input-cache read price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_cache_read: Option<String>,
+    /// Input-cache write price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_cache_write: Option<String>,
+    /// Input-audio-cache price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_audio_cache: Option<String>,
+    /// One-hour input-cache write price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_cache_write_1h: Option<String>,
+    /// Promotional pricing metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub promo: Option<ModelPricingPromo>,
+    /// Prompt-size-dependent pricing tiers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dynamic: Option<Box<ModelDynamicPricing>>,
+    /// Provider service-tier pricing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tiers: Option<Vec<ModelServiceTierPricing>>,
+}
+
+/// Promotional pricing metadata in the public model catalog.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ModelPricingPromo {
+    /// Discount percentage.
+    pub discount_percent: f64,
+    /// ISO-8601 promotion expiry.
+    pub ends_at: String,
+}
+
+/// Dynamic pricing table keyed by prompt-token count.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ModelDynamicPricing {
+    /// Dimension used to select the tier.
+    #[serde(default)]
+    pub basis: Option<String>,
+    /// Ordered pricing tiers.
+    #[serde(default)]
+    pub tiers: Vec<ModelDynamicPricingTier>,
+}
+
+/// One prompt-size-dependent pricing tier.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ModelDynamicPricingTier {
+    /// Minimum prompt tokens for this tier.
+    pub min_prompt_tokens: u64,
+    /// Prices applied at this tier.
+    pub pricing: Box<ModelPricing>,
+    /// Human-readable pricing note.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// One provider service-tier pricing entry.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ModelServiceTierPricing {
+    /// Service-tier name.
+    pub tier: String,
+    /// Prices applied at this tier.
+    pub pricing: Box<ModelPricing>,
+    /// Human-readable pricing note.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 /// Product tier assigned to a model by Rainy.
@@ -1658,9 +2446,18 @@ pub struct ModelDataPolicy {
 pub struct ModelCatalogItem {
     /// Unique model identifier.
     pub id: String,
+    /// Canonical registry slug, when different from `id`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canonical_slug: Option<String>,
     /// Human-readable model name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Provider registry creation timestamp.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created: Option<u64>,
+    /// Human-readable provider description.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// Maximum context length in tokens.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_length: Option<u32>,
@@ -1673,6 +2470,9 @@ pub struct ModelCatalogItem {
     /// Model architecture metadata.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub architecture: Option<ModelArchitecture>,
+    /// Provider per-request limits, when published.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_request_limits: Option<serde_json::Value>,
     /// Rainy capability hints (v1).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rainy_capabilities: Option<RainyCapabilities>,
@@ -1708,6 +2508,39 @@ pub struct ModelCatalogItem {
     /// Additional model metadata.
     #[serde(flatten, default)]
     pub extra: HashMap<String, serde_json::Value>,
+}
+
+impl ModelCatalogItem {
+    /// Builds a typed reasoning object from this model's published v2
+    /// capability metadata.
+    ///
+    /// The result is safe to pass to [`ChatCompletionRequest::with_reasoning`]
+    /// or [`ResponsesRequest::with_reasoning`]. An error means the catalog did
+    /// not publish a compatible control/profile; callers should not guess a
+    /// provider parameter in that case.
+    pub fn reasoning_config_for(
+        &self,
+        control: &ReasoningControl,
+    ) -> Result<ReasoningConfig, String> {
+        self.rainy_capabilities_v2
+            .as_ref()
+            .ok_or_else(|| "model has no rainy_capabilities_v2 metadata".to_string())?
+            .reasoning
+            .reasoning_config(control)
+    }
+
+    /// Builds a typed reasoning budget, including catalog-declared dynamic and
+    /// disabled sentinel values.
+    pub fn reasoning_budget_config(
+        &self,
+        budget: ReasoningBudget,
+    ) -> Result<ReasoningConfig, String> {
+        self.rainy_capabilities_v2
+            .as_ref()
+            .ok_or_else(|| "model has no rainy_capabilities_v2 metadata".to_string())?
+            .reasoning
+            .reasoning_budget_config(budget)
+    }
 }
 
 /// Reasoning mode expected by the caller when selecting models.
@@ -1981,15 +2814,19 @@ pub fn build_reasoning_config(
                 return None;
             }
 
-            let effort_profile = profiles
-                .iter()
-                .find(|p| p.parameter_path == "reasoning.effort")?;
-            match effort_profile.parameter_path.as_str() {
-                "reasoning.effort" => Some(serde_json::json!({
-                    "reasoning": { "effort": value }
-                })),
-                _ => None,
+            let effort_profile = profiles.iter().find(|profile| {
+                profile.parameter_path == "reasoning.effort"
+                    || profile.parameter_path == "reasoning.thinking_level"
+            })?;
+            if let Some(values) = &effort_profile.values
+                && !values
+                    .iter()
+                    .any(|candidate| candidate.eq_ignore_ascii_case(&value))
+            {
+                return None;
             }
+            let field = effort_profile.parameter_path.rsplit('.').next()?;
+            Some(serde_json::json!({ "reasoning": { field: value } }))
         }
         ReasoningMode::ThinkingLevel => {
             let value = preference.value.clone()?;
@@ -2000,17 +2837,17 @@ pub fn build_reasoning_config(
             if !supports {
                 return None;
             }
-            let level_profile = profiles
-                .iter()
-                .find(|p| p.parameter_path == "thinking_config.thinking_level")?;
+            let level_profile = profiles.iter().find(|profile| {
+                profile.parameter_path == "reasoning.thinking_level"
+                    || profile.parameter_path == "reasoning.effort"
+            })?;
             if let Some(values) = &level_profile.values
                 && !values.iter().any(|v| v.eq_ignore_ascii_case(&value))
             {
                 return None;
             }
-            Some(serde_json::json!({
-                "thinking_config": { "thinking_level": value }
-            }))
+            let field = level_profile.parameter_path.rsplit('.').next()?;
+            Some(serde_json::json!({ "reasoning": { field: value } }))
         }
         ReasoningMode::ThinkingBudget => {
             let budget = preference.budget?;
@@ -2018,22 +2855,13 @@ pub fn build_reasoning_config(
             if budget < supports.min || budget > supports.max {
                 return None;
             }
-            let budget_profile = profiles.iter().find(|p| {
-                p.parameter_path == "thinking.budget_tokens"
-                    || p.parameter_path == "thinking_config.thinking_budget"
+            let budget_profile = profiles.iter().find(|profile| {
+                profile.parameter_path == "reasoning.max_tokens"
+                    || profile.parameter_path == "reasoning.thinking_budget"
             })?;
 
-            if budget_profile.parameter_path == "thinking.budget_tokens" {
-                return Some(serde_json::json!({
-                    "thinking": { "budget_tokens": budget }
-                }));
-            }
-            if budget_profile.parameter_path == "thinking_config.thinking_budget" {
-                return Some(serde_json::json!({
-                "thinking_config": { "thinking_budget": budget }
-                }));
-            }
-            None
+            let field = budget_profile.parameter_path.rsplit('.').next()?;
+            Some(serde_json::json!({ "reasoning": { field: budget } }))
         }
     }
 }
@@ -2082,6 +2910,7 @@ impl ChatCompletionRequest {
             provider: None,
             stream: None,
             stream_options: None,
+            cache_control: None,
             logit_bias: None,
             logprobs: None,
             top_logprobs: None,
@@ -2095,6 +2924,7 @@ impl ChatCompletionRequest {
             provider_options: None,
             prompt_cache_retention: None,
             reasoning: None,
+            reasoning_effort: None,
             include_reasoning: None,
             metadata: None,
             service_tier: None,
@@ -2105,9 +2935,15 @@ impl ChatCompletionRequest {
             prediction: None,
             verbosity: None,
             web_search_options: None,
+            image_config: None,
+            top_k: None,
+            min_p: None,
+            repetition_penalty: None,
+            structured_outputs: None,
             functions: None,
             function_call: None,
             thinking_config: None,
+            extra: HashMap::new(),
         }
     }
 
@@ -2139,6 +2975,30 @@ impl ChatCompletionRequest {
         self
     }
 
+    /// Sets nucleus sampling (`top_p`).
+    pub fn with_top_p(mut self, top_p: f32) -> Self {
+        self.top_p = Some(top_p.clamp(0.0, 1.0));
+        self
+    }
+
+    /// Sets frequency penalty.
+    pub fn with_frequency_penalty(mut self, penalty: f32) -> Self {
+        self.frequency_penalty = Some(penalty.clamp(-2.0, 2.0));
+        self
+    }
+
+    /// Sets presence penalty.
+    pub fn with_presence_penalty(mut self, penalty: f32) -> Self {
+        self.presence_penalty = Some(penalty.clamp(-2.0, 2.0));
+        self
+    }
+
+    /// Sets one or more stop sequences using Rainy's string-or-array wire shape.
+    pub fn with_stop(mut self, stop: impl Into<StopSequences>) -> Self {
+        self.stop = Some(stop.into());
+        self
+    }
+
     /// Sets the user identifier for the chat completion.
     ///
     /// # Arguments
@@ -2154,7 +3014,7 @@ impl ChatCompletionRequest {
     /// # Arguments
     ///
     /// * `provider` - The name of the provider to use.
-    pub fn with_provider(mut self, provider: impl Into<String>) -> Self {
+    pub fn with_provider(mut self, provider: impl Into<ProviderOptions>) -> Self {
         self.provider = Some(provider.into());
         self
     }
@@ -2172,6 +3032,19 @@ impl ChatCompletionRequest {
     /// Sets stream options payload.
     pub fn with_stream_options(mut self, stream_options: serde_json::Value) -> Self {
         self.stream_options = Some(stream_options);
+        self
+    }
+
+    /// Sets typed Chat stream options.
+    pub fn with_chat_stream_options(mut self, stream_options: ChatStreamOptions) -> Self {
+        self.stream_options =
+            Some(serde_json::to_value(stream_options).expect("chat stream options serialize"));
+        self
+    }
+
+    /// Sets provider cache-control metadata.
+    pub fn with_cache_control(mut self, cache_control: serde_json::Value) -> Self {
+        self.cache_control = Some(cache_control);
         self
     }
 
@@ -2251,19 +3124,159 @@ impl ChatCompletionRequest {
     ///
     /// * `thinking_config` - Configuration for thinking capabilities.
     pub fn with_thinking_config(mut self, thinking_config: ThinkingConfig) -> Self {
+        self.include_reasoning = thinking_config.include_thoughts;
+        self.reasoning = legacy_reasoning_request(&thinking_config);
         self.thinking_config = Some(thinking_config);
         self
     }
 
     /// Sets reasoning configuration object used by modern compat routes.
-    pub fn with_reasoning(mut self, reasoning: serde_json::Value) -> Self {
-        self.reasoning = Some(reasoning);
+    pub fn with_reasoning(mut self, reasoning: impl Into<ReasoningRequest>) -> Self {
+        self.reasoning = Some(reasoning.into());
+        self
+    }
+
+    /// Sets the typed reasoning configuration object.
+    pub fn with_reasoning_config(mut self, reasoning: ReasoningConfig) -> Self {
+        self.reasoning = Some(ReasoningRequest::Config(reasoning));
+        self
+    }
+
+    /// Sets a canonical effort value inside the Rainy `reasoning` object.
+    pub fn with_reasoning_effort(mut self, effort: impl Into<ReasoningEffort>) -> Self {
+        self.reasoning = Some(ReasoningRequest::Config(ReasoningConfig::effort(effort)));
+        self
+    }
+
+    /// Enables adaptive/default reasoning for the selected model.
+    pub fn with_adaptive_reasoning(mut self) -> Self {
+        self.reasoning = Some(ReasoningRequest::Config(ReasoningConfig::adaptive()));
+        self
+    }
+
+    /// Sets a manual reasoning-token budget. The selected model must declare this control.
+    pub fn with_reasoning_budget(mut self, max_tokens: u32) -> Self {
+        self.reasoning = Some(ReasoningRequest::Config(ReasoningConfig::manual_budget(
+            max_tokens,
+        )));
+        self
+    }
+
+    /// Sets the top-level canonical `reasoning_effort` parameter.
+    pub fn with_top_level_reasoning_effort(mut self, effort: impl Into<ReasoningEffort>) -> Self {
+        self.reasoning_effort = Some(effort.into());
         self
     }
 
     /// Requests reasoning traces where supported.
     pub fn with_include_reasoning(mut self, include_reasoning: bool) -> Self {
         self.include_reasoning = Some(include_reasoning);
+        self
+    }
+
+    /// Sets a seed for deterministic sampling where the selected model supports it.
+    pub fn with_seed(mut self, seed: i64) -> Self {
+        self.seed = Some(seed);
+        self
+    }
+
+    /// Sets the prompt-cache key.
+    pub fn with_prompt_cache_key(mut self, key: impl Into<String>) -> Self {
+        self.prompt_cache_key = Some(key.into());
+        self
+    }
+
+    /// Sets the prompt-cache retention mode (`in-memory`, `in_memory`, or `24h`).
+    pub fn with_prompt_cache_retention(mut self, retention: impl Into<String>) -> Self {
+        self.prompt_cache_retention = Some(retention.into());
+        self
+    }
+
+    /// Sets output modalities (`text`, `audio`, or `image`).
+    pub fn with_modalities<I, S>(mut self, modalities: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.modalities = Some(modalities.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Sets audio output options.
+    pub fn with_audio(mut self, audio: serde_json::Value) -> Self {
+        self.audio = Some(audio);
+        self
+    }
+
+    /// Sets a prediction optimization payload.
+    pub fn with_prediction(mut self, prediction: serde_json::Value) -> Self {
+        self.prediction = Some(prediction);
+        self
+    }
+
+    /// Sets output verbosity.
+    pub fn with_verbosity(mut self, verbosity: impl Into<String>) -> Self {
+        self.verbosity = Some(verbosity.into());
+        self
+    }
+
+    /// Sets web-search options.
+    pub fn with_web_search_options(mut self, options: serde_json::Value) -> Self {
+        self.web_search_options = Some(options);
+        self
+    }
+
+    /// Sets a model-declared `top_k` parameter.
+    pub fn with_top_k(mut self, top_k: f32) -> Self {
+        self.top_k = Some(top_k);
+        self
+    }
+
+    /// Sets a model-declared `min_p` parameter.
+    pub fn with_min_p(mut self, min_p: f32) -> Self {
+        self.min_p = Some(min_p);
+        self
+    }
+
+    /// Sets a model-declared repetition penalty.
+    pub fn with_repetition_penalty(mut self, penalty: f32) -> Self {
+        self.repetition_penalty = Some(penalty);
+        self
+    }
+
+    /// Sets the provider's structured-output compatibility flag.
+    pub fn with_structured_outputs(mut self, enabled: bool) -> Self {
+        self.structured_outputs = Some(enabled);
+        self
+    }
+
+    /// Sets provider-specific option data forwarded as `provider_options`.
+    pub fn with_provider_options(mut self, options: serde_json::Value) -> Self {
+        self.provider_options = Some(options);
+        self
+    }
+
+    /// Sets legacy function definitions when the selected model declares them.
+    pub fn with_functions(mut self, functions: Vec<serde_json::Value>) -> Self {
+        self.functions = Some(functions);
+        self
+    }
+
+    /// Sets the legacy function-call directive when the selected model declares it.
+    pub fn with_function_call(mut self, function_call: serde_json::Value) -> Self {
+        self.function_call = Some(function_call);
+        self
+    }
+
+    /// Sets image-generation controls for multimodal output.
+    pub fn with_image_config(mut self, image_config: ChatImageConfig) -> Self {
+        self.image_config = Some(image_config);
+        self
+    }
+
+    /// Adds an explicit request extension field.
+    pub fn with_extra(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.extra.insert(key.into(), value);
         self
     }
 
@@ -2288,6 +3301,7 @@ impl ChatCompletionRequest {
         let mut config = self.thinking_config.unwrap_or_default();
         config.include_thoughts = Some(include_thoughts);
         self.thinking_config = Some(config);
+        self.include_reasoning = Some(include_thoughts);
         self
     }
 
@@ -2299,6 +3313,7 @@ impl ChatCompletionRequest {
     pub fn with_thinking_level(mut self, thinking_level: ThinkingLevel) -> Self {
         let mut config = self.thinking_config.unwrap_or_default();
         config.thinking_level = Some(thinking_level);
+        self.reasoning = legacy_reasoning_request(&config);
         self.thinking_config = Some(config);
         self
     }
@@ -2311,6 +3326,7 @@ impl ChatCompletionRequest {
     pub fn with_thinking_budget(mut self, thinking_budget: i32) -> Self {
         let mut config = self.thinking_config.unwrap_or_default();
         config.thinking_budget = Some(thinking_budget);
+        self.reasoning = legacy_reasoning_request(&config);
         self.thinking_config = Some(config);
         self
     }
@@ -2394,10 +3410,11 @@ impl ChatCompletionRequest {
 
         // Validate stop sequences
         if let Some(stop) = &self.stop {
-            if stop.len() > 4 {
+            let sequences = stop.as_slice();
+            if sequences.len() > 4 {
                 return Err("Cannot have more than 4 stop sequences".to_string());
             }
-            for seq in stop {
+            for seq in sequences {
                 if seq.is_empty() {
                     return Err("Stop sequences cannot be empty".to_string());
                 }
@@ -2410,6 +3427,10 @@ impl ChatCompletionRequest {
         // Validate thinking configuration for Gemini models
         if let Some(thinking_config) = &self.thinking_config {
             self.validate_thinking_config(thinking_config)?;
+        }
+
+        if let Some(ReasoningRequest::Config(reasoning)) = &self.reasoning {
+            reasoning.validate()?;
         }
 
         Ok(())
@@ -2498,6 +3519,7 @@ impl OpenAIChatCompletionRequest {
             provider: None,
             stream: None,
             stream_options: None,
+            cache_control: None,
             logit_bias: None,
             logprobs: None,
             top_logprobs: None,
@@ -2511,6 +3533,7 @@ impl OpenAIChatCompletionRequest {
             provider_options: None,
             prompt_cache_retention: None,
             reasoning: None,
+            reasoning_effort: None,
             include_reasoning: None,
             metadata: None,
             service_tier: None,
@@ -2521,10 +3544,16 @@ impl OpenAIChatCompletionRequest {
             prediction: None,
             verbosity: None,
             web_search_options: None,
+            image_config: None,
+            top_k: None,
+            min_p: None,
+            repetition_penalty: None,
+            structured_outputs: None,
             functions: None,
             function_call: None,
             thinking_config: None,
             thinking: None,
+            extra: HashMap::new(),
         }
     }
 
@@ -2553,7 +3582,7 @@ impl OpenAIChatCompletionRequest {
     }
 
     /// Sets a provider hint.
-    pub fn with_provider(mut self, provider: impl Into<String>) -> Self {
+    pub fn with_provider(mut self, provider: impl Into<ProviderOptions>) -> Self {
         self.provider = Some(provider.into());
         self
     }
@@ -2589,8 +3618,8 @@ impl OpenAIChatCompletionRequest {
     }
 
     /// Sets stop sequences.
-    pub fn with_stop(mut self, stop: Vec<String>) -> Self {
-        self.stop = Some(stop);
+    pub fn with_stop(mut self, stop: impl Into<StopSequences>) -> Self {
+        self.stop = Some(stop.into());
         self
     }
 
@@ -2638,19 +3667,65 @@ impl OpenAIChatCompletionRequest {
 
     /// Sets the Gemini thinking configuration.
     pub fn with_thinking_config(mut self, thinking_config: ThinkingConfig) -> Self {
+        self.include_reasoning = thinking_config.include_thoughts;
+        self.reasoning = legacy_reasoning_request(&thinking_config);
         self.thinking_config = Some(thinking_config);
         self
     }
 
     /// Sets reasoning configuration object used by modern compat routes.
-    pub fn with_reasoning(mut self, reasoning: serde_json::Value) -> Self {
-        self.reasoning = Some(reasoning);
+    pub fn with_reasoning(mut self, reasoning: impl Into<ReasoningRequest>) -> Self {
+        self.reasoning = Some(reasoning.into());
+        self
+    }
+
+    /// Sets the typed reasoning configuration object.
+    pub fn with_reasoning_config(mut self, reasoning: ReasoningConfig) -> Self {
+        self.reasoning = Some(ReasoningRequest::Config(reasoning));
+        self
+    }
+
+    /// Sets a canonical effort value inside the Rainy `reasoning` object.
+    pub fn with_reasoning_effort(mut self, effort: impl Into<ReasoningEffort>) -> Self {
+        self.reasoning = Some(ReasoningRequest::Config(ReasoningConfig::effort(effort)));
+        self
+    }
+
+    /// Enables adaptive/default reasoning for the selected model.
+    pub fn with_adaptive_reasoning(mut self) -> Self {
+        self.reasoning = Some(ReasoningRequest::Config(ReasoningConfig::adaptive()));
+        self
+    }
+
+    /// Sets a manual reasoning-token budget. The selected model must declare this control.
+    pub fn with_reasoning_budget(mut self, max_tokens: u32) -> Self {
+        self.reasoning = Some(ReasoningRequest::Config(ReasoningConfig::manual_budget(
+            max_tokens,
+        )));
+        self
+    }
+
+    /// Sets the top-level canonical `reasoning_effort` parameter.
+    pub fn with_top_level_reasoning_effort(mut self, effort: impl Into<ReasoningEffort>) -> Self {
+        self.reasoning_effort = Some(effort.into());
         self
     }
 
     /// Requests reasoning traces where supported.
     pub fn with_include_reasoning(mut self, include_reasoning: bool) -> Self {
         self.include_reasoning = Some(include_reasoning);
+        self
+    }
+
+    /// Sets image-generation controls for multimodal output.
+    pub fn with_image_config(mut self, image_config: ChatImageConfig) -> Self {
+        self.image_config = Some(image_config);
+        self
+    }
+
+    /// Adds an explicit request extension field.
+    pub fn with_extra(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.extra.insert(key.into(), value);
         self
     }
 
@@ -2671,6 +3746,7 @@ impl OpenAIChatCompletionRequest {
         let mut config = self.thinking_config.unwrap_or_default();
         config.include_thoughts = Some(include_thoughts);
         self.thinking_config = Some(config);
+        self.include_reasoning = Some(include_thoughts);
         self
     }
 
@@ -2678,6 +3754,7 @@ impl OpenAIChatCompletionRequest {
     pub fn with_thinking_level(mut self, thinking_level: ThinkingLevel) -> Self {
         let mut config = self.thinking_config.unwrap_or_default();
         config.thinking_level = Some(thinking_level);
+        self.reasoning = legacy_reasoning_request(&config);
         self.thinking_config = Some(config);
         self
     }
@@ -2686,6 +3763,7 @@ impl OpenAIChatCompletionRequest {
     pub fn with_thinking_budget(mut self, thinking_budget: i32) -> Self {
         let mut config = self.thinking_config.unwrap_or_default();
         config.thinking_budget = Some(thinking_budget);
+        self.reasoning = legacy_reasoning_request(&config);
         self.thinking_config = Some(config);
         self
     }
@@ -2697,6 +3775,10 @@ impl OpenAIChatCompletionRequest {
     pub fn with_anthropic_thinking(mut self, budget_tokens: i32) -> Self {
         self.thinking =
             Some(serde_json::json!({"type": "enabled", "budget_tokens": budget_tokens}));
+        self.reasoning = Some(ReasoningRequest::Raw(serde_json::json!({
+            "type": "enabled",
+            "budget_tokens": budget_tokens,
+        })));
         self
     }
 
@@ -2716,6 +3798,7 @@ impl OpenAIChatCompletionRequest {
             provider: self.provider.clone(),
             stream: self.stream,
             stream_options: self.stream_options.clone(),
+            cache_control: self.cache_control.clone(),
             logit_bias: self.logit_bias.clone(),
             logprobs: self.logprobs,
             top_logprobs: self.top_logprobs,
@@ -2729,6 +3812,7 @@ impl OpenAIChatCompletionRequest {
             provider_options: self.provider_options.clone(),
             prompt_cache_retention: self.prompt_cache_retention.clone(),
             reasoning: self.reasoning.clone(),
+            reasoning_effort: self.reasoning_effort.clone(),
             include_reasoning: self.include_reasoning,
             metadata: self.metadata.clone(),
             service_tier: self.service_tier.clone(),
@@ -2739,9 +3823,15 @@ impl OpenAIChatCompletionRequest {
             prediction: self.prediction.clone(),
             verbosity: self.verbosity.clone(),
             web_search_options: self.web_search_options.clone(),
+            image_config: self.image_config.clone(),
+            top_k: self.top_k,
+            min_p: self.min_p,
+            repetition_penalty: self.repetition_penalty,
+            structured_outputs: self.structured_outputs,
             functions: self.functions.clone(),
             function_call: self.function_call.clone(),
             thinking_config: self.thinking_config.clone(),
+            extra: self.extra.clone(),
         }
         .validate_openai_compatibility()
     }
@@ -2754,6 +3844,102 @@ impl OpenAIChatCompletionRequest {
     /// Checks whether the selected model requires thought signatures for function calling.
     pub fn requires_thought_signatures(&self) -> bool {
         self.model.contains("gemini-3")
+    }
+}
+
+impl OpenAIChatCompletionRequest {
+    /// Sets provider cache-control metadata.
+    pub fn with_cache_control(mut self, cache_control: serde_json::Value) -> Self {
+        self.cache_control = Some(cache_control);
+        self
+    }
+
+    /// Sets prompt-cache routing key.
+    pub fn with_prompt_cache_key(mut self, key: impl Into<String>) -> Self {
+        self.prompt_cache_key = Some(key.into());
+        self
+    }
+
+    /// Sets prompt-cache retention mode.
+    pub fn with_prompt_cache_retention(mut self, retention: impl Into<String>) -> Self {
+        self.prompt_cache_retention = Some(retention.into());
+        self
+    }
+
+    /// Sets output modalities.
+    pub fn with_modalities<I, S>(mut self, modalities: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.modalities = Some(modalities.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Sets audio output options.
+    pub fn with_audio(mut self, audio: serde_json::Value) -> Self {
+        self.audio = Some(audio);
+        self
+    }
+
+    /// Sets a prediction optimization payload.
+    pub fn with_prediction(mut self, prediction: serde_json::Value) -> Self {
+        self.prediction = Some(prediction);
+        self
+    }
+
+    /// Sets output verbosity.
+    pub fn with_verbosity(mut self, verbosity: impl Into<String>) -> Self {
+        self.verbosity = Some(verbosity.into());
+        self
+    }
+
+    /// Sets web-search options.
+    pub fn with_web_search_options(mut self, options: serde_json::Value) -> Self {
+        self.web_search_options = Some(options);
+        self
+    }
+
+    /// Sets a model-declared `top_k` parameter.
+    pub fn with_top_k(mut self, top_k: f32) -> Self {
+        self.top_k = Some(top_k);
+        self
+    }
+
+    /// Sets a model-declared `min_p` parameter.
+    pub fn with_min_p(mut self, min_p: f32) -> Self {
+        self.min_p = Some(min_p);
+        self
+    }
+
+    /// Sets a model-declared repetition penalty.
+    pub fn with_repetition_penalty(mut self, penalty: f32) -> Self {
+        self.repetition_penalty = Some(penalty);
+        self
+    }
+
+    /// Sets whether structured outputs are requested.
+    pub fn with_structured_outputs(mut self, enabled: bool) -> Self {
+        self.structured_outputs = Some(enabled);
+        self
+    }
+
+    /// Sets provider-specific option data.
+    pub fn with_provider_options(mut self, options: serde_json::Value) -> Self {
+        self.provider_options = Some(options);
+        self
+    }
+
+    /// Sets legacy function definitions.
+    pub fn with_functions(mut self, functions: Vec<serde_json::Value>) -> Self {
+        self.functions = Some(functions);
+        self
+    }
+
+    /// Sets the legacy function-call directive.
+    pub fn with_function_call(mut self, function_call: serde_json::Value) -> Self {
+        self.function_call = Some(function_call);
+        self
     }
 }
 
@@ -2834,6 +4020,45 @@ impl OpenAIContentPart {
             },
         }
     }
+
+    /// Creates an inline base64 audio input part.
+    pub fn input_audio(data: impl Into<String>, format: impl Into<String>) -> Self {
+        Self::InputAudio {
+            input_audio: OpenAIInputAudio {
+                data: data.into(),
+                format: format.into(),
+            },
+        }
+    }
+
+    /// Creates an audio URL input part.
+    pub fn audio_url(url: impl Into<String>) -> Self {
+        Self::AudioUrl {
+            audio_url: OpenAIAudioUrl { url: url.into() },
+        }
+    }
+
+    /// Creates a file-reference input part.
+    pub fn file_id(file_id: impl Into<String>) -> Self {
+        Self::File {
+            file: OpenAIFile {
+                file_id: Some(file_id.into()),
+                file_data: None,
+                filename: None,
+            },
+        }
+    }
+
+    /// Creates an inline file-data input part.
+    pub fn file_data(data: impl Into<String>, filename: Option<String>) -> Self {
+        Self::File {
+            file: OpenAIFile {
+                file_id: None,
+                file_data: Some(data.into()),
+                filename,
+            },
+        }
+    }
 }
 
 impl OpenAIChatMessage {
@@ -2845,6 +4070,11 @@ impl OpenAIChatMessage {
             name: None,
             tool_calls: None,
             tool_call_id: None,
+            reasoning: None,
+            reasoning_content: None,
+            reasoning_details: None,
+            refusal: None,
+            extra: HashMap::new(),
         }
     }
 
@@ -2856,6 +4086,11 @@ impl OpenAIChatMessage {
             name: None,
             tool_calls: None,
             tool_call_id: None,
+            reasoning: None,
+            reasoning_content: None,
+            reasoning_details: None,
+            refusal: None,
+            extra: HashMap::new(),
         }
     }
 
@@ -2867,6 +4102,11 @@ impl OpenAIChatMessage {
             name: None,
             tool_calls: None,
             tool_call_id: None,
+            reasoning: None,
+            reasoning_content: None,
+            reasoning_details: None,
+            refusal: None,
+            extra: HashMap::new(),
         }
     }
 
@@ -2878,6 +4118,11 @@ impl OpenAIChatMessage {
             name: None,
             tool_calls: Some(tool_calls),
             tool_call_id: None,
+            reasoning: None,
+            reasoning_content: None,
+            reasoning_details: None,
+            refusal: None,
+            extra: HashMap::new(),
         }
     }
 
@@ -2889,6 +4134,11 @@ impl OpenAIChatMessage {
             name: None,
             tool_calls: None,
             tool_call_id: Some(tool_call_id.into()),
+            reasoning: None,
+            reasoning_content: None,
+            reasoning_details: None,
+            refusal: None,
+            extra: HashMap::new(),
         }
     }
 
@@ -2905,6 +4155,11 @@ impl OpenAIChatMessage {
             name: None,
             tool_calls,
             tool_call_id,
+            reasoning: None,
+            reasoning_content: None,
+            reasoning_details: None,
+            refusal: None,
+            extra: HashMap::new(),
         }
     }
 }
@@ -2930,14 +4185,17 @@ pub use legacy_types::{
 };
 
 /// Represents the format that the model must output.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
 pub enum ResponseFormat {
     /// The model can return text.
+    #[serde(rename = "text")]
     Text,
     /// The model must return a valid JSON object.
+    #[serde(rename = "json_object")]
     JsonObject,
     /// The model must return a JSON object that matches the provided schema.
+    #[serde(rename = "json_schema")]
     JsonSchema {
         /// The JSON Schema that the model's output must conform to.
         json_schema: serde_json::Value,
@@ -2945,7 +4203,7 @@ pub enum ResponseFormat {
 }
 
 /// Represents a tool that the model can use.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Tool {
     /// The type of the tool (currently only "function" is supported).
     pub r#type: ToolType,
@@ -2954,7 +4212,7 @@ pub struct Tool {
 }
 
 /// The type of tool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolType {
     /// A function tool.
@@ -2962,7 +4220,7 @@ pub enum ToolType {
 }
 
 /// Represents a function definition for a tool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FunctionDefinition {
     /// The name of the function.
     pub name: String,
@@ -2975,13 +4233,14 @@ pub struct FunctionDefinition {
 }
 
 /// Controls which tool is called by the model.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ToolChoice {
     /// No tool is called.
     None,
     /// The model chooses which tool to call.
     Auto,
+    /// A tool must be called.
+    Required,
     /// A specific tool is called.
     Tool {
         /// The type of the tool being called.
@@ -2991,8 +4250,56 @@ pub enum ToolChoice {
     },
 }
 
+impl Serialize for ToolChoice {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::None => serializer.serialize_str("none"),
+            Self::Auto => serializer.serialize_str("auto"),
+            Self::Required => serializer.serialize_str("required"),
+            Self::Tool { r#type, function } => {
+                serde_json::json!({ "type": r#type, "function": function }).serialize(serializer)
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ToolChoice {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if let Some(value) = value.as_str() {
+            return match value {
+                "none" => Ok(Self::None),
+                "auto" => Ok(Self::Auto),
+                "required" => Ok(Self::Required),
+                other => Err(serde::de::Error::custom(format!(
+                    "unknown tool choice '{other}'"
+                ))),
+            };
+        }
+
+        #[derive(Deserialize)]
+        struct ToolChoiceObject {
+            r#type: ToolType,
+            function: ToolFunction,
+        }
+
+        let object: ToolChoiceObject = serde_json::from_value(value)
+            .map_err(|error| serde::de::Error::custom(error.to_string()))?;
+        Ok(Self::Tool {
+            r#type: object.r#type,
+            function: object.function,
+        })
+    }
+}
+
 /// Represents a tool function call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ToolFunction {
     /// The name of the function to call.
     pub name: String,
@@ -3026,6 +4333,39 @@ pub enum ThinkingLevel {
     Medium,
     /// High thinking level - deep reasoning for complex tasks (default).
     High,
+}
+
+/// Converts the pre-v6 Gemini thinking builder into the current Rainy
+/// reasoning wire shape without silently dropping any configured value.
+///
+/// The legacy type is retained for source compatibility, but its old
+/// `#[serde(skip)]` representation was never a valid request payload. A
+/// single control is represented with the typed `ReasoningConfig`; a legacy
+/// combination or dynamic `-1` budget is preserved as an explicit raw object
+/// so validation can reject a contradictory request instead of changing it.
+fn legacy_reasoning_request(config: &ThinkingConfig) -> Option<ReasoningRequest> {
+    let effort = config.thinking_level.as_ref().map(|level| match level {
+        ThinkingLevel::Minimal => ReasoningEffort::Minimal,
+        ThinkingLevel::Low => ReasoningEffort::Low,
+        ThinkingLevel::Medium => ReasoningEffort::Medium,
+        ThinkingLevel::High => ReasoningEffort::High,
+    });
+    let budget = config.thinking_budget;
+
+    match (effort, budget) {
+        (None, None) => None,
+        (Some(effort), None) => Some(ReasoningRequest::Config(ReasoningConfig::effort(effort))),
+        (None, Some(budget)) if budget >= 0 => Some(ReasoningRequest::Config(
+            ReasoningConfig::manual_budget(budget as u32),
+        )),
+        (Some(effort), Some(budget)) => Some(ReasoningRequest::Raw(serde_json::json!({
+            "effort": effort,
+            "max_tokens": budget,
+        }))),
+        (None, Some(budget)) => Some(ReasoningRequest::Raw(serde_json::json!({
+            "max_tokens": budget,
+        }))),
+    }
 }
 
 /// Represents a content part that may include thought signatures.
@@ -3132,7 +4472,7 @@ impl ThinkingConfig {
         Self {
             thinking_level: Some(ThinkingLevel::High),
             include_thoughts: Some(true),
-            thinking_budget: Some(-1), // Dynamic for 2.5 models
+            thinking_budget: None,
         }
     }
 
@@ -3141,7 +4481,7 @@ impl ThinkingConfig {
         Self {
             thinking_level: Some(ThinkingLevel::Low),
             include_thoughts: Some(false),
-            thinking_budget: Some(512), // Low budget for 2.5 models
+            thinking_budget: None,
         }
     }
 }
@@ -3268,6 +4608,13 @@ pub enum ChatStreamEvent {
     Chunk(ChatCompletionStreamResponse),
     /// Rainy native billing event.
     Billing(RainyBillingStreamEvent),
+    /// A named SSE event that this SDK does not yet classify.
+    Unknown {
+        /// Native event name supplied by the server.
+        event: String,
+        /// Unmodified JSON payload.
+        data: serde_json::Value,
+    },
     /// Unknown event payload kept verbatim for forward compatibility.
     Raw(serde_json::Value),
 }
@@ -3301,7 +4648,30 @@ impl ChatStreamEvent {
             return Self::Billing(billing);
         }
 
-        Self::from_value(value)
+        // A named provider event is authoritative. Do not reinterpret a
+        // future event carrying a chunk-shaped payload as a normal chunk.
+        if let Some(event) = event_name.filter(|name| !name.is_empty())
+            && !event.eq_ignore_ascii_case("message")
+            && !event.eq_ignore_ascii_case("chat.completion.chunk")
+        {
+            return Self::Unknown {
+                event: event.to_string(),
+                data: value,
+            };
+        }
+
+        if let Ok(chunk) = serde_json::from_value::<ChatCompletionStreamResponse>(value.clone()) {
+            return Self::Chunk(chunk);
+        }
+
+        if let Some(event) = event_name.filter(|name| !name.is_empty()) {
+            return Self::Unknown {
+                event: event.to_string(),
+                data: value,
+            };
+        }
+
+        Self::Raw(value)
     }
 }
 

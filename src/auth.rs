@@ -1,7 +1,141 @@
 use crate::error::{RainyError, Result};
+use futures::StreamExt;
+use reqwest::Response;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
 use secrecy::{ExposeSecret, SecretString};
+use serde::Serialize;
 use std::time::Duration;
+
+/// Maximum request body accepted by ordinary Rainy API routes.
+pub(crate) const GENERAL_REQUEST_BODY_BYTES: usize = 1_048_576;
+/// Maximum request body accepted by model-generation and embedding routes.
+pub(crate) const MODEL_REQUEST_BODY_BYTES: usize = 33_554_432;
+/// Maximum response body retained by the SDK for a normal JSON response.
+pub(crate) const MAX_RESPONSE_BODY_BYTES: usize = 16 * 1024 * 1024;
+/// Maximum error body retained by the SDK. Error payloads are not useful after
+/// a small bounded prefix and must never become an unbounded memory sink.
+pub(crate) const MAX_ERROR_BODY_BYTES: usize = 64 * 1024;
+
+/// Serializes a JSON request body while enforcing the corresponding Rainy
+/// route limit before a request is sent.
+pub(crate) fn serialize_json_body<T: Serialize>(value: &T, max_bytes: usize) -> Result<Vec<u8>> {
+    let body = serde_json::to_vec(value).map_err(|error| RainyError::Serialization {
+        message: "Failed to serialize JSON request body".to_string(),
+        source_error: Some(error.to_string()),
+    })?;
+    if body.len() > max_bytes {
+        return Err(RainyError::PayloadTooLarge {
+            message: "JSON request body exceeds the configured safety limit".to_string(),
+            max_bytes,
+        });
+    }
+    Ok(body)
+}
+
+/// Parses the numeric form of the HTTP `Retry-After` header.
+///
+/// Rainy's rate-limit responses use seconds.  Invalid, fractional, negative,
+/// and unreasonably large values are ignored instead of being allowed to turn
+/// a retry into an unbounded sleep.  HTTP-date values are deliberately not
+/// guessed at here: honoring a malformed date would be less safe than using
+/// the SDK's bounded exponential backoff.
+pub(crate) fn retry_after_seconds(headers: &HeaderMap) -> Option<u64> {
+    headers
+        .get("retry-after")
+        .and_then(|header| header.to_str().ok())
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|seconds| *seconds <= 86_400)
+}
+
+/// Read an HTTP body without allowing an untrusted peer to force an
+/// unbounded allocation.
+pub(crate) async fn read_limited_response_body(
+    response: Response,
+    max_bytes: usize,
+) -> Result<Vec<u8>> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
+        return Err(RainyError::PayloadTooLarge {
+            message: "HTTP response body exceeds the configured safety limit".to_string(),
+            max_bytes,
+        });
+    }
+
+    let mut body = Vec::new();
+    let mut chunks = response.bytes_stream();
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.map_err(|_error| RainyError::Network {
+            message: "Failed while reading HTTP response body".to_string(),
+            retryable: false,
+            source_error: None,
+        })?;
+        if body.len().saturating_add(chunk.len()) > max_bytes {
+            return Err(RainyError::PayloadTooLarge {
+                message: "HTTP response body exceeds the configured safety limit".to_string(),
+                max_bytes,
+            });
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
+/// Validate a configured service URL before it is used for authenticated HTTP.
+///
+/// HTTPS is required for real hosts. Plain HTTP is allowed only for loopback
+/// test servers, which keeps local integration tests useful without allowing a
+/// caller to accidentally send credentials over the network in cleartext.
+pub(crate) fn validate_service_url(raw: &str, code: &str) -> Result<url::Url> {
+    if raw != raw.trim() {
+        return Err(RainyError::InvalidRequest {
+            code: code.to_string(),
+            message: "Base URL must not contain surrounding whitespace".to_string(),
+            details: None,
+        });
+    }
+
+    let parsed = url::Url::parse(raw).map_err(|_| RainyError::InvalidRequest {
+        code: code.to_string(),
+        message: "Base URL is not a valid URL".to_string(),
+        details: None,
+    })?;
+
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| RainyError::InvalidRequest {
+            code: code.to_string(),
+            message: "Base URL must include a host".to_string(),
+            details: None,
+        })?;
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| address.is_loopback());
+    if parsed.scheme() != "https" && !(parsed.scheme() == "http" && loopback) {
+        return Err(RainyError::InvalidRequest {
+            code: code.to_string(),
+            message: "Base URL must use HTTPS (HTTP is allowed only for loopback hosts)"
+                .to_string(),
+            details: None,
+        });
+    }
+
+    if !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return Err(RainyError::InvalidRequest {
+            code: code.to_string(),
+            message: "Base URL must not contain credentials, a query, or a fragment".to_string(),
+            details: None,
+        });
+    }
+
+    Ok(parsed)
+}
 
 /// Configuration for authentication and client behavior.
 ///
@@ -132,7 +266,8 @@ impl AuthConfig {
     /// This method checks for common configuration errors, such as an empty API key
     /// or an invalid base URL.
     ///
-    /// Supports standard API key format: `ra-{48 hex}` = 51 characters.
+    /// Supports standard keys (`ra-` plus 48 characters) and platform keys
+    /// (`rk_live_` plus 48 characters), matching the Rainy API.
     ///
     /// # Returns
     ///
@@ -148,42 +283,29 @@ impl AuthConfig {
 
         let key = self.api_key.expose_secret();
 
-        if key.starts_with("ra-") {
-            // Standard key: ra- (3 chars) + 48 hex = 51 chars
-            if key.len() != 51 {
-                return Err(RainyError::Authentication {
-                    code: "INVALID_API_KEY_FORMAT".to_string(),
-                    message: "Standard API key must be 51 characters (ra- + 48 hex)".to_string(),
-                    retryable: false,
-                });
-            }
-        } else {
+        let valid_length = (key.starts_with("ra-") && key.len() == 51)
+            || (key.starts_with("rk_live_") && key.len() == 56);
+        if !valid_length || !key.is_ascii() || key.bytes().any(|byte| byte.is_ascii_whitespace()) {
             return Err(RainyError::Authentication {
                 code: "INVALID_API_KEY_FORMAT".to_string(),
-                message: "API key must start with 'ra-'".to_string(),
+                message: "API key has an invalid prefix or length".to_string(),
                 retryable: false,
             });
         }
 
-        // Validate URL format
-        if url::Url::parse(&self.base_url).is_err() {
+        if self.timeout_seconds == 0 {
             return Err(RainyError::InvalidRequest {
-                code: "INVALID_BASE_URL".to_string(),
-                message: "Base URL is not a valid URL".to_string(),
+                code: "INVALID_TIMEOUT".to_string(),
+                message: "Request timeout must be greater than zero".to_string(),
                 details: None,
             });
         }
 
-        if self
-            .api_base_url
-            .as_ref()
-            .is_some_and(|api_base_url| url::Url::parse(api_base_url).is_err())
-        {
-            return Err(RainyError::InvalidRequest {
-                code: "INVALID_API_BASE_URL".to_string(),
-                message: "API base URL is not a valid URL".to_string(),
-                details: None,
-            });
+        // Validate URL format
+        validate_service_url(&self.base_url, "INVALID_BASE_URL")?;
+
+        if let Some(api_base_url) = self.api_base_url.as_ref() {
+            validate_service_url(api_base_url, "INVALID_API_BASE_URL")?;
         }
 
         Ok(())

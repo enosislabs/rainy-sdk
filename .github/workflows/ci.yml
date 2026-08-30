@@ -38,26 +38,28 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.rust == '1.98.0'
 
       - name: Run clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
         if: matrix.os == 'ubuntu-latest' && matrix.rust == '1.98.0'
 
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --locked --all-features --verbose
 
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --locked --all-features --verbose
 
       - name: Run integration tests
-        run: cargo test --test integration_test --verbose
+        run: cargo test --locked --all-features --test integration_test --verbose
         env:
           RUST_LOG: debug
 
       - name: Generate documentation
-        run: cargo doc --no-deps
+        run: |
+          RUSTDOCFLAGS="-D missing_docs -D rustdoc::broken_intra_doc_links" \
+          cargo doc --locked --all-features --no-deps
         if: matrix.os == 'ubuntu-latest' && matrix.rust == '1.98.0'
 
       - name: Check documentation examples
-        run: cargo test --doc
+        run: cargo test --locked --doc --all-features
         if: matrix.os == 'ubuntu-latest' && matrix.rust == '1.98.0'
 
   security-audit:
@@ -125,17 +127,28 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run enhanced clippy checks
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
       - name: Check for unused dependencies
         run: |
           cargo install cargo-machete
           cargo machete
 
+      - name: Check dependency policy
+        run: |
+          cargo install cargo-deny
+          cargo deny check
+
+      - name: Check feature matrix
+        run: |
+          cargo check --locked --no-default-features
+          cargo check --locked --features legacy
+          cargo test --locked --no-default-features
+
       - name: Check documentation coverage
         run: |
           RUSTDOCFLAGS="-D missing_docs -D rustdoc::broken_intra_doc_links" \
-          cargo doc --all-features --no-deps
+          cargo doc --locked --all-features --no-deps
 
       - name: Verify no TODO/FIXME comments in production code
         run: |
@@ -162,11 +175,13 @@ jobs:
       - name: Run performance tests
         run: |
           # Build optimized version for performance testing
-          cargo build --release --all-features
+          cargo build --locked --release --all-features
 
           # Check binary size (fail if too large)
           size=$(stat -c%s target/release/librainy_sdk.rlib 2>/dev/null || echo "0")
-          max_size=$((10 * 1024 * 1024))  # 10MB limit
+          # The typed Chat/Responses/Messages/session/catalog surface is intentionally
+          # larger than the pre-typed SDK. Keep a hard 16 MiB all-features budget.
+          max_size=$((16 * 1024 * 1024))  # 16 MiB limit
 
           if [ "$size" -gt "$max_size" ]; then
             echo "Binary size ($size bytes) exceeds limit ($max_size bytes)"
@@ -180,7 +195,7 @@ jobs:
           # Measure compilation time
           start_time=$(date +%s)
           cargo clean
-          cargo build --release
+          cargo build --locked --release --all-features
           end_time=$(date +%s)
           compile_time=$((end_time - start_time))
 

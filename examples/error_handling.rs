@@ -12,11 +12,12 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let api_key = std::env::var("RAINY_API_KEY").unwrap_or_else(|_| "ra-test-key".to_string());
+    let api_key =
+        std::env::var("RAINY_API_KEY").unwrap_or_else(|_| format!("ra-{}", "0".repeat(48)));
 
     let client = RainyClient::with_api_key(&api_key)?;
 
-    println!("🌧️  Rainy SDK v0.2.0 - Error Handling Example");
+    println!("🌧️  Rainy SDK v0.6.16 - Error Handling Example");
     println!("==============================================");
 
     // Example 1: Handle different error types

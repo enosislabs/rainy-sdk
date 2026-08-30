@@ -125,10 +125,7 @@ impl RainyClient {
 
         self.wait_for_slot().await;
         let response = self
-            .send_request(
-                self.api_request(reqwest::Method::POST, "/search")
-                    .json(&request),
-            )
+            .send_request(self.json_request(reqwest::Method::POST, "/search", &request)?)
             .await?;
 
         let envelope: SearchEnvelope = self.handle_response(response).await?;
@@ -148,10 +145,7 @@ impl RainyClient {
 
         self.wait_for_slot().await;
         let response = self
-            .send_request(
-                self.api_request(reqwest::Method::POST, "/search/extract")
-                    .json(&request),
-            )
+            .send_request(self.json_request(reqwest::Method::POST, "/search/extract", &request)?)
             .await?;
 
         let envelope: ExtractEnvelope = self.handle_response(response).await?;

@@ -45,36 +45,27 @@ fn test_responses_request_accepts_gpt_5_6_model_family() {
 fn test_responses_request_supports_modern_reasoning_and_hosted_tools() {
     let request = ResponsesRequest::text("gpt-5.6-sol", "Research this")
         .with_reasoning_effort("high")
-        .with_reasoning_context("all_turns")
-        .with_reasoning_mode("pro")
-        .with_reasoning_summary("auto")
         .with_tool_choice("auto")
         .with_parallel_tool_calls(true)
-        .with_max_tool_calls(4)
         .add_web_search_tool()
         .add_file_search_tool(["vs_123"])
         .with_include(vec![
             "web_search_call.action.sources".to_string(),
             "file_search_call.results".to_string(),
         ])
-        .with_prompt_cache_options(serde_json::json!({
-            "mode": "explicit",
-            "ttl": "30m"
-        }))
+        .with_prompt_cache_key("research-session")
         .with_store(true);
 
     let json = serde_json::to_value(request).expect("serialize modern Responses request");
     assert_eq!(json["reasoning"]["effort"], "high");
-    assert_eq!(json["reasoning"]["context"], "all_turns");
-    assert_eq!(json["reasoning"]["mode"], "pro");
-    assert_eq!(json["reasoning"]["generate_summary"], "auto");
     assert_eq!(json["tool_choice"], "auto");
     assert_eq!(json["parallel_tool_calls"], true);
-    assert_eq!(json["max_tool_calls"], 4);
+    assert!(json.get("max_tool_calls").is_none());
     assert_eq!(json["tools"][0]["type"], "web_search");
     assert_eq!(json["tools"][1]["type"], "file_search");
     assert_eq!(json["tools"][1]["vector_store_ids"][0], "vs_123");
-    assert_eq!(json["prompt_cache_options"]["mode"], "explicit");
+    assert_eq!(json["prompt_cache_key"], "research-session");
+    assert!(json.get("prompt_cache_options").is_none());
 }
 
 #[test]
@@ -350,6 +341,7 @@ fn test_select_models_ranks_by_prompt_completion_and_context() {
         pricing: Some(ModelPricing {
             prompt: Some("0.000001".to_string()),
             completion: Some("0.000002".to_string()),
+            ..Default::default()
         }),
         rainy_capabilities_v2: Some(RainyCapabilitiesV2 {
             multimodal: rainy_sdk::RainyMultimodalCapabilitiesV2 {
@@ -395,6 +387,7 @@ fn test_select_models_ranks_by_prompt_completion_and_context() {
         pricing: Some(ModelPricing {
             prompt: Some("0.00001".to_string()),
             completion: Some("0.00002".to_string()),
+            ..Default::default()
         }),
         rainy_capabilities_v2: cheap.rainy_capabilities_v2.clone(),
         ..Default::default()
@@ -430,7 +423,7 @@ fn test_build_reasoning_config_by_profile() {
                 },
                 "profiles": [
                     { "provider": "other", "parameter_path": "reasoning.effort", "values": ["low", "medium", "high"] },
-                    { "provider": "other", "parameter_path": "thinking_config.thinking_budget" }
+                    { "provider": "other", "parameter_path": "reasoning.max_tokens" }
                 ]
             },
             "parameters": { "accepted": ["reasoning"] }
@@ -458,7 +451,7 @@ fn test_build_reasoning_config_by_profile() {
         },
     )
     .expect("budget payload");
-    assert_eq!(budget_payload["thinking_config"]["thinking_budget"], 1024);
+    assert_eq!(budget_payload["reasoning"]["max_tokens"], 1024);
 }
 
 #[test]

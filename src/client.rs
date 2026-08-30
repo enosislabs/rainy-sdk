@@ -1,10 +1,14 @@
 use crate::{
-    auth::AuthConfig,
+    auth::{
+        AuthConfig, GENERAL_REQUEST_BODY_BYTES, MAX_ERROR_BODY_BYTES, MAX_RESPONSE_BODY_BYTES,
+        MODEL_REQUEST_BODY_BYTES, read_limited_response_body, retry_after_seconds,
+        serialize_json_body,
+    },
     error::{ApiErrorResponse, RainyError, Result},
     models::*,
     retry::{RetryConfig, retry_with_backoff},
+    sse::parse_sse_stream,
 };
-use eventsource_stream::Eventsource;
 use futures::{Stream, StreamExt};
 use reqwest::{
     Client, Method, RequestBuilder, Response,
@@ -15,6 +19,29 @@ use serde::Deserialize;
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Instant;
+
+fn encode_path_segment(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte & 0x0f) as usize]));
+        }
+    }
+    encoded
+}
+
+fn request_body_limit(endpoint: &str) -> usize {
+    match endpoint {
+        "/chat/completions" | "/responses" | "/messages" | "/embeddings" => {
+            MODEL_REQUEST_BODY_BYTES
+        }
+        _ => GENERAL_REQUEST_BODY_BYTES,
+    }
+}
 
 #[cfg(feature = "rate-limiting")]
 use governor::{
@@ -148,14 +175,16 @@ impl RainyClient {
         let client = Client::builder()
             .tls_backend_rustls()
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
-            .https_only(true)
+            // Redirects are deliberately disabled.  A configured API key or
+            // session token must never follow a redirect to another origin.
+            .redirect(reqwest::redirect::Policy::none())
             .timeout(auth_config.timeout())
             .default_headers(headers)
             .build()
             .map_err(|e| RainyError::Network {
                 message: format!("Failed to create HTTP client: {}", e),
                 retryable: false,
-                source_error: Some(e.to_string()),
+                source_error: None,
             })?;
 
         let retry_config = RetryConfig::new(auth_config.max_retries);
@@ -211,6 +240,19 @@ impl RainyClient {
         }
     }
 
+    /// Runs a non-idempotent operation once after applying the client rate
+    /// limiter. Automatic replay of a POST can duplicate provider work or a
+    /// bill, so callers must opt into an API-level idempotency contract before
+    /// adding retries.
+    async fn execute_without_retry<F, Fut, T>(&self, operation: F) -> Result<T>
+    where
+        F: Fn() -> Fut,
+        Fut: Future<Output = Result<T>>,
+    {
+        self.wait_for_slot().await;
+        operation().await
+    }
+
     pub(crate) fn api_request(&self, method: Method, endpoint: &str) -> RequestBuilder {
         self.client.request(method, self.api_v1_url(endpoint))
     }
@@ -219,11 +261,33 @@ impl RainyClient {
         self.client.request(method, self.root_url(endpoint))
     }
 
+    pub(crate) fn json_request<T: serde::Serialize>(
+        &self,
+        method: Method,
+        endpoint: &str,
+        body: &T,
+    ) -> Result<RequestBuilder> {
+        let body = serialize_json_body(body, request_body_limit(endpoint))?;
+        Ok(self
+            .api_request(method, endpoint)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body))
+    }
+
     pub(crate) async fn send_request(&self, request: RequestBuilder) -> Result<Response> {
-        request.send().await.map_err(|e| RainyError::Network {
-            message: format!("Failed to send request: {e}"),
-            retryable: true,
-            source_error: Some(e.to_string()),
+        request.send().await.map_err(|error| {
+            if error.is_timeout() {
+                RainyError::Timeout {
+                    message: "Request timed out".to_string(),
+                    duration_ms: self.auth_config.timeout_seconds.saturating_mul(1000),
+                }
+            } else {
+                RainyError::Network {
+                    message: "Failed to send request".to_string(),
+                    retryable: error.is_connect() || error.is_request(),
+                    source_error: None,
+                }
+            }
         })
     }
 
@@ -276,6 +340,59 @@ impl RainyClient {
         self.execute_with_retry(operation).await
     }
 
+    /// Lists the full OpenAI-compatible model records exposed by Rainy.
+    pub async fn list_models(&self) -> Result<ModelList> {
+        #[derive(Deserialize)]
+        struct Envelope {
+            data: ModelList,
+        }
+
+        let url = self.api_v1_url("/models");
+        let operation = || async {
+            let response = self.send_request(self.client.get(&url)).await?;
+            let envelope: Envelope = self.handle_response(response).await?;
+            Ok(envelope.data)
+        };
+        self.execute_with_retry(operation).await
+    }
+
+    /// Retrieves one model record by its provider/model identifier.
+    pub async fn get_model(&self, model_id: &str) -> Result<ModelListItem> {
+        #[derive(Deserialize)]
+        struct Envelope {
+            data: ModelListItem,
+        }
+
+        let path = format!("/models/{}", encode_path_segment(model_id));
+        let url = self.api_v1_url(&path);
+        let operation = || async {
+            let response = self.send_request(self.client.get(&url)).await?;
+            let envelope: Envelope = self.handle_response(response).await?;
+            Ok(envelope.data)
+        };
+        self.execute_with_retry(operation).await
+    }
+
+    /// Retrieves the server-curated model launch feed.
+    pub async fn get_model_launches(&self) -> Result<Vec<ModelLaunch>> {
+        #[derive(Deserialize)]
+        struct LaunchesData {
+            data: Vec<ModelLaunch>,
+        }
+        #[derive(Deserialize)]
+        struct Envelope {
+            data: LaunchesData,
+        }
+
+        let url = self.api_v1_url("/models/launches");
+        let operation = || async {
+            let response = self.send_request(self.client.get(&url)).await?;
+            let envelope: Envelope = self.handle_response(response).await?;
+            Ok(envelope.data.data)
+        };
+        self.execute_with_retry(operation).await
+    }
+
     /// Creates a chat completion based on the provided request.
     ///
     /// # Arguments
@@ -290,12 +407,11 @@ impl RainyClient {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<(ChatCompletionResponse, RequestMetadata)> {
-        let url = self.api_v1_url("/chat/completions");
         let start_time = Instant::now();
 
         let operation = || async {
             let response = self
-                .send_request(self.client.post(&url).json(&request))
+                .send_request(self.json_request(Method::POST, "/chat/completions", &request)?)
                 .await?;
 
             let metadata = self.extract_metadata(&response, start_time);
@@ -304,7 +420,7 @@ impl RainyClient {
             Ok((chat_response, metadata))
         };
 
-        self.execute_with_retry(operation).await
+        self.execute_without_retry(operation).await
     }
 
     /// Creates a chat completion in envelope mode (`X-Rainy-Response-Mode: envelope`).
@@ -312,16 +428,13 @@ impl RainyClient {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<(RainyEnvelope<ChatCompletionResponse>, RequestMetadata)> {
-        let url = self.api_v1_url("/chat/completions");
         let start_time = Instant::now();
 
         let operation = || async {
             let response = self
                 .send_request(
-                    self.client
-                        .post(&url)
-                        .header("X-Rainy-Response-Mode", "envelope")
-                        .json(&request),
+                    self.json_request(Method::POST, "/chat/completions", &request)?
+                        .header("X-Rainy-Response-Mode", "envelope"),
                 )
                 .await?;
 
@@ -331,7 +444,7 @@ impl RainyClient {
             Ok((chat_response, metadata))
         };
 
-        self.execute_with_retry(operation).await
+        self.execute_without_retry(operation).await
     }
 
     /// Creates an OpenAI-compatible chat completion in envelope mode.
@@ -339,16 +452,13 @@ impl RainyClient {
         &self,
         request: OpenAIChatCompletionRequest,
     ) -> Result<(RainyEnvelope<OpenAIChatCompletionResponse>, RequestMetadata)> {
-        let url = self.api_v1_url("/chat/completions");
         let start_time = Instant::now();
 
         let operation = || async {
             let response = self
                 .send_request(
-                    self.client
-                        .post(&url)
-                        .header("X-Rainy-Response-Mode", "envelope")
-                        .json(&request),
+                    self.json_request(Method::POST, "/chat/completions", &request)?
+                        .header("X-Rainy-Response-Mode", "envelope"),
                 )
                 .await?;
 
@@ -358,7 +468,7 @@ impl RainyClient {
             Ok((chat_response, metadata))
         };
 
-        self.execute_with_retry(operation).await
+        self.execute_without_retry(operation).await
     }
 
     /// Creates a streaming chat completion based on the provided request.
@@ -378,27 +488,20 @@ impl RainyClient {
         // Ensure stream is set to true
         request.stream = Some(true);
 
-        let url = self.api_v1_url("/chat/completions");
-
-        // Note: Retries are more complex with streams, so we only retry the initial connection
+        // Retrying an inference POST can duplicate provider work or billing, so
+        // the stream connection is intentionally attempted once.
         let operation = || async {
             let response = self
-                .client
-                .post(&url)
-                .json(&request)
-                .send()
-                .await
-                .map_err(|e| RainyError::Network {
-                    message: format!("Failed to send request: {}", e),
-                    retryable: true,
-                    source_error: Some(e.to_string()),
-                })?;
+                .send_request(self.json_request(Method::POST, "/chat/completions", &request)?)
+                .await?;
 
             let events = self.handle_chat_stream_response(response).await?;
             let stream = events.filter_map(|event| async move {
                 match event {
                     Ok(ChatStreamEvent::Chunk(chunk)) => Some(Ok(chunk)),
-                    Ok(ChatStreamEvent::Billing(_)) | Ok(ChatStreamEvent::Raw(_)) => None,
+                    Ok(ChatStreamEvent::Billing(_))
+                    | Ok(ChatStreamEvent::Unknown { .. })
+                    | Ok(ChatStreamEvent::Raw(_)) => None,
                     Err(error) => Some(Err(error)),
                 }
             });
@@ -409,7 +512,7 @@ impl RainyClient {
                 >)
         };
 
-        self.execute_with_retry(operation).await
+        self.execute_without_retry(operation).await
     }
 
     /// Creates a Responses API completion (`POST /api/v1/responses`) in raw mode.
@@ -417,19 +520,18 @@ impl RainyClient {
         &self,
         request: ResponsesRequest,
     ) -> Result<(ResponsesApiResponse, RequestMetadata)> {
-        let url = self.api_v1_url("/responses");
         let start_time = Instant::now();
 
         let operation = || async {
             let response = self
-                .send_request(self.client.post(&url).json(&request))
+                .send_request(self.json_request(Method::POST, "/responses", &request)?)
                 .await?;
             let metadata = self.extract_metadata(&response, start_time);
             let api_response: ResponsesApiResponse = self.handle_response(response).await?;
             Ok((api_response, metadata))
         };
 
-        self.execute_with_retry(operation).await
+        self.execute_without_retry(operation).await
     }
 
     /// Creates a Responses API completion in envelope mode (`X-Rainy-Response-Mode: envelope`).
@@ -437,16 +539,13 @@ impl RainyClient {
         &self,
         request: ResponsesRequest,
     ) -> Result<(RainyEnvelope<ResponsesApiResponse>, RequestMetadata)> {
-        let url = self.api_v1_url("/responses");
         let start_time = Instant::now();
 
         let operation = || async {
             let response = self
                 .send_request(
-                    self.client
-                        .post(&url)
-                        .header("X-Rainy-Response-Mode", "envelope")
-                        .json(&request),
+                    self.json_request(Method::POST, "/responses", &request)?
+                        .header("X-Rainy-Response-Mode", "envelope"),
                 )
                 .await?;
             let metadata = self.extract_metadata(&response, start_time);
@@ -455,7 +554,7 @@ impl RainyClient {
             Ok((api_response, metadata))
         };
 
-        self.execute_with_retry(operation).await
+        self.execute_without_retry(operation).await
     }
 
     /// Creates a streaming Responses API completion and returns SSE events.
@@ -465,17 +564,15 @@ impl RainyClient {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ResponsesStreamEvent>> + Send>>> {
         request.stream = Some(true);
 
-        let url = self.api_v1_url("/responses");
-
         let operation = || async {
             let response = self
-                .send_request(self.client.post(&url).json(&request))
+                .send_request(self.json_request(Method::POST, "/responses", &request)?)
                 .await?;
 
-            self.handle_stream_response(response).await
+            self.handle_responses_stream_response(response).await
         };
 
-        self.execute_with_retry(operation).await
+        self.execute_without_retry(operation).await
     }
 
     /// Creates a chat completion stream returning typed events (OpenAI chunks + Rainy native events).
@@ -485,16 +582,15 @@ impl RainyClient {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatStreamEvent>> + Send>>> {
         request.stream = Some(true);
 
-        let url = self.api_v1_url("/chat/completions");
         let operation = || async {
             let response = self
-                .send_request(self.client.post(&url).json(&request))
+                .send_request(self.json_request(Method::POST, "/chat/completions", &request)?)
                 .await?;
 
             self.handle_chat_stream_response(response).await
         };
 
-        self.execute_with_retry(operation).await
+        self.execute_without_retry(operation).await
     }
 
     /// Retrieves `/api/v1/models/catalog` entries including `rainy_capabilities` metadata.
@@ -580,67 +676,20 @@ impl RainyClient {
             .get("x-request-id")
             .and_then(|v| v.to_str().ok())
             .map(String::from);
+        let retry_after = retry_after_seconds(response.headers());
 
         if status.is_success() {
-            let body = response.bytes().await?;
+            let body = read_limited_response_body(response, MAX_RESPONSE_BODY_BYTES).await?;
             serde_json::from_slice(&body).map_err(|e| RainyError::Serialization {
                 message: format!("Failed to parse response: {}", e),
-                source_error: Some(e.to_string()),
+                source_error: None,
             })
         } else {
-            let text = response.text().await.unwrap_or_default();
-            self.handle_error_text(status, request_id, text)
+            let text = read_limited_response_body(response, MAX_ERROR_BODY_BYTES)
+                .await
+                .map(|body| String::from_utf8_lossy(&body).into_owned())?;
+            self.handle_error_text(status, request_id, retry_after, text)
         }
-    }
-
-    /// Handles the HTTP response for streaming requests.
-    pub(crate) async fn handle_stream_response<T>(
-        &self,
-        response: Response,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<T>> + Send>>>
-    where
-        T: serde::de::DeserializeOwned + Send + 'static,
-    {
-        let status = response.status();
-        let request_id = response
-            .headers()
-            .get("x-request-id")
-            .and_then(|v| v.to_str().ok())
-            .map(String::from);
-
-        if !status.is_success() {
-            let text = response.text().await.unwrap_or_default();
-            return self.handle_error_text(status, request_id, text);
-        }
-
-        let stream = response
-            .bytes_stream()
-            .eventsource()
-            .filter_map(|event| async move {
-                match event {
-                    Ok(event) => {
-                        let payload = event.data.trim();
-                        if payload.is_empty() || payload.eq_ignore_ascii_case("[DONE]") {
-                            return None;
-                        }
-
-                        match serde_json::from_str::<T>(payload) {
-                            Ok(chunk) => Some(Ok(chunk)),
-                            Err(e) => Some(Err(RainyError::Serialization {
-                                message: format!("Failed to parse stream chunk: {}", e),
-                                source_error: Some(e.to_string()),
-                            })),
-                        }
-                    }
-                    Err(e) => Some(Err(RainyError::Network {
-                        message: format!("Stream error: {}", e),
-                        retryable: true,
-                        source_error: Some(e.to_string()),
-                    })),
-                }
-            });
-
-        Ok(Box::pin(stream))
     }
 
     pub(crate) async fn handle_chat_stream_response(
@@ -653,43 +702,107 @@ impl RainyClient {
             .get("x-request-id")
             .and_then(|v| v.to_str().ok())
             .map(String::from);
+        let retry_after = retry_after_seconds(response.headers());
 
         if !status.is_success() {
-            let text = response.text().await.unwrap_or_default();
-            return self.handle_error_text(status, request_id, text);
+            let text = read_limited_response_body(response, MAX_ERROR_BODY_BYTES)
+                .await
+                .map(|body| String::from_utf8_lossy(&body).into_owned())?;
+            return self.handle_error_text(status, request_id, retry_after, text);
         }
 
-        let stream = response
-            .bytes_stream()
-            .eventsource()
-            .filter_map(|event| async move {
-                match event {
-                    Ok(event) => {
-                        let payload = event.data.trim();
-                        if payload.is_empty() || payload.eq_ignore_ascii_case("[DONE]") {
-                            return None;
-                        }
-
-                        let event_name = event.event.trim();
-                        let event_name = (!event_name.is_empty()).then_some(event_name);
-
-                        match serde_json::from_str::<serde_json::Value>(payload) {
-                            Ok(value) => {
-                                Some(Ok(ChatStreamEvent::from_sse_event(event_name, value)))
-                            }
-                            Err(e) => Some(Err(RainyError::Serialization {
-                                message: format!("Failed to parse stream chunk: {}", e),
-                                source_error: Some(e.to_string()),
-                            })),
-                        }
-                    }
-                    Err(e) => Some(Err(RainyError::Network {
-                        message: format!("Stream error: {}", e),
-                        retryable: true,
-                        source_error: Some(e.to_string()),
+        let stream = parse_sse_stream(response.bytes_stream()).filter_map(|event| async move {
+            match event {
+                Ok(event) if event.done || event.data.trim().is_empty() => None,
+                Ok(event) => match serde_json::from_str::<serde_json::Value>(event.data.trim()) {
+                    Ok(value) => Some(Ok(ChatStreamEvent::from_sse_event(
+                        event.event.as_deref(),
+                        value,
+                    ))),
+                    Err(_error) => Some(Err(RainyError::Serialization {
+                        message: "Failed to parse SSE JSON payload".to_string(),
+                        source_error: None,
                     })),
-                }
-            });
+                },
+                Err(error) => Some(Err(error)),
+            }
+        });
+
+        Ok(Box::pin(stream))
+    }
+
+    /// Handles native Responses SSE events while retaining the event name and
+    /// classifying the payload's `type` field.
+    pub(crate) async fn handle_responses_stream_response(
+        &self,
+        response: Response,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ResponsesStreamEvent>> + Send>>> {
+        let status = response.status();
+        let request_id = response
+            .headers()
+            .get("x-request-id")
+            .and_then(|value| value.to_str().ok())
+            .map(String::from);
+        let retry_after = retry_after_seconds(response.headers());
+
+        if !status.is_success() {
+            let text = read_limited_response_body(response, MAX_ERROR_BODY_BYTES)
+                .await
+                .map(|body| String::from_utf8_lossy(&body).into_owned())?;
+            return self.handle_error_text(status, request_id, retry_after, text);
+        }
+
+        let stream = parse_sse_stream(response.bytes_stream()).filter_map(|event| async move {
+            match event {
+                Ok(event) if event.done || event.data.trim().is_empty() => None,
+                Ok(event) => match serde_json::from_str::<serde_json::Value>(event.data.trim()) {
+                    Ok(value) => Some(Ok(ResponsesEvent::new(event.event, value))),
+                    Err(error) => Some(Err(RainyError::Serialization {
+                        message: "Failed to parse Responses SSE JSON payload".to_string(),
+                        source_error: Some(error.to_string()),
+                    })),
+                },
+                Err(error) => Some(Err(error)),
+            }
+        });
+
+        Ok(Box::pin(stream))
+    }
+
+    /// Handles Anthropic Messages SSE events while preserving native event
+    /// names such as `message_start`, `content_block_delta`, and `message_stop`.
+    pub(crate) async fn handle_anthropic_message_stream_response(
+        &self,
+        response: Response,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<AnthropicMessageStreamEvent>> + Send>>> {
+        let status = response.status();
+        let request_id = response
+            .headers()
+            .get("x-request-id")
+            .and_then(|value| value.to_str().ok())
+            .map(String::from);
+        let retry_after = retry_after_seconds(response.headers());
+
+        if !status.is_success() {
+            let text = read_limited_response_body(response, MAX_ERROR_BODY_BYTES)
+                .await
+                .map(|body| String::from_utf8_lossy(&body).into_owned())?;
+            return self.handle_error_text(status, request_id, retry_after, text);
+        }
+
+        let stream = parse_sse_stream(response.bytes_stream()).filter_map(|event| async move {
+            match event {
+                Ok(event) if event.done || event.data.trim().is_empty() => None,
+                Ok(event) => match serde_json::from_str::<serde_json::Value>(event.data.trim()) {
+                    Ok(data) => Some(Ok(AnthropicMessageStreamEvent::new(event.event, data))),
+                    Err(error) => Some(Err(RainyError::Serialization {
+                        message: "Failed to parse Anthropic Messages SSE JSON payload".to_string(),
+                        source_error: Some(error.to_string()),
+                    })),
+                },
+                Err(error) => Some(Err(error)),
+            }
+        });
 
         Ok(Box::pin(stream))
     }
@@ -698,11 +811,23 @@ impl RainyClient {
         &self,
         status: reqwest::StatusCode,
         request_id: Option<String>,
+        retry_after: Option<u64>,
         text: String,
     ) -> Result<T> {
         if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&text) {
             let error = error_response.error;
-            self.map_api_error(error, status.as_u16(), request_id)
+            self.map_api_error(error, status.as_u16(), request_id, retry_after)
+        } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            Err(RainyError::RateLimit {
+                code: "RATE_LIMIT_EXCEEDED".to_string(),
+                message: if text.is_empty() {
+                    "Too many requests".to_string()
+                } else {
+                    text
+                },
+                retry_after,
+                current_usage: None,
+            })
         } else {
             Err(RainyError::Api {
                 code: status.canonical_reason().unwrap_or("UNKNOWN").to_string(),
@@ -789,98 +914,145 @@ impl RainyClient {
         error: crate::error::ApiErrorDetails,
         status_code: u16,
         request_id: Option<String>,
+        retry_after_header: Option<u64>,
     ) -> Result<T> {
         let retryable = error.retryable.unwrap_or(status_code >= 500);
+        let code = error.code.as_str();
+        let is_authentication_error = status_code == 401
+            || matches!(
+                code,
+                "INVALID_API_KEY"
+                    | "EXPIRED_API_KEY"
+                    | "UNAUTHORIZED"
+                    | "INVALID_TOKEN"
+                    | "SESSION_EXPIRED"
+                    | "SESSION_INVALID"
+            );
+        let is_access_error = status_code == 403
+            || matches!(
+                code,
+                "FORBIDDEN"
+                    | "ACCESS_DENIED"
+                    | "LAST_ADMIN_FORBIDDEN"
+                    | "ORG_ACCESS_DENIED"
+                    | "ORG_ADMIN_REQUIRED"
+                    | "USER_NOT_AUTHORIZED"
+                    | "MODEL_TIER_NOT_ALLOWED"
+                    | "MODEL_NOT_ALLOWED"
+                    | "MODEL_DISABLED_FOR_ORGANIZATION"
+                    | "MODEL_PRIVACY_POLICY_INCOMPATIBLE"
+                    | "TOOLS_NOT_ALLOWED"
+                    | "REASONING_NOT_ALLOWED"
+            );
 
-        let rainy_error = match error.code.as_str() {
-            "INVALID_API_KEY" | "EXPIRED_API_KEY" => RainyError::Authentication {
+        let rainy_error = if is_authentication_error {
+            RainyError::Authentication {
                 code: error.code,
                 message: error.message,
                 retryable: false,
-            },
-            "INSUFFICIENT_CREDITS" => {
-                // Extract credit info from details if available
-                let (current_credits, estimated_cost, reset_date) =
-                    if let Some(details) = error.details {
-                        let current = details
-                            .get("current_credits")
-                            .and_then(|v| v.as_f64())
-                            .unwrap_or(0.0);
-                        let cost = details
-                            .get("estimated_cost")
-                            .and_then(|v| v.as_f64())
-                            .unwrap_or(0.0);
-                        let reset = details
-                            .get("reset_date")
-                            .and_then(|v| v.as_str())
-                            .map(String::from);
-                        (current, cost, reset)
-                    } else {
-                        (0.0, 0.0, None)
-                    };
-
-                RainyError::InsufficientCredits {
-                    code: error.code,
-                    message: error.message,
-                    current_credits,
-                    estimated_cost,
-                    reset_date,
-                }
             }
-            "RATE_LIMIT_EXCEEDED" => {
-                let retry_after = error
-                    .details
-                    .as_ref()
-                    .and_then(|d| d.get("retry_after"))
-                    .and_then(|v| v.as_u64());
-
-                RainyError::RateLimit {
-                    code: error.code,
-                    message: error.message,
-                    retry_after,
-                    current_usage: None,
-                }
-            }
-            "INVALID_REQUEST" | "MISSING_REQUIRED_FIELD" | "INVALID_MODEL" => {
-                RainyError::InvalidRequest {
-                    code: error.code,
-                    message: error.message,
-                    details: error.details,
-                }
-            }
-            "MODEL_TIER_NOT_ALLOWED"
-            | "MODEL_NOT_ALLOWED"
-            | "MODEL_DISABLED_FOR_ORGANIZATION"
-            | "MODEL_PRIVACY_POLICY_INCOMPATIBLE"
-            | "TOOLS_NOT_ALLOWED"
-            | "REASONING_NOT_ALLOWED" => RainyError::AccessDenied {
+        } else if is_access_error {
+            RainyError::AccessDenied {
                 code: error.code,
                 message: error.message,
                 details: error.details,
-            },
-            "PROVIDER_ERROR" | "PROVIDER_UNAVAILABLE" => {
-                let provider = error
-                    .details
-                    .as_ref()
-                    .and_then(|d| d.get("provider"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown")
-                    .to_string();
+            }
+        } else {
+            match code {
+                "REFRESH_UNSUPPORTED" => RainyError::FeatureNotAvailable {
+                    feature: "session_refresh".to_string(),
+                    message: error.message,
+                },
+                "AGENTS_ENDPOINT_REMOVED" => RainyError::FeatureNotAvailable {
+                    feature: "agents".to_string(),
+                    message: error.message,
+                },
+                "INSUFFICIENT_CREDITS" => {
+                    // Extract credit info from details if available
+                    let (current_credits, estimated_cost, reset_date) =
+                        if let Some(details) = error.details {
+                            let current = details
+                                .get("current_credits")
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            let cost = details
+                                .get("estimated_cost")
+                                .and_then(|v| v.as_f64())
+                                .unwrap_or(0.0);
+                            let reset = details
+                                .get("reset_date")
+                                .and_then(|v| v.as_str())
+                                .map(String::from);
+                            (current, cost, reset)
+                        } else {
+                            (0.0, 0.0, None)
+                        };
 
-                RainyError::Provider {
+                    RainyError::InsufficientCredits {
+                        code: error.code,
+                        message: error.message,
+                        current_credits,
+                        estimated_cost,
+                        reset_date,
+                    }
+                }
+                "RATE_LIMIT_EXCEEDED" => {
+                    let retry_after = error
+                        .details
+                        .as_ref()
+                        .and_then(|d| d.get("retry_after"))
+                        .and_then(|v| v.as_u64())
+                        .or(retry_after_header);
+
+                    RainyError::RateLimit {
+                        code: error.code,
+                        message: error.message,
+                        retry_after,
+                        current_usage: None,
+                    }
+                }
+                "INVALID_REQUEST" | "MISSING_REQUIRED_FIELD" | "INVALID_MODEL" => {
+                    RainyError::InvalidRequest {
+                        code: error.code,
+                        message: error.message,
+                        details: error.details,
+                    }
+                }
+                "PROVIDER_ERROR" | "PROVIDER_UNAVAILABLE" => {
+                    let provider = error
+                        .details
+                        .as_ref()
+                        .and_then(|d| d.get("provider"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+
+                    RainyError::Provider {
+                        code: error.code,
+                        message: error.message,
+                        provider,
+                        retryable,
+                    }
+                }
+                _ if status_code == 429 => RainyError::RateLimit {
                     code: error.code,
                     message: error.message,
-                    provider,
+                    retry_after: retry_after_header,
+                    current_usage: error
+                        .details
+                        .as_ref()
+                        .and_then(|details| details.get("current_usage"))
+                        .and_then(|value| value.as_str())
+                        .map(String::from),
+                },
+                _ => RainyError::Api {
+                    code: error.code,
+                    message: error.message,
+                    status_code,
                     retryable,
-                }
+                    request_id: request_id.clone(),
+                },
             }
-            _ => RainyError::Api {
-                code: error.code,
-                message: error.message,
-                status_code,
-                retryable,
-                request_id: request_id.clone(),
-            },
         };
 
         Err(rainy_error)
@@ -943,11 +1115,10 @@ impl RainyClient {
         body: Option<serde_json::Value>,
     ) -> Result<T> {
         self.wait_for_slot().await;
-        let mut request = self.api_request(method, endpoint);
-
-        if let Some(body) = body {
-            request = request.json(&body);
-        }
+        let request = match body {
+            Some(body) => self.json_request(method, endpoint, &body)?,
+            None => self.api_request(method, endpoint),
+        };
 
         let response = self.send_request(request).await?;
         self.handle_response(response).await
