@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ChatModality","StopSequences"],"struct":["ChatImageConfig","ChatStreamOptions","ProviderOptions"]};
