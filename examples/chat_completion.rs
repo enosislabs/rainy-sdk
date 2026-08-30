@@ -1,18 +1,20 @@
+//! Interactive streaming Chat Completions example.
+
+use futures::StreamExt;
 use rainy_sdk::{ChatCompletionRequest, ChatMessage, RainyClient};
 use std::error::Error;
 use std::io::{self, Write};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Initialize client - base URL defaults to api.enosislabs.com
-    let client = RainyClient::with_api_key("your-api-key-here")?;
+    let client = RainyClient::with_api_key(
+        std::env::var("RAINY_API_KEY").unwrap_or_else(|_| "your-api-key-here".to_string()),
+    )?;
 
-    println!("💬 Rainy API Chat Example");
-    println!("=========================");
-    println!("Type 'quit' to exit\n");
+    println!("Rainy SDK streaming Chat Completions example");
+    println!("Type 'quit' to exit.\n");
 
-    let mut conversation_history: Vec<ChatMessage> = Vec::new();
-
+    let mut conversation_history = Vec::new();
     loop {
         print!("You: ");
         io::stdout().flush()?;
@@ -20,44 +22,44 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
         let input = input.trim();
-
         if input.eq_ignore_ascii_case("quit") {
             break;
         }
-
-        // Add user message to history
-        conversation_history.push(ChatMessage::user(input));
-
-        // Create chat completion request
-        let request = ChatCompletionRequest::new("gemini-pro", conversation_history.clone())
-            .with_max_tokens(500)
-            .with_temperature(0.7);
-
-        match client.create_chat_completion(request).await {
-            Ok(response) => {
-                if let Some(choice) = response.choices.first() {
-                    println!("🤖 Assistant: {}", choice.message.content);
-
-                    // Add assistant response to history
-                    conversation_history
-                        .push(ChatMessage::assistant(choice.message.content.clone()));
-
-                    if let Some(usage) = &response.usage {
-                        println!("📊 Tokens used: {}", usage.total_tokens);
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("❌ Error: {e}");
-
-                // Remove the failed user message from history
-                conversation_history.pop();
-            }
+        if input.is_empty() {
+            continue;
         }
 
+        conversation_history.push(ChatMessage::user(input));
+        let request =
+            ChatCompletionRequest::new("compatible/chat-model", conversation_history.clone());
+
+        print!("Assistant: ");
+        io::stdout().flush()?;
+        let mut stream = match client.chat_completion_stream(request).await {
+            Ok(stream) => stream,
+            Err(error) => {
+                eprintln!("request failed: {error}");
+                conversation_history.pop();
+                continue;
+            }
+        };
+
+        let mut assistant = String::new();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            if let Some(content) = chunk
+                .choices
+                .first()
+                .and_then(|choice| choice.delta.content.as_deref())
+            {
+                print!("{content}");
+                io::stdout().flush()?;
+                assistant.push_str(content);
+            }
+        }
         println!();
+        conversation_history.push(ChatMessage::assistant(assistant));
     }
 
-    println!("👋 Goodbye!");
     Ok(())
 }

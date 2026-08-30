@@ -1,15 +1,15 @@
 //! # Rainy SDK
 //!
-//! The official Rust SDK for the Rainy API by Enosis Labs (v3.8.1 service).
+//! A universal Rust SDK for OpenAI-compatible and Anthropic-compatible inference APIs.
 //!
 //! This SDK provides a clean, idiomatic Rust interface for interacting with
-//! the Rainy API, which unifies multiple AI providers under a single API.
+//! Rainy and other services that expose compatible inference protocols.
 //!
 //! ## Features
 //!
 //! - **Idiomatic Rust API**: Clean, type-safe interfaces
-//! - **Automatic Authentication**: API key and admin key management
-//! - **Rate Limiting**: Built-in rate limit handling
+//! - **Protocol boundaries**: Chat, Responses, Messages, and embeddings
+//! - **Optional extensions**: Explicit Rainy model discovery, health, and search helpers
 //! - **Error Handling**: Comprehensive error types and handling
 //! - **Async Support**: Full async/await support with Tokio
 //!
@@ -20,12 +20,13 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Create client with API key - automatically connects to the Rainy API v3 service
+//!     // Create a client with an API key. No discovery call is made here.
 //!     let client = RainyClient::with_api_key("your-api-key")?;
 //!
-//!     // Check API health
-//!     let health = client.health_check().await?;
-//!     println!("API Status: {:?}", health.status);
+//!     let response = client
+//!         .simple_chat("compatible/chat-model", "Say hello")
+//!         .await?;
+//!     println!("{response}");
 //!
 //!     Ok(())
 //! }
@@ -33,7 +34,9 @@
 //!
 //! ## Authentication
 //!
-//! The SDK uses API key authentication:
+//! API-key authentication is selected by protocol. OpenAI-compatible routes
+//! use Bearer authentication; native Anthropic Messages routes use `x-api-key`
+//! and `anthropic-version` headers.
 //!
 //! ### API Key Authentication
 //!
@@ -42,15 +45,15 @@
 //! # #[tokio::main]
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Simplest way to create a client
-//! let client = RainyClient::with_api_key("ra-20250125143052Ab3Cd9Ef2Gh5Ik8Lm4Np7Qr")?;
+//! let client = RainyClient::with_api_key("your-api-key")?;
 //! # Ok(())
 //! # }
 //! ```
 //!
 
-/// Handles authentication and API key management.
+/// Handles protocol-neutral API-key authentication and request safety checks.
 pub mod auth;
-/// The main client for interacting with the Rainy API.
+/// The main client for protocol-compatible inference and explicit Rainy extensions.
 pub mod client;
 /// Defines error types and result aliases for the SDK.
 pub mod error;
@@ -58,18 +61,25 @@ pub mod error;
 pub mod models;
 /// Implements retry logic with exponential backoff.
 pub mod retry;
-/// Web search types and options for Tavily-powered search.
+/// Web search and research types for the optional Rainy search extension.
 pub mod search;
-/// JWT/session client for Rainy API v3 dashboard endpoints.
+/// Optional JWT/session client for Rainy account endpoints.
+#[cfg(feature = "rainy-account")]
 pub mod session;
 
+mod sse;
+
 mod endpoints;
+
+/// Default native Anthropic API version used by Messages requests.
+pub use endpoints::messages::DEFAULT_ANTHROPIC_VERSION;
 
 pub use auth::AuthConfig;
 pub use client::RainyClient;
 pub use error::{ApiErrorDetails, ApiErrorResponse, RainyError, Result};
 pub use models::*;
 pub use retry::{RetryConfig, retry_with_backoff};
+#[cfg(feature = "rainy-account")]
 pub use session::{
     CreatedApiKey, LoginResponse, OrgProfile, RainySessionClient, RefreshResponse,
     SessionApiKeyListItem, SessionConfig, SessionTokens, SessionUser, UsageCreditsResponse,

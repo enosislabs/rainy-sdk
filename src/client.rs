@@ -1,20 +1,25 @@
+//! Shared HTTP transport and Rainy/OpenAI-compatible protocol operations.
+
 use crate::{
-    auth::AuthConfig,
-    error::{ApiErrorResponse, RainyError, Result},
+    auth::{
+        AuthConfig, AuthScheme, GENERAL_REQUEST_BODY_BYTES, MAX_ERROR_BODY_BYTES,
+        MAX_RESPONSE_BODY_BYTES, MODEL_REQUEST_BODY_BYTES, read_limited_response_body,
+        retry_after_seconds, safe_url_label, serialize_json_body,
+    },
+    error::{ApiErrorDetails, RainyError, Result},
     models::*,
     retry::{RetryConfig, retry_with_backoff},
+    sse::parse_sse_stream,
 };
-use eventsource_stream::Eventsource;
 use futures::{Stream, StreamExt};
 use reqwest::{
     Client, Method, RequestBuilder, Response,
     header::{AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
 };
 use secrecy::ExposeSecret;
-use serde::Deserialize;
-use std::future::Future;
-use std::pin::Pin;
-use std::time::Instant;
+use serde::de::DeserializeOwned;
+use serde_json::Value;
+use std::{future::Future, pin::Pin, time::Instant};
 
 #[cfg(feature = "rate-limiting")]
 use governor::{
@@ -23,168 +28,132 @@ use governor::{
     state::{InMemoryState, NotKeyed},
 };
 
-/// The main client for interacting with the Rainy API.
-///
-/// `RainyClient` provides a convenient and high-level interface for making requests
-/// to the various endpoints of the Rainy API. It handles authentication, rate limiting,
-/// and retries automatically.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use rainy_sdk::{RainyClient, Result};
-///
-/// #[tokio::main]
-/// async fn main() -> Result<()> {
-///     // Create a client using an API key from an environment variable
-///     let api_key = std::env::var("RAINY_API_KEY").expect("RAINY_API_KEY not set");
-///     let client = RainyClient::with_api_key(api_key)?;
-///
-///     // Use the client to make API calls
-///     let models = client.get_available_models().await?;
-///     println!("Available models: {:?}", models);
-///
-///     Ok(())
-/// }
-/// ```
-pub struct RainyClient {
-    /// The underlying `reqwest::Client` used for making HTTP requests.
-    client: Client,
-    /// The authentication configuration for the client.
-    auth_config: AuthConfig,
-    /// The retry configuration for handling failed requests.
-    retry_config: RetryConfig,
+const DEFAULT_ANTHROPIC_VERSION: &str = "2023-06-01";
 
-    /// An optional rate limiter to control the request frequency.
-    /// This is only available when the `rate-limiting` feature is enabled.
+fn normalize_path(path: &str) -> String {
+    if path.starts_with('/') {
+        path.to_string()
+    } else {
+        format!("/{path}")
+    }
+}
+
+fn encode_path_segment(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte >> 4) as usize]));
+            encoded.push(char::from(b"0123456789ABCDEF"[(byte & 0x0f) as usize]));
+        }
+    }
+    encoded
+}
+
+fn request_body_limit(endpoint: &str) -> usize {
+    match endpoint {
+        "/chat/completions" | "/responses" | "/messages" | "/embeddings" => {
+            MODEL_REQUEST_BODY_BYTES
+        }
+        _ => GENERAL_REQUEST_BODY_BYTES,
+    }
+}
+
+/// Main reusable API-key client.
+///
+/// The client owns one configured `reqwest::Client` and exposes protocol
+/// operations over that transport. It does not perform model discovery before
+/// inference and it never retries an ordinary inference POST.
+pub struct RainyClient {
+    client: Client,
+    auth_config: AuthConfig,
+    retry_config: RetryConfig,
     #[cfg(feature = "rate-limiting")]
     rate_limiter: Option<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>,
 }
 
 impl RainyClient {
     pub(crate) fn root_url(&self, path: &str) -> String {
-        let normalized = if path.starts_with('/') {
-            path.to_string()
-        } else {
-            format!("/{path}")
-        };
         format!(
             "{}{}",
             self.auth_config.base_url.trim_end_matches('/'),
-            normalized
+            normalize_path(path)
         )
     }
 
     pub(crate) fn api_v1_url(&self, path: &str) -> String {
-        let normalized = if path.starts_with('/') {
-            path.to_string()
+        let normalized = normalize_path(path);
+        if let Some(api_base_url) = self.auth_config.api_base_url.as_deref() {
+            return format!("{}{}", api_base_url.trim_end_matches('/'), normalized);
+        }
+
+        let base = self.auth_config.base_url.trim_end_matches('/');
+        let use_configured_path = url::Url::parse(base)
+            .ok()
+            .is_some_and(|url| url.path() != "" && url.path() != "/");
+        if use_configured_path {
+            format!("{base}{normalized}")
         } else {
-            format!("/{path}")
-        };
-        match self.auth_config.api_base_url.as_deref() {
-            Some(api_base_url) => {
-                format!("{}{}", api_base_url.trim_end_matches('/'), normalized)
-            }
-            None => format!(
-                "{}/api/v1{}",
-                self.auth_config.base_url.trim_end_matches('/'),
-                normalized
-            ),
+            format!("{base}/api/v1{normalized}")
         }
     }
 
-    /// Creates a new `RainyClient` with the given API key.
-    ///
-    /// This is the simplest way to create a client. It uses default settings for the base URL,
-    /// timeout, and retries.
-    ///
-    /// # Arguments
-    ///
-    /// * `api_key` - Your Rainy API key.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing the new `RainyClient` or a `RainyError` if initialization fails.
+    /// Creates a client using a protocol-neutral API key.
     pub fn with_api_key(api_key: impl Into<String>) -> Result<Self> {
-        let auth_config = AuthConfig::new(api_key);
-        Self::with_config(auth_config)
+        Self::with_config(AuthConfig::new(api_key))
     }
 
-    /// Creates a new `RainyClient` with a custom `AuthConfig`.
-    ///
-    /// This allows for more advanced configuration, such as setting a custom base URL or timeout.
-    ///
-    /// # Arguments
-    ///
-    /// * `auth_config` - The authentication configuration to use.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing the new `RainyClient` or a `RainyError` if initialization fails.
+    /// Creates a client from explicit configuration.
     pub fn with_config(auth_config: AuthConfig) -> Result<Self> {
-        // Validate configuration
         auth_config.validate()?;
 
-        // Build HTTP client
+        // Only non-sensitive defaults are installed globally. Authentication
+        // is attached per protocol so a Messages request can never inherit a
+        // Bearer header by accident.
         let mut headers = HeaderMap::new();
         headers.insert(
-            AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", auth_config.api_key.expose_secret()))
-                .map_err(|e| RainyError::Authentication {
-                    code: "INVALID_API_KEY".to_string(),
-                    message: format!("Invalid API key format: {}", e),
-                    retryable: false,
-                })?,
-        );
-        headers.insert(
             USER_AGENT,
-            HeaderValue::from_str(&auth_config.user_agent).map_err(|e| RainyError::Network {
-                message: format!("Invalid user agent: {}", e),
-                retryable: false,
-                source_error: None,
+            HeaderValue::from_str(&auth_config.user_agent).map_err(|_| {
+                RainyError::InvalidRequest {
+                    code: "INVALID_USER_AGENT".to_string(),
+                    message: "User-Agent contains invalid header characters".to_string(),
+                    details: None,
+                }
             })?,
         );
 
         let client = Client::builder()
             .tls_backend_rustls()
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
-            .https_only(true)
+            // Authenticated redirects can disclose credentials to another
+            // origin, so callers must configure the final service URL.
+            .redirect(reqwest::redirect::Policy::none())
             .timeout(auth_config.timeout())
             .default_headers(headers)
             .build()
-            .map_err(|e| RainyError::Network {
-                message: format!("Failed to create HTTP client: {}", e),
+            .map_err(|_| RainyError::Network {
+                message: "Failed to create HTTP client".to_string(),
                 retryable: false,
-                source_error: Some(e.to_string()),
+                source_error: None,
             })?;
-
-        let retry_config = RetryConfig::new(auth_config.max_retries);
 
         #[cfg(feature = "rate-limiting")]
         let rate_limiter = Some(RateLimiter::direct(Quota::per_second(
-            std::num::NonZeroU32::new(10).unwrap(),
+            std::num::NonZeroU32::new(10).expect("non-zero quota"),
         )));
 
         Ok(Self {
             client,
+            retry_config: RetryConfig::new(auth_config.max_retries),
             auth_config,
-            retry_config,
             #[cfg(feature = "rate-limiting")]
             rate_limiter,
         })
     }
 
-    /// Sets a custom retry configuration for the client.
-    ///
-    /// This allows you to override the default retry behavior.
-    ///
-    /// # Arguments
-    ///
-    /// * `retry_config` - The new retry configuration.
-    ///
-    /// # Returns
-    ///
-    /// The `RainyClient` instance with the updated retry configuration.
+    /// Replaces the retry configuration used for safe operations.
     pub fn with_retry_config(mut self, retry_config: RetryConfig) -> Self {
         self.retry_config = retry_config;
         self
@@ -192,18 +161,17 @@ impl RainyClient {
 
     pub(crate) async fn wait_for_slot(&self) {
         #[cfg(feature = "rate-limiting")]
-        if let Some(ref limiter) = self.rate_limiter {
+        if let Some(limiter) = &self.rate_limiter {
             limiter.until_ready().await;
         }
     }
 
-    async fn execute_with_retry<F, Fut, T>(&self, operation: F) -> Result<T>
+    async fn execute_safe<F, Fut, T>(&self, operation: F) -> Result<T>
     where
         F: Fn() -> Fut,
         Fut: Future<Output = Result<T>>,
     {
         self.wait_for_slot().await;
-
         if self.auth_config.enable_retry {
             retry_with_backoff(&self.retry_config, operation).await
         } else {
@@ -211,353 +179,357 @@ impl RainyClient {
         }
     }
 
-    pub(crate) fn api_request(&self, method: Method, endpoint: &str) -> RequestBuilder {
-        self.client.request(method, self.api_v1_url(endpoint))
+    async fn execute_once<F, Fut, T>(&self, operation: F) -> Result<T>
+    where
+        F: Fn() -> Fut,
+        Fut: Future<Output = Result<T>>,
+    {
+        self.wait_for_slot().await;
+        operation().await
     }
 
+    /// Builds an OpenAI-compatible Bearer-authenticated request.
+    pub(crate) fn api_request(&self, method: Method, endpoint: &str) -> RequestBuilder {
+        let value = format!("Bearer {}", self.auth_config.api_key.expose_secret());
+        self.client
+            .request(method, self.api_v1_url(endpoint))
+            .header(AUTHORIZATION, value)
+    }
+
+    /// Builds an unauthenticated root-level request, used by health checks.
     pub(crate) fn root_request(&self, method: Method, endpoint: &str) -> RequestBuilder {
         self.client.request(method, self.root_url(endpoint))
     }
 
+    /// Builds a native Anthropic request without a Bearer header.
+    pub(crate) fn anthropic_request(
+        &self,
+        method: Method,
+        endpoint: &str,
+        version: &str,
+    ) -> Result<RequestBuilder> {
+        let headers = self
+            .auth_config
+            .build_protocol_headers(AuthScheme::XApiKey, Some(version))?;
+        Ok(self
+            .client
+            .request(method, self.api_v1_url(endpoint))
+            .headers(headers))
+    }
+
+    /// Serializes and bounds an OpenAI-compatible request body.
+    pub(crate) fn json_request<T: serde::Serialize>(
+        &self,
+        method: Method,
+        endpoint: &str,
+        body: &T,
+    ) -> Result<RequestBuilder> {
+        let body = serialize_json_body(body, request_body_limit(endpoint))?;
+        Ok(self
+            .api_request(method, endpoint)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body))
+    }
+
+    /// Serializes and bounds a native Messages request body.
+    pub(crate) fn anthropic_json_request<T: serde::Serialize>(
+        &self,
+        method: Method,
+        endpoint: &str,
+        body: &T,
+    ) -> Result<RequestBuilder> {
+        let body = serialize_json_body(body, request_body_limit(endpoint))?;
+        Ok(self
+            .anthropic_request(method, endpoint, DEFAULT_ANTHROPIC_VERSION)?
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body))
+    }
+
     pub(crate) async fn send_request(&self, request: RequestBuilder) -> Result<Response> {
-        request.send().await.map_err(|e| RainyError::Network {
-            message: format!("Failed to send request: {e}"),
-            retryable: true,
-            source_error: Some(e.to_string()),
+        request.send().await.map_err(|error| {
+            if error.is_timeout() {
+                RainyError::Timeout {
+                    message: "Request timed out".to_string(),
+                    duration_ms: self.auth_config.timeout_seconds.saturating_mul(1000),
+                }
+            } else {
+                RainyError::Network {
+                    message: if error.is_connect() {
+                        "Could not connect to the service".to_string()
+                    } else {
+                        "The HTTP request failed".to_string()
+                    },
+                    retryable: error.is_connect() || error.is_request(),
+                    source_error: None,
+                }
+            }
         })
     }
 
-    /// Retrieves the list of available models and providers from the API.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing an `AvailableModels` struct on success, or a `RainyError` on failure.
+    /// Performs a safe explicit model-list request.
+    pub async fn list_models(&self) -> Result<ModelList> {
+        self.execute_safe(|| async {
+            let response = self
+                .send_request(self.api_request(Method::GET, "/models"))
+                .await?;
+            let value: Value = self.handle_response(response).await?;
+            decode_model_list(value)
+        })
+        .await
+    }
+
+    /// Returns a compatibility summary of the public model list.
     pub async fn get_available_models(&self) -> Result<AvailableModels> {
-        #[derive(Deserialize)]
-        struct ModelListItem {
-            id: String,
+        let models = self.list_models().await?;
+        let mut providers = std::collections::HashMap::<String, Vec<String>>::new();
+        for item in models.data {
+            let owner = item
+                .id
+                .split_once('/')
+                .map(|(owner, _)| owner.to_string())
+                .unwrap_or_else(|| "default".to_string());
+            providers.entry(owner).or_default().push(item.id);
         }
-        #[derive(Deserialize)]
-        struct ModelsData {
-            data: Vec<ModelListItem>,
-        }
-        #[derive(Deserialize)]
-        struct Envelope {
-            data: ModelsData,
-        }
+        let total_models = providers.values().map(Vec::len).sum();
+        let mut active_providers = providers.keys().cloned().collect::<Vec<_>>();
+        active_providers.sort();
+        Ok(AvailableModels {
+            providers,
+            total_models,
+            active_providers,
+        })
+    }
 
-        let url = self.api_v1_url("/models");
+    /// Alias for [`Self::get_available_models`].
+    pub async fn list_available_models(&self) -> Result<AvailableModels> {
+        self.get_available_models().await
+    }
 
-        let operation = || async {
-            let response = self.send_request(self.client.get(&url)).await?;
-            let envelope: Envelope = self.handle_response(response).await?;
-
-            let mut providers = std::collections::HashMap::<String, Vec<String>>::new();
-            for item in envelope.data.data {
-                let provider = item
-                    .id
-                    .split_once('/')
-                    .map(|(p, _)| p.to_string())
-                    .unwrap_or_else(|| "rainy".to_string());
-                providers.entry(provider).or_default().push(item.id);
-            }
-
-            let total_models = providers.values().map(std::vec::Vec::len).sum();
-            let mut active_providers = providers.keys().cloned().collect::<Vec<_>>();
-            active_providers.sort();
-
-            Ok(AvailableModels {
-                providers,
-                total_models,
-                active_providers,
+    /// Retrieves one public model record.
+    pub async fn get_model(&self, model_id: &str) -> Result<ModelListItem> {
+        let endpoint = format!("/models/{}", encode_path_segment(model_id));
+        self.execute_safe(|| async {
+            let response = self
+                .send_request(self.api_request(Method::GET, &endpoint))
+                .await?;
+            let value: Value = self.handle_response(response).await?;
+            let data = value.get("data").cloned().unwrap_or(value);
+            serde_json::from_value(data).map_err(|error| RainyError::Serialization {
+                message: "failed to decode model response".to_string(),
+                source_error: Some(error.to_string()),
             })
-        };
-
-        self.execute_with_retry(operation).await
+        })
+        .await
     }
 
-    /// Creates a chat completion based on the provided request.
-    ///
-    /// # Arguments
-    ///
-    /// * `request` - A `ChatCompletionRequest` containing the model, messages, and other parameters.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a tuple of `(ChatCompletionResponse, RequestMetadata)` on success,
-    /// or a `RainyError` on failure.
-    pub async fn chat_completion(
-        &self,
-        request: ChatCompletionRequest,
-    ) -> Result<(ChatCompletionResponse, RequestMetadata)> {
-        let url = self.api_v1_url("/chat/completions");
-        let start_time = Instant::now();
-
-        let operation = || async {
-            let response = self
-                .send_request(self.client.post(&url).json(&request))
-                .await?;
-
-            let metadata = self.extract_metadata(&response, start_time);
-            let chat_response: ChatCompletionResponse = self.handle_response(response).await?;
-
-            Ok((chat_response, metadata))
-        };
-
-        self.execute_with_retry(operation).await
-    }
-
-    /// Creates a chat completion in envelope mode (`X-Rainy-Response-Mode: envelope`).
-    pub async fn chat_completion_envelope(
-        &self,
-        request: ChatCompletionRequest,
-    ) -> Result<(RainyEnvelope<ChatCompletionResponse>, RequestMetadata)> {
-        let url = self.api_v1_url("/chat/completions");
-        let start_time = Instant::now();
-
-        let operation = || async {
-            let response = self
-                .send_request(
-                    self.client
-                        .post(&url)
-                        .header("X-Rainy-Response-Mode", "envelope")
-                        .json(&request),
-                )
-                .await?;
-
-            let metadata = self.extract_metadata(&response, start_time);
-            let chat_response: RainyEnvelope<ChatCompletionResponse> =
-                self.handle_response(response).await?;
-            Ok((chat_response, metadata))
-        };
-
-        self.execute_with_retry(operation).await
-    }
-
-    /// Creates an OpenAI-compatible chat completion in envelope mode.
-    pub async fn openai_chat_completion_envelope(
-        &self,
-        request: OpenAIChatCompletionRequest,
-    ) -> Result<(RainyEnvelope<OpenAIChatCompletionResponse>, RequestMetadata)> {
-        let url = self.api_v1_url("/chat/completions");
-        let start_time = Instant::now();
-
-        let operation = || async {
-            let response = self
-                .send_request(
-                    self.client
-                        .post(&url)
-                        .header("X-Rainy-Response-Mode", "envelope")
-                        .json(&request),
-                )
-                .await?;
-
-            let metadata = self.extract_metadata(&response, start_time);
-            let chat_response: RainyEnvelope<OpenAIChatCompletionResponse> =
-                self.handle_response(response).await?;
-            Ok((chat_response, metadata))
-        };
-
-        self.execute_with_retry(operation).await
-    }
-
-    /// Creates a streaming chat completion based on the provided request.
-    ///
-    /// # Arguments
-    ///
-    /// * `request` - A `ChatCompletionRequest` containing the model, messages, and other parameters.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a stream of OpenAI-style `chat.completion.chunk` events on success,
-    /// or a `RainyError` on failure.
-    pub async fn chat_completion_stream(
-        &self,
-        mut request: ChatCompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionStreamResponse>> + Send>>> {
-        // Ensure stream is set to true
-        request.stream = Some(true);
-
-        let url = self.api_v1_url("/chat/completions");
-
-        // Note: Retries are more complex with streams, so we only retry the initial connection
-        let operation = || async {
-            let response = self
-                .client
-                .post(&url)
-                .json(&request)
-                .send()
-                .await
-                .map_err(|e| RainyError::Network {
-                    message: format!("Failed to send request: {}", e),
-                    retryable: true,
-                    source_error: Some(e.to_string()),
-                })?;
-
-            let events = self.handle_chat_stream_response(response).await?;
-            let stream = events.filter_map(|event| async move {
-                match event {
-                    Ok(ChatStreamEvent::Chunk(chunk)) => Some(Ok(chunk)),
-                    Ok(ChatStreamEvent::Billing(_)) | Ok(ChatStreamEvent::Raw(_)) => None,
-                    Err(error) => Some(Err(error)),
-                }
-            });
-
-            Ok(Box::pin(stream)
-                as Pin<
-                    Box<dyn Stream<Item = Result<ChatCompletionStreamResponse>> + Send>,
-                >)
-        };
-
-        self.execute_with_retry(operation).await
-    }
-
-    /// Creates a Responses API completion (`POST /api/v1/responses`) in raw mode.
-    pub async fn create_response(
-        &self,
-        request: ResponsesRequest,
-    ) -> Result<(ResponsesApiResponse, RequestMetadata)> {
-        let url = self.api_v1_url("/responses");
-        let start_time = Instant::now();
-
-        let operation = || async {
-            let response = self
-                .send_request(self.client.post(&url).json(&request))
-                .await?;
-            let metadata = self.extract_metadata(&response, start_time);
-            let api_response: ResponsesApiResponse = self.handle_response(response).await?;
-            Ok((api_response, metadata))
-        };
-
-        self.execute_with_retry(operation).await
-    }
-
-    /// Creates a Responses API completion in envelope mode (`X-Rainy-Response-Mode: envelope`).
-    pub async fn create_response_envelope(
-        &self,
-        request: ResponsesRequest,
-    ) -> Result<(RainyEnvelope<ResponsesApiResponse>, RequestMetadata)> {
-        let url = self.api_v1_url("/responses");
-        let start_time = Instant::now();
-
-        let operation = || async {
-            let response = self
-                .send_request(
-                    self.client
-                        .post(&url)
-                        .header("X-Rainy-Response-Mode", "envelope")
-                        .json(&request),
-                )
-                .await?;
-            let metadata = self.extract_metadata(&response, start_time);
-            let api_response: RainyEnvelope<ResponsesApiResponse> =
-                self.handle_response(response).await?;
-            Ok((api_response, metadata))
-        };
-
-        self.execute_with_retry(operation).await
-    }
-
-    /// Creates a streaming Responses API completion and returns SSE events.
-    pub async fn create_response_stream(
-        &self,
-        mut request: ResponsesRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ResponsesStreamEvent>> + Send>>> {
-        request.stream = Some(true);
-
-        let url = self.api_v1_url("/responses");
-
-        let operation = || async {
-            let response = self
-                .send_request(self.client.post(&url).json(&request))
-                .await?;
-
-            self.handle_stream_response(response).await
-        };
-
-        self.execute_with_retry(operation).await
-    }
-
-    /// Creates a chat completion stream returning typed events (OpenAI chunks + Rainy native events).
-    pub async fn chat_completion_stream_events(
-        &self,
-        mut request: ChatCompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatStreamEvent>> + Send>>> {
-        request.stream = Some(true);
-
-        let url = self.api_v1_url("/chat/completions");
-        let operation = || async {
-            let response = self
-                .send_request(self.client.post(&url).json(&request))
-                .await?;
-
-            self.handle_chat_stream_response(response).await
-        };
-
-        self.execute_with_retry(operation).await
-    }
-
-    /// Retrieves `/api/v1/models/catalog` entries including `rainy_capabilities` metadata.
+    /// Retrieves the public model catalog extension.
     pub async fn get_models_catalog(&self) -> Result<Vec<ModelCatalogItem>> {
-        #[derive(Deserialize)]
-        struct ModelsCatalogData {
-            data: Vec<ModelCatalogItem>,
-        }
-        #[derive(Deserialize)]
-        struct Envelope {
-            data: ModelsCatalogData,
-        }
-
-        let url = self.api_v1_url("/models/catalog");
-        let operation = || async {
-            let response = self.send_request(self.client.get(&url)).await?;
-            let envelope: Envelope = self.handle_response(response).await?;
-            Ok(envelope.data.data)
-        };
-
-        self.execute_with_retry(operation).await
+        self.execute_safe(|| async {
+            let response = self
+                .send_request(self.api_request(Method::GET, "/models/catalog"))
+                .await?;
+            let value: Value = self.handle_response(response).await?;
+            decode_catalog(value)
+        })
+        .await
     }
 
-    /// Retrieves catalog and filters/sorts models using SDK selector criteria.
+    /// Fetches the public catalog and applies local selection criteria.
     pub async fn select_models(
         &self,
         criteria: ModelSelectionCriteria,
     ) -> Result<Vec<ModelCatalogItem>> {
-        let catalog = self.get_models_catalog().await?;
-        Ok(crate::models::select_models(&catalog, &criteria))
+        Ok(select_models(&self.get_models_catalog().await?, &criteria))
     }
 
-    /// Builds provider-aware reasoning payload from a catalog entry and preference.
+    /// Builds a literal reasoning object using public catalog declarations.
     pub fn build_reasoning_config(
         &self,
         model: &ModelCatalogItem,
         preference: &ReasoningPreference,
-    ) -> Option<serde_json::Value> {
-        crate::models::build_reasoning_config(model, preference)
+    ) -> Option<Value> {
+        build_reasoning_config(model, preference)
     }
 
-    /// Creates a simple chat completion with a single user prompt.
-    ///
-    /// This is a convenience method for simple use cases where you only need to send a single
-    /// prompt to a model and get a text response.
-    ///
-    /// # Arguments
-    ///
-    /// * `model` - The name of the model to use for the completion.
-    /// * `prompt` - The user's prompt.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing the `String` response from the model, or a `RainyError` on failure.
+    /// Creates a compact text Chat completion.
+    pub async fn chat_completion(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> Result<(ChatCompletionResponse, RequestMetadata)> {
+        request
+            .validate_openai_compatibility()
+            .map_err(RainyError::ValidationError)?;
+        let started = Instant::now();
+        let response = self
+            .execute_once(|| async {
+                self.send_request(self.json_request(Method::POST, "/chat/completions", &request)?)
+                    .await
+            })
+            .await?;
+        let metadata = self.extract_metadata(&response, started);
+        let result = self.handle_response(response).await?;
+        Ok((result, metadata))
+    }
+
+    /// Creates a compact Chat completion without metadata.
+    pub async fn create_chat_completion(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> Result<ChatCompletionResponse> {
+        Ok(self.chat_completion(request).await?.0)
+    }
+
+    /// Creates a compact Chat completion in Rainy envelope mode.
+    pub async fn chat_completion_envelope(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> Result<(RainyEnvelope<ChatCompletionResponse>, RequestMetadata)> {
+        request
+            .validate_openai_compatibility()
+            .map_err(RainyError::ValidationError)?;
+        let started = Instant::now();
+        let response = self
+            .execute_once(|| async {
+                self.send_request(
+                    self.json_request(Method::POST, "/chat/completions", &request)?
+                        .header("X-Rainy-Response-Mode", "envelope"),
+                )
+                .await
+            })
+            .await?;
+        let metadata = self.extract_metadata(&response, started);
+        Ok((self.handle_response(response).await?, metadata))
+    }
+
+    /// Creates a compact Chat completion in envelope mode without metadata.
+    pub async fn create_chat_completion_envelope(
+        &self,
+        request: ChatCompletionRequest,
+    ) -> Result<RainyEnvelope<ChatCompletionResponse>> {
+        Ok(self.chat_completion_envelope(request).await?.0)
+    }
+
+    /// Creates a compact streaming Chat completion.
+    pub async fn chat_completion_stream(
+        &self,
+        mut request: ChatCompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatCompletionStreamResponse>> + Send>>> {
+        request
+            .validate_openai_compatibility()
+            .map_err(RainyError::ValidationError)?;
+        request.stream = Some(true);
+        let events = self
+            .execute_once(|| async {
+                let response = self
+                    .send_request(self.json_request(Method::POST, "/chat/completions", &request)?)
+                    .await?;
+                let events = self.handle_chat_stream_response(response).await?;
+                let chunks = events.filter_map(|event| async move {
+                    match event {
+                        Ok(ChatStreamEvent::Chunk(chunk)) => Some(Ok(chunk)),
+                        Ok(ChatStreamEvent::Billing(_))
+                        | Ok(ChatStreamEvent::Unknown { .. })
+                        | Ok(ChatStreamEvent::Raw(_)) => None,
+                        Err(error) => Some(Err(error)),
+                    }
+                });
+                Ok(Box::pin(chunks)
+                    as Pin<
+                        Box<dyn Stream<Item = Result<ChatCompletionStreamResponse>> + Send>,
+                    >)
+            })
+            .await?;
+        Ok(events)
+    }
+
+    /// Creates a typed streaming Chat completion.
+    pub async fn chat_completion_stream_events(
+        &self,
+        mut request: ChatCompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatStreamEvent>> + Send>>> {
+        request
+            .validate_openai_compatibility()
+            .map_err(RainyError::ValidationError)?;
+        request.stream = Some(true);
+        self.execute_once(|| async {
+            let response = self
+                .send_request(self.json_request(Method::POST, "/chat/completions", &request)?)
+                .await?;
+            self.handle_chat_stream_response(response).await
+        })
+        .await
+    }
+
+    /// Creates an OpenAI-compatible Responses request.
+    pub async fn create_response(
+        &self,
+        request: ResponsesRequest,
+    ) -> Result<(ResponsesApiResponse, RequestMetadata)> {
+        request.validate().map_err(RainyError::ValidationError)?;
+        let started = Instant::now();
+        let response = self
+            .execute_once(|| async {
+                self.send_request(self.json_request(Method::POST, "/responses", &request)?)
+                    .await
+            })
+            .await?;
+        let metadata = self.extract_metadata(&response, started);
+        Ok((self.handle_response(response).await?, metadata))
+    }
+
+    /// Creates a Responses request without metadata.
+    pub async fn response(&self, request: ResponsesRequest) -> Result<ResponsesApiResponse> {
+        Ok(self.create_response(request).await?.0)
+    }
+
+    /// Creates a Responses request in Rainy envelope mode.
+    pub async fn create_response_envelope(
+        &self,
+        request: ResponsesRequest,
+    ) -> Result<(RainyEnvelope<ResponsesApiResponse>, RequestMetadata)> {
+        request.validate().map_err(RainyError::ValidationError)?;
+        let started = Instant::now();
+        let response = self
+            .execute_once(|| async {
+                self.send_request(
+                    self.json_request(Method::POST, "/responses", &request)?
+                        .header("X-Rainy-Response-Mode", "envelope"),
+                )
+                .await
+            })
+            .await?;
+        let metadata = self.extract_metadata(&response, started);
+        Ok((self.handle_response(response).await?, metadata))
+    }
+
+    /// Creates a Responses stream with native event names preserved.
+    pub async fn create_response_stream(
+        &self,
+        mut request: ResponsesRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ResponsesStreamEvent>> + Send>>> {
+        request.validate().map_err(RainyError::ValidationError)?;
+        request.stream = Some(true);
+        self.execute_once(|| async {
+            let response = self
+                .send_request(self.json_request(Method::POST, "/responses", &request)?)
+                .await?;
+            self.handle_responses_stream_response(response).await
+        })
+        .await
+    }
+
+    /// Performs a simple single-prompt Chat request and extracts text.
     pub async fn simple_chat(
         &self,
         model: impl Into<String>,
         prompt: impl Into<String>,
     ) -> Result<String> {
-        let request = ChatCompletionRequest::new(model, vec![ChatMessage::user(prompt)]);
-
-        let (response, _) = self.chat_completion(request).await?;
-
+        let response = self
+            .create_chat_completion(ChatCompletionRequest::new(
+                model,
+                vec![ChatMessage::user(prompt)],
+            ))
+            .await?;
         Ok(response
             .choices
             .into_iter()
@@ -566,398 +538,442 @@ impl RainyClient {
             .unwrap_or_default())
     }
 
-    /// Handles the HTTP response, deserializing the body into a given type `T` on success,
-    /// or mapping the error to a `RainyError` on failure.
-    ///
-    /// This is an internal method used by the various endpoint functions.
-    pub(crate) async fn handle_response<T>(&self, response: Response) -> Result<T>
-    where
-        T: serde::de::DeserializeOwned,
-    {
-        let status = response.status();
-        let request_id = response
-            .headers()
-            .get("x-request-id")
-            .and_then(|v| v.to_str().ok())
-            .map(String::from);
-
-        if status.is_success() {
-            let body = response.bytes().await?;
-            serde_json::from_slice(&body).map_err(|e| RainyError::Serialization {
-                message: format!("Failed to parse response: {}", e),
-                source_error: Some(e.to_string()),
-            })
-        } else {
-            let text = response.text().await.unwrap_or_default();
-            self.handle_error_text(status, request_id, text)
-        }
-    }
-
-    /// Handles the HTTP response for streaming requests.
-    pub(crate) async fn handle_stream_response<T>(
+    /// Bounds and decodes a successful response or maps a safe error.
+    pub(crate) async fn handle_response<T: DeserializeOwned>(
         &self,
         response: Response,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<T>> + Send>>>
-    where
-        T: serde::de::DeserializeOwned + Send + 'static,
-    {
+    ) -> Result<T> {
         let status = response.status();
-        let request_id = response
-            .headers()
-            .get("x-request-id")
-            .and_then(|v| v.to_str().ok())
-            .map(String::from);
-
-        if !status.is_success() {
-            let text = response.text().await.unwrap_or_default();
-            return self.handle_error_text(status, request_id, text);
+        let request_id = header_string(response.headers(), "x-request-id");
+        let retry_after = retry_after_seconds(response.headers());
+        if status.is_success() {
+            let body = read_limited_response_body(response, MAX_RESPONSE_BODY_BYTES).await?;
+            serde_json::from_slice(&body).map_err(|error| RainyError::Serialization {
+                message: "failed to decode JSON response".to_string(),
+                source_error: Some(error.to_string()),
+            })
+        } else {
+            let body = read_limited_response_body(response, MAX_ERROR_BODY_BYTES).await?;
+            self.handle_error_text(
+                status,
+                request_id,
+                retry_after,
+                String::from_utf8_lossy(&body).into_owned(),
+            )
         }
-
-        let stream = response
-            .bytes_stream()
-            .eventsource()
-            .filter_map(|event| async move {
-                match event {
-                    Ok(event) => {
-                        let payload = event.data.trim();
-                        if payload.is_empty() || payload.eq_ignore_ascii_case("[DONE]") {
-                            return None;
-                        }
-
-                        match serde_json::from_str::<T>(payload) {
-                            Ok(chunk) => Some(Ok(chunk)),
-                            Err(e) => Some(Err(RainyError::Serialization {
-                                message: format!("Failed to parse stream chunk: {}", e),
-                                source_error: Some(e.to_string()),
-                            })),
-                        }
-                    }
-                    Err(e) => Some(Err(RainyError::Network {
-                        message: format!("Stream error: {}", e),
-                        retryable: true,
-                        source_error: Some(e.to_string()),
-                    })),
-                }
-            });
-
-        Ok(Box::pin(stream))
     }
 
     pub(crate) async fn handle_chat_stream_response(
         &self,
         response: Response,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatStreamEvent>> + Send>>> {
-        let status = response.status();
-        let request_id = response
-            .headers()
-            .get("x-request-id")
-            .and_then(|v| v.to_str().ok())
-            .map(String::from);
-
-        if !status.is_success() {
-            let text = response.text().await.unwrap_or_default();
-            return self.handle_error_text(status, request_id, text);
-        }
-
-        let stream = response
-            .bytes_stream()
-            .eventsource()
-            .filter_map(|event| async move {
-                match event {
-                    Ok(event) => {
-                        let payload = event.data.trim();
-                        if payload.is_empty() || payload.eq_ignore_ascii_case("[DONE]") {
-                            return None;
-                        }
-
-                        let event_name = event.event.trim();
-                        let event_name = (!event_name.is_empty()).then_some(event_name);
-
-                        match serde_json::from_str::<serde_json::Value>(payload) {
-                            Ok(value) => {
-                                Some(Ok(ChatStreamEvent::from_sse_event(event_name, value)))
-                            }
-                            Err(e) => Some(Err(RainyError::Serialization {
-                                message: format!("Failed to parse stream chunk: {}", e),
-                                source_error: Some(e.to_string()),
-                            })),
-                        }
-                    }
-                    Err(e) => Some(Err(RainyError::Network {
-                        message: format!("Stream error: {}", e),
-                        retryable: true,
-                        source_error: Some(e.to_string()),
+        let response = self.prepare_stream_response(response).await?;
+        let stream = parse_sse_stream(response.bytes_stream()).filter_map(|event| async move {
+            match event {
+                Ok(event) if event.done || event.data.trim().is_empty() => None,
+                Ok(event) => match serde_json::from_str::<Value>(event.data.trim()) {
+                    Ok(value) => Some(Ok(ChatStreamEvent::from_sse_event(
+                        event.event.as_deref(),
+                        value,
+                    ))),
+                    Err(_) => Some(Err(RainyError::Serialization {
+                        message: "failed to decode Chat SSE payload".to_string(),
+                        source_error: None,
                     })),
-                }
-            });
-
+                },
+                Err(error) => Some(Err(error)),
+            }
+        });
         Ok(Box::pin(stream))
+    }
+
+    pub(crate) async fn handle_responses_stream_response(
+        &self,
+        response: Response,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ResponsesStreamEvent>> + Send>>> {
+        let response = self.prepare_stream_response(response).await?;
+        let stream = parse_sse_stream(response.bytes_stream()).filter_map(|event| async move {
+            match event {
+                Ok(event) if event.done || event.data.trim().is_empty() => None,
+                Ok(event) => match serde_json::from_str::<Value>(event.data.trim()) {
+                    Ok(value) => Some(Ok(ResponsesEvent::new(event.event, value))),
+                    Err(_) => Some(Err(RainyError::Serialization {
+                        message: "failed to decode Responses SSE payload".to_string(),
+                        source_error: None,
+                    })),
+                },
+                Err(error) => Some(Err(error)),
+            }
+        });
+        Ok(Box::pin(stream))
+    }
+
+    pub(crate) async fn handle_anthropic_message_stream_response(
+        &self,
+        response: Response,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<AnthropicMessageStreamEvent>> + Send>>> {
+        let response = self.prepare_stream_response(response).await?;
+        let stream = parse_sse_stream(response.bytes_stream()).filter_map(|event| async move {
+            match event {
+                Ok(event) if event.done || event.data.trim().is_empty() => None,
+                Ok(event) => match serde_json::from_str::<Value>(event.data.trim()) {
+                    Ok(value) => Some(Ok(AnthropicMessageStreamEvent::new(event.event, value))),
+                    Err(_) => Some(Err(RainyError::Serialization {
+                        message: "failed to decode Anthropic SSE payload".to_string(),
+                        source_error: None,
+                    })),
+                },
+                Err(error) => Some(Err(error)),
+            }
+        });
+        Ok(Box::pin(stream))
+    }
+
+    async fn prepare_stream_response(&self, response: Response) -> Result<Response> {
+        if response.status().is_success() {
+            return Ok(response);
+        }
+        let status = response.status();
+        let request_id = header_string(response.headers(), "x-request-id");
+        let retry_after = retry_after_seconds(response.headers());
+        let body = read_limited_response_body(response, MAX_ERROR_BODY_BYTES).await?;
+        self.handle_error_text(
+            status,
+            request_id,
+            retry_after,
+            String::from_utf8_lossy(&body).into_owned(),
+        )
     }
 
     fn handle_error_text<T>(
         &self,
         status: reqwest::StatusCode,
         request_id: Option<String>,
+        retry_after: Option<u64>,
         text: String,
     ) -> Result<T> {
-        if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&text) {
-            let error = error_response.error;
-            self.map_api_error(error, status.as_u16(), request_id)
-        } else {
-            Err(RainyError::Api {
-                code: status.canonical_reason().unwrap_or("UNKNOWN").to_string(),
-                message: if text.is_empty() {
-                    format!("HTTP {}", status.as_u16())
-                } else {
-                    text
-                },
-                status_code: status.as_u16(),
-                retryable: status.is_server_error(),
-                request_id,
-            })
-        }
-    }
-
-    /// Extracts request metadata from the HTTP response headers.
-    ///
-    /// This is an internal method.
-    fn extract_metadata(&self, response: &Response, start_time: Instant) -> RequestMetadata {
-        let headers = response.headers();
-
-        RequestMetadata {
-            response_time: Some(start_time.elapsed().as_millis() as u64),
-            provider: headers
-                .get("x-provider")
-                .and_then(|v| v.to_str().ok())
-                .map(String::from),
-            tokens_used: headers
-                .get("x-tokens-used")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse().ok()),
-            credits_used: headers
-                .get("x-credits-used")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse().ok()),
-            credits_remaining: headers
-                .get("x-credits-remaining")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse().ok()),
-            request_id: headers
-                .get("x-request-id")
-                .and_then(|v| v.to_str().ok())
-                .map(String::from),
-            compat_warnings: headers
-                .get("x-rainy-compat-warnings")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse().ok()),
-            response_mode: headers
-                .get("x-rainy-response-mode")
-                .and_then(|v| v.to_str().ok())
-                .map(String::from),
-            billing_plan: headers
-                .get("x-rainy-billing-plan")
-                .and_then(|v| v.to_str().ok())
-                .map(String::from),
-            rainy_credits_charged: headers
-                .get("x-rainy-credits-charged")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse().ok()),
-            rainy_daily_credits_remaining: headers
-                .get("x-rainy-daily-credits-remaining")
-                .and_then(|v| v.to_str().ok())
-                .map(String::from),
-            rainy_sanitized_params: headers
-                .get("x-rainy-sanitized-params")
-                .and_then(|v| v.to_str().ok())
-                .map(String::from),
-            rainy_billing_adjustment: headers
-                .get("x-rainy-billing-adjustment")
-                .and_then(|v| v.to_str().ok())
-                .map(String::from),
-            rainy_billing_outstanding_credits: headers
-                .get("x-rainy-billing-outstanding-credits")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse().ok()),
-        }
-    }
-
-    /// Maps a structured API error response to a `RainyError`.
-    ///
-    /// This is an internal method.
-    fn map_api_error<T>(
-        &self,
-        error: crate::error::ApiErrorDetails,
-        status_code: u16,
-        request_id: Option<String>,
-    ) -> Result<T> {
-        let retryable = error.retryable.unwrap_or(status_code >= 500);
-
-        let rainy_error = match error.code.as_str() {
-            "INVALID_API_KEY" | "EXPIRED_API_KEY" => RainyError::Authentication {
-                code: error.code,
-                message: error.message,
-                retryable: false,
-            },
-            "INSUFFICIENT_CREDITS" => {
-                // Extract credit info from details if available
-                let (current_credits, estimated_cost, reset_date) =
-                    if let Some(details) = error.details {
-                        let current = details
-                            .get("current_credits")
-                            .and_then(|v| v.as_f64())
-                            .unwrap_or(0.0);
-                        let cost = details
-                            .get("estimated_cost")
-                            .and_then(|v| v.as_f64())
-                            .unwrap_or(0.0);
-                        let reset = details
-                            .get("reset_date")
-                            .and_then(|v| v.as_str())
-                            .map(String::from);
-                        (current, cost, reset)
+        let parsed = serde_json::from_str::<Value>(&text).ok();
+        let (code, message, details, server_retryable) = parsed
+            .as_ref()
+            .and_then(extract_error_fields)
+            .unwrap_or_else(|| {
+                (
+                    status
+                        .canonical_reason()
+                        .unwrap_or("HTTP_ERROR")
+                        .to_string(),
+                    if text.is_empty() {
+                        format!("HTTP {}", status.as_u16())
                     } else {
-                        (0.0, 0.0, None)
-                    };
+                        "The service returned an invalid error response".to_string()
+                    },
+                    None,
+                    None,
+                )
+            });
 
-                RainyError::InsufficientCredits {
-                    code: error.code,
-                    message: error.message,
-                    current_credits,
-                    estimated_cost,
-                    reset_date,
-                }
-            }
-            "RATE_LIMIT_EXCEEDED" => {
-                let retry_after = error
-                    .details
-                    .as_ref()
-                    .and_then(|d| d.get("retry_after"))
-                    .and_then(|v| v.as_u64());
-
-                RainyError::RateLimit {
-                    code: error.code,
-                    message: error.message,
-                    retry_after,
-                    current_usage: None,
-                }
-            }
-            "INVALID_REQUEST" | "MISSING_REQUIRED_FIELD" | "INVALID_MODEL" => {
-                RainyError::InvalidRequest {
-                    code: error.code,
-                    message: error.message,
-                    details: error.details,
-                }
-            }
-            "MODEL_TIER_NOT_ALLOWED"
-            | "MODEL_NOT_ALLOWED"
-            | "MODEL_DISABLED_FOR_ORGANIZATION"
-            | "MODEL_PRIVACY_POLICY_INCOMPATIBLE"
-            | "TOOLS_NOT_ALLOWED"
-            | "REASONING_NOT_ALLOWED" => RainyError::AccessDenied {
-                code: error.code,
-                message: error.message,
-                details: error.details,
-            },
-            "PROVIDER_ERROR" | "PROVIDER_UNAVAILABLE" => {
-                let provider = error
-                    .details
-                    .as_ref()
-                    .and_then(|d| d.get("provider"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-
-                RainyError::Provider {
-                    code: error.code,
-                    message: error.message,
-                    provider,
-                    retryable,
-                }
-            }
-            _ => RainyError::Api {
-                code: error.code,
-                message: error.message,
-                status_code,
-                retryable,
+        self.map_api_error(
+            ApiErrorDetails {
+                code,
+                message,
+                details,
+                retryable: server_retryable,
+                timestamp: None,
                 request_id: request_id.clone(),
             },
-        };
-
-        Err(rainy_error)
+            status.as_u16(),
+            request_id,
+            retry_after,
+        )
     }
 
-    /// Returns a reference to the current authentication configuration.
+    fn extract_metadata(&self, response: &Response, started: Instant) -> RequestMetadata {
+        let headers = response.headers();
+        RequestMetadata {
+            response_time: Some(started.elapsed().as_millis() as u64),
+            provider: header_string(headers, "x-provider"),
+            tokens_used: header_string(headers, "x-tokens-used")
+                .and_then(|value| value.parse().ok()),
+            credits_used: header_string(headers, "x-credits-used")
+                .and_then(|value| value.parse().ok()),
+            credits_remaining: header_string(headers, "x-credits-remaining")
+                .and_then(|value| value.parse().ok()),
+            request_id: header_string(headers, "x-request-id"),
+            compat_warnings: header_string(headers, "x-rainy-compat-warnings")
+                .and_then(|value| value.parse().ok()),
+            response_mode: header_string(headers, "x-rainy-response-mode"),
+            billing_plan: header_string(headers, "x-rainy-billing-plan"),
+            rainy_credits_charged: header_string(headers, "x-rainy-credits-charged")
+                .and_then(|value| value.parse().ok()),
+            rainy_daily_credits_remaining: header_string(
+                headers,
+                "x-rainy-daily-credits-remaining",
+            ),
+            rainy_sanitized_params: header_string(headers, "x-rainy-sanitized-params"),
+            rainy_billing_adjustment: header_string(headers, "x-rainy-billing-adjustment"),
+            rainy_billing_outstanding_credits: header_string(
+                headers,
+                "x-rainy-billing-outstanding-credits",
+            )
+            .and_then(|value| value.parse().ok()),
+        }
+    }
+
+    fn map_api_error<T>(
+        &self,
+        error: ApiErrorDetails,
+        status_code: u16,
+        request_id: Option<String>,
+        retry_after_header: Option<u64>,
+    ) -> Result<T> {
+        let retryable = error.retryable.unwrap_or(status_code >= 500);
+        let secret = self.auth_config.api_key.expose_secret();
+        let code = safe_error_message(&redact_secret(&error.code, secret));
+        let message = safe_error_message(&redact_secret(&error.message, secret));
+        let details = error.details.map(|details| redact_json(details, secret));
+        if status_code == 401
+            || matches!(
+                code.as_str(),
+                "INVALID_API_KEY" | "EXPIRED_API_KEY" | "UNAUTHORIZED" | "INVALID_TOKEN"
+            )
+        {
+            return Err(RainyError::Authentication {
+                code,
+                message,
+                retryable: false,
+            });
+        }
+        if status_code == 403 || matches!(code.as_str(), "FORBIDDEN" | "ACCESS_DENIED") {
+            return Err(RainyError::AccessDenied {
+                code,
+                message,
+                details,
+            });
+        }
+        if status_code == 413 {
+            return Err(RainyError::PayloadTooLarge {
+                message: "the service rejected the request as too large".to_string(),
+                max_bytes: MODEL_REQUEST_BODY_BYTES,
+            });
+        }
+        if status_code == 429 || code == "RATE_LIMIT_EXCEEDED" {
+            let retry_after = details
+                .as_ref()
+                .and_then(|details| details.get("retry_after"))
+                .and_then(Value::as_u64)
+                .map(|value| value.min(86_400))
+                .or(retry_after_header);
+            return Err(RainyError::RateLimit {
+                code,
+                message,
+                retry_after,
+                current_usage: None,
+            });
+        }
+        if code == "INSUFFICIENT_CREDITS" {
+            let detail_ref = details.as_ref();
+            return Err(RainyError::InsufficientCredits {
+                code,
+                message,
+                current_credits: detail_ref
+                    .and_then(|value| value.get("current_credits"))
+                    .and_then(Value::as_f64)
+                    .unwrap_or_default(),
+                estimated_cost: detail_ref
+                    .and_then(|value| value.get("estimated_cost"))
+                    .and_then(Value::as_f64)
+                    .unwrap_or_default(),
+                reset_date: detail_ref
+                    .and_then(|value| value.get("reset_date"))
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned),
+            });
+        }
+        if matches!(
+            code.as_str(),
+            "INVALID_REQUEST" | "MISSING_REQUIRED_FIELD" | "INVALID_MODEL"
+        ) || (400..500).contains(&status_code)
+        {
+            return Err(RainyError::InvalidRequest {
+                code,
+                message,
+                details,
+            });
+        }
+        if matches!(code.as_str(), "PROVIDER_ERROR" | "PROVIDER_UNAVAILABLE") {
+            return Err(RainyError::Provider {
+                code,
+                message,
+                provider: "upstream".to_string(),
+                retryable,
+            });
+        }
+        Err(RainyError::Api {
+            code,
+            message,
+            status_code,
+            retryable,
+            request_id,
+        })
+    }
+
+    /// Returns the configured authentication settings.
     pub fn auth_config(&self) -> &AuthConfig {
         &self.auth_config
     }
 
-    /// Returns the base URL being used by the client.
+    /// Returns the root base URL.
     pub fn base_url(&self) -> &str {
         &self.auth_config.base_url
     }
 
-    /// Returns the effective base URL used for versioned API endpoints.
+    /// Returns the effective versioned API base URL.
     pub fn api_base_url(&self) -> String {
-        self.auth_config.api_base_url.clone().unwrap_or_else(|| {
-            format!("{}/api/v1", self.auth_config.base_url.trim_end_matches('/'))
-        })
-    }
-
-    /// Retrieves the list of available models from the API.
-    ///
-    /// This method returns information about all models that are currently available
-    /// through the Rainy API, including their compatibility status and supported parameters.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a `AvailableModels` struct with model information.
-    ///
-    /// # Example
-    ///
-    /// ```rust,no_run
-    /// # use rainy_sdk::RainyClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RainyClient::with_api_key("your-api-key")?;
-    /// let models = client.list_available_models().await?;
-    ///
-    /// println!("Total models: {}", models.total_models);
-    /// for (provider, model_list) in &models.providers {
-    ///     println!("Provider {}: {:?}", provider, model_list);
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn list_available_models(&self) -> Result<AvailableModels> {
-        self.get_available_models().await
-    }
-
-    // Legacy methods for backward compatibility
-
-    /// Makes a generic HTTP request to the API.
-    ///
-    /// This is an internal method kept for compatibility with endpoint implementations.
-    pub(crate) async fn make_request<T: serde::de::DeserializeOwned>(
-        &self,
-        method: reqwest::Method,
-        endpoint: &str,
-        body: Option<serde_json::Value>,
-    ) -> Result<T> {
-        self.wait_for_slot().await;
-        let mut request = self.api_request(method, endpoint);
-
-        if let Some(body) = body {
-            request = request.json(&body);
+        if let Some(value) = &self.auth_config.api_base_url {
+            return value.clone();
         }
+        let base = self.auth_config.base_url.trim_end_matches('/');
+        let has_path = url::Url::parse(base)
+            .ok()
+            .is_some_and(|url| url.path() != "" && url.path() != "/");
+        if has_path {
+            base.to_string()
+        } else {
+            format!("{base}/api/v1")
+        }
+    }
 
-        let response = self.send_request(request).await?;
-        self.handle_response(response).await
+    /// Compatibility helper for older endpoint modules.
+    #[cfg(feature = "legacy")]
+    pub(crate) async fn make_request<T: DeserializeOwned>(
+        &self,
+        method: Method,
+        endpoint: &str,
+        body: Option<Value>,
+    ) -> Result<T> {
+        self.execute_once(|| async {
+            let request = match body.as_ref() {
+                Some(body) => self.json_request(method.clone(), endpoint, body)?,
+                None => self.api_request(method.clone(), endpoint),
+            };
+            let response = self.send_request(request).await?;
+            self.handle_response(response).await
+        })
+        .await
     }
 }
 
+fn header_string(headers: &HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(ToOwned::to_owned)
+}
+
+fn safe_error_message(message: &str) -> String {
+    let mut output = message
+        .chars()
+        .filter(|character| !character.is_control() || matches!(character, '\n' | '\t'))
+        .collect::<String>();
+    if output.chars().count() > 1024 {
+        output = output.chars().take(1024).collect();
+        output.push('…');
+    }
+    if output.is_empty() {
+        "The service returned an error".to_string()
+    } else {
+        output
+    }
+}
+
+fn redact_secret(value: &str, secret: &str) -> String {
+    if secret.is_empty() {
+        value.to_string()
+    } else {
+        value.replace(secret, "<redacted>")
+    }
+}
+
+fn redact_json(value: Value, secret: &str) -> Value {
+    match value {
+        Value::String(value) => Value::String(redact_secret(&value, secret)),
+        Value::Array(values) => Value::Array(
+            values
+                .into_iter()
+                .map(|value| redact_json(value, secret))
+                .collect(),
+        ),
+        Value::Object(values) => Value::Object(
+            values
+                .into_iter()
+                .map(|(key, value)| (key, redact_json(value, secret)))
+                .collect(),
+        ),
+        value => value,
+    }
+}
+
+fn extract_error_fields(value: &Value) -> Option<(String, String, Option<Value>, Option<bool>)> {
+    let error = value.get("error").unwrap_or(value);
+    let code = error
+        .get("code")
+        .and_then(Value::as_str)
+        .or_else(|| error.get("type").and_then(Value::as_str))
+        .or_else(|| value.get("code").and_then(Value::as_str))
+        .unwrap_or("API_ERROR")
+        .to_string();
+    let message = error
+        .get("message")
+        .and_then(Value::as_str)
+        .or_else(|| value.get("message").and_then(Value::as_str))
+        .unwrap_or("The service returned an error")
+        .to_string();
+    let details = error
+        .get("details")
+        .cloned()
+        .or_else(|| value.get("details").cloned());
+    let retryable = error
+        .get("retryable")
+        .and_then(Value::as_bool)
+        .or_else(|| value.get("retryable").and_then(Value::as_bool));
+    Some((code, message, details, retryable))
+}
+
+fn decode_model_list(value: Value) -> Result<ModelList> {
+    let data = value.get("data").cloned().unwrap_or(value);
+    let data = if data.get("data").is_some() {
+        data.get("data").cloned().unwrap_or(data)
+    } else {
+        data
+    };
+    serde_json::from_value(data).map_err(|error| RainyError::Serialization {
+        message: "failed to decode model list".to_string(),
+        source_error: Some(error.to_string()),
+    })
+}
+
+fn decode_catalog(value: Value) -> Result<Vec<ModelCatalogItem>> {
+    let data = value.get("data").cloned().unwrap_or(value);
+    let data = if data.is_array() {
+        data
+    } else {
+        data.get("data").cloned().unwrap_or(data)
+    };
+    serde_json::from_value(data).map_err(|error| RainyError::Serialization {
+        message: "failed to decode model catalog".to_string(),
+        source_error: Some(error.to_string()),
+    })
+}
+
 impl std::fmt::Debug for RainyClient {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RainyClient")
-            .field("base_url", &self.auth_config.base_url)
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RainyClient")
+            .field("base_url", &safe_url_label(&self.auth_config.base_url))
+            .field(
+                "api_base_url",
+                &self.auth_config.api_base_url.as_deref().map(safe_url_label),
+            )
             .field("timeout", &self.auth_config.timeout_seconds)
             .field("max_retries", &self.retry_config.max_retries)
             .finish()
@@ -968,17 +984,16 @@ impl std::fmt::Debug for RainyClient {
 mod tests {
     use super::*;
 
-    fn valid_api_key() -> String {
+    fn key() -> String {
         format!("ra-{}", "a".repeat(48))
     }
 
     #[test]
-    fn versioned_routes_use_the_rainy_prefix_by_default() {
+    fn default_routes_use_rainy_api_prefix() {
         let client = RainyClient::with_config(
-            AuthConfig::new(valid_api_key()).with_base_url("https://gateway.example.com/"),
+            AuthConfig::new(key()).with_base_url("https://gateway.example.com/"),
         )
-        .expect("build client");
-
+        .unwrap();
         assert_eq!(
             client.api_v1_url("responses"),
             "https://gateway.example.com/api/v1/responses"
@@ -986,21 +1001,32 @@ mod tests {
     }
 
     #[test]
-    fn versioned_routes_use_the_configured_api_base_url() {
+    fn custom_versioned_base_url_is_used_directly() {
         let client = RainyClient::with_config(
-            AuthConfig::new(valid_api_key())
-                .with_base_url("https://gateway.example.com")
-                .with_api_base_url("https://responses.example.com/openai/v1/"),
+            AuthConfig::new("sk-compatible")
+                .with_base_url("https://example-compatible-provider.com/v1"),
         )
-        .expect("build client");
-
+        .unwrap();
         assert_eq!(
             client.api_v1_url("/responses"),
-            "https://responses.example.com/openai/v1/responses"
+            "https://example-compatible-provider.com/v1/responses"
         );
-        assert_eq!(
-            client.root_url("/health"),
-            "https://gateway.example.com/health"
-        );
+    }
+
+    #[test]
+    fn extracts_nested_error_details_and_retryability() {
+        let value = serde_json::json!({
+            "error": {
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": "slow down",
+                "retryable": true,
+                "details": {"retry_after": 2}
+            }
+        });
+        let (code, message, details, retryable) = extract_error_fields(&value).unwrap();
+        assert_eq!(code, "RATE_LIMIT_EXCEEDED");
+        assert_eq!(message, "slow down");
+        assert_eq!(details.unwrap()["retry_after"], 2);
+        assert_eq!(retryable, Some(true));
     }
 }

@@ -1,17 +1,25 @@
-//! JWT/session client for Rainy API v3 dashboard-style endpoints.
+//! Optional JWT/session client for Rainy account endpoints.
 //!
-//! This module intentionally separates session/JWT operations from `RainyClient` (API-key flows)
-//! to keep trust boundaries clear and the default SDK surface smaller.
+//! This module is deliberately behind the non-default `rainy-account` feature.
+//! It keeps session and dashboard-style operations separate from the
+//! API-key-authenticated inference client and shares the SDK's URL, body-size,
+//! redirect, and diagnostic-safety rules.
 
+use crate::auth::{
+    GENERAL_REQUEST_BODY_BYTES, MAX_ERROR_BODY_BYTES, MAX_RESPONSE_BODY_BYTES,
+    read_limited_response_body, safe_url_label, serialize_json_body, validate_service_url,
+};
 use crate::error::{ApiErrorResponse, RainyError, Result};
 use reqwest::{
     Client, Method, Response,
     header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue, USER_AGENT},
 };
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use std::fmt;
 
 /// Configuration for [`RainySessionClient`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SessionConfig {
     /// Base URL of the Rainy API v3 service (host only; API paths are added by the client).
     pub base_url: String,
@@ -19,6 +27,17 @@ pub struct SessionConfig {
     pub timeout_seconds: u64,
     /// User-Agent header used for session requests.
     pub user_agent: String,
+}
+
+impl fmt::Debug for SessionConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SessionConfig")
+            .field("base_url", &safe_url_label(&self.base_url))
+            .field("timeout_seconds", &self.timeout_seconds)
+            .field("user_agent", &self.user_agent)
+            .finish()
+    }
 }
 
 impl Default for SessionConfig {
@@ -58,13 +77,13 @@ impl SessionConfig {
 
 /// Client for Rainy API v3 JWT/session endpoints.
 ///
-/// Use this client for authentication and dashboard/account operations such as
+/// Use this client for authentication and account operations such as
 /// `/api/v1/auth/*`, `/api/v1/keys`, `/api/v1/usage/*`, and `/api/v1/orgs/me`.
-#[derive(Debug, Clone)]
+/// It is not part of the default inference client or default feature set.
 pub struct RainySessionClient {
     client: Client,
     config: SessionConfig,
-    access_token: Option<String>,
+    access_token: Option<SecretString>,
 }
 
 /// Request body for `POST /api/v1/auth/login`.
@@ -110,7 +129,7 @@ pub struct SessionUser {
 }
 
 /// Pair of access and refresh tokens.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SessionTokens {
     /// Access token for authenticated session requests.
     #[serde(rename = "accessToken")]
@@ -121,7 +140,7 @@ pub struct SessionTokens {
 }
 
 /// Response payload for login/register auth endpoints.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct LoginResponse {
     /// Access token returned by the API.
     #[serde(rename = "accessToken")]
@@ -134,7 +153,7 @@ pub struct LoginResponse {
 }
 
 /// Response payload for token refresh.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct RefreshResponse {
     /// New access token.
     #[serde(rename = "accessToken")]
@@ -188,7 +207,7 @@ pub struct SessionApiKeyListItem {
 }
 
 /// Created API key response for `POST /api/v1/keys`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct CreatedApiKey {
     /// Plaintext API key value (returned only at creation time).
     pub key: String,
@@ -224,7 +243,7 @@ pub struct UsageStatsResponse {
     /// Total credits deducted in the selected period.
     #[serde(rename = "totalCreditsDeducted")]
     pub total_credits_deducted: f64,
-    /// Provider-level summary alias payload.
+    /// Generic usage summary returned by the service.
     #[serde(rename = "statsByProvider", default)]
     pub stats_by_provider: serde_json::Value,
     /// Recent usage logs alias payload.
@@ -255,10 +274,11 @@ impl RainySessionClient {
 
     /// Creates a session client with custom configuration.
     pub fn with_config(config: SessionConfig) -> Result<Self> {
-        if url::Url::parse(&config.base_url).is_err() {
+        validate_service_url(&config.base_url, "INVALID_BASE_URL")?;
+        if config.timeout_seconds == 0 {
             return Err(RainyError::InvalidRequest {
-                code: "INVALID_BASE_URL".to_string(),
-                message: "Base URL is not a valid URL".to_string(),
+                code: "INVALID_TIMEOUT".to_string(),
+                message: "session timeout must be greater than zero".to_string(),
                 details: None,
             });
         }
@@ -267,23 +287,24 @@ impl RainySessionClient {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         headers.insert(
             USER_AGENT,
-            HeaderValue::from_str(&config.user_agent).map_err(|e| RainyError::Network {
-                message: format!("Invalid user agent: {e}"),
-                retryable: false,
-                source_error: Some(e.to_string()),
+            HeaderValue::from_str(&config.user_agent).map_err(|_| RainyError::InvalidRequest {
+                code: "INVALID_USER_AGENT".to_string(),
+                message: "User-Agent contains invalid header characters".to_string(),
+                details: None,
             })?,
         );
 
         let client = Client::builder()
             .tls_backend_rustls()
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
+            .redirect(reqwest::redirect::Policy::none())
             .timeout(std::time::Duration::from_secs(config.timeout_seconds))
             .default_headers(headers)
             .build()
-            .map_err(|e| RainyError::Network {
-                message: format!("Failed to create HTTP client: {e}"),
+            .map_err(|_| RainyError::Network {
+                message: "Failed to create HTTP client".to_string(),
                 retryable: false,
-                source_error: Some(e.to_string()),
+                source_error: None,
             })?;
 
         Ok(Self {
@@ -300,7 +321,7 @@ impl RainySessionClient {
 
     /// Sets the in-memory access token used for authenticated requests.
     pub fn set_access_token(&mut self, access_token: impl Into<String>) {
-        self.access_token = Some(access_token.into());
+        self.access_token = Some(SecretString::from(access_token.into()));
     }
 
     /// Clears the in-memory access token.
@@ -310,7 +331,9 @@ impl RainySessionClient {
 
     /// Returns the current in-memory access token, if set.
     pub fn access_token(&self) -> Option<&str> {
-        self.access_token.as_deref()
+        self.access_token
+            .as_ref()
+            .map(|token| token.expose_secret())
     }
 
     /// Returns the configured API base URL.
@@ -336,38 +359,47 @@ impl RainySessionClient {
         let request_id = response
             .headers()
             .get("x-request-id")
-            .and_then(|v| v.to_str().ok())
+            .and_then(|value| value.to_str().ok())
             .map(ToOwned::to_owned);
         if status.is_success() {
-            let body = response.bytes().await?;
-            serde_json::from_slice::<T>(&body).map_err(|e| RainyError::Serialization {
-                message: format!("Failed to parse response: {e}"),
-                source_error: Some(e.to_string()),
+            let body = read_limited_response_body(response, MAX_RESPONSE_BODY_BYTES).await?;
+            serde_json::from_slice::<T>(&body).map_err(|error| RainyError::Serialization {
+                message: "failed to parse session response".to_string(),
+                source_error: Some(error.to_string()),
             })
         } else {
-            let text = response.text().await.unwrap_or_default();
-            if let Ok(error_response) = serde_json::from_str::<ApiErrorResponse>(&text) {
-                let error = error_response.error;
-                Err(RainyError::Api {
-                    code: error.code,
-                    message: error.message,
-                    status_code: status.as_u16(),
-                    retryable: status.is_server_error(),
-                    request_id,
+            let body = read_limited_response_body(response, MAX_ERROR_BODY_BYTES).await?;
+            let parsed = serde_json::from_slice::<ApiErrorResponse>(&body).ok();
+            let access_token = self
+                .access_token
+                .as_ref()
+                .map(|token| token.expose_secret());
+            let (code, message) = parsed
+                .map(|response| {
+                    (
+                        redact_secret(
+                            &safe_error_component(&response.error.code, "API_ERROR"),
+                            access_token,
+                        ),
+                        redact_secret(&safe_error_message(&response.error.message), access_token),
+                    )
                 })
-            } else {
-                Err(RainyError::Api {
-                    code: status.canonical_reason().unwrap_or("UNKNOWN").to_string(),
-                    message: if text.is_empty() {
-                        format!("HTTP {}", status.as_u16())
-                    } else {
-                        text
-                    },
-                    status_code: status.as_u16(),
-                    retryable: status.is_server_error(),
-                    request_id,
-                })
-            }
+                .unwrap_or_else(|| {
+                    (
+                        status
+                            .canonical_reason()
+                            .unwrap_or("HTTP_ERROR")
+                            .to_string(),
+                        "The service returned an invalid error response".to_string(),
+                    )
+                });
+            Err(RainyError::Api {
+                code,
+                message,
+                status_code: status.as_u16(),
+                retryable: status.is_server_error(),
+                request_id,
+            })
         }
     }
 
@@ -389,17 +421,38 @@ impl RainySessionClient {
                     message: "Session access token is required for this operation".to_string(),
                     retryable: false,
                 })?;
-            request = request.header(AUTHORIZATION, format!("Bearer {token}"));
+            let value = HeaderValue::from_str(&format!("Bearer {}", token.expose_secret()))
+                .map_err(|_| RainyError::InvalidRequest {
+                    code: "INVALID_SESSION_TOKEN".to_string(),
+                    message: "session token cannot be used in an HTTP header".to_string(),
+                    details: None,
+                })?;
+            request = request.header(AUTHORIZATION, value);
         }
 
         if let Some(body) = body {
-            request = request.json(body);
+            request = request
+                .header(CONTENT_TYPE, "application/json")
+                .body(serialize_json_body(body, GENERAL_REQUEST_BODY_BYTES)?);
         }
 
-        let response = request.send().await.map_err(|e| RainyError::Network {
-            message: format!("Failed to send request: {e}"),
-            retryable: true,
-            source_error: Some(e.to_string()),
+        let response = request.send().await.map_err(|error| {
+            if error.is_timeout() {
+                RainyError::Timeout {
+                    message: "Request timed out".to_string(),
+                    duration_ms: self.config.timeout_seconds.saturating_mul(1000),
+                }
+            } else {
+                RainyError::Network {
+                    message: if error.is_connect() {
+                        "Could not connect to the service".to_string()
+                    } else {
+                        "The HTTP request failed".to_string()
+                    },
+                    retryable: error.is_connect() || error.is_request(),
+                    source_error: None,
+                }
+            }
         })?;
         self.parse_response(response).await
     }
@@ -414,11 +467,11 @@ impl RainySessionClient {
                 false,
             )
             .await?;
-        self.access_token = Some(response.access_token.clone());
+        self.set_access_token(response.access_token.clone());
         Ok(response)
     }
 
-    /// Registers a user and stores the returned access token in the client.
+    /// Registers a user and stores the returned access token.
     pub async fn register(
         &mut self,
         email: &str,
@@ -437,7 +490,7 @@ impl RainySessionClient {
                 false,
             )
             .await?;
-        self.access_token = Some(response.access_token.clone());
+        self.set_access_token(response.access_token.clone());
         Ok(response)
     }
 
@@ -451,7 +504,7 @@ impl RainySessionClient {
                 false,
             )
             .await?;
-        self.access_token = Some(response.access_token.clone());
+        self.set_access_token(response.access_token.clone());
         Ok(response)
     }
 
@@ -471,15 +524,13 @@ impl RainySessionClient {
 
     /// Returns the current organization profile from `GET /api/v1/orgs/me`.
     pub async fn org_me(&self) -> Result<OrgProfile> {
-        let response: OrgProfile = self
-            .request_json(
-                Method::GET,
-                "/orgs/me",
-                Option::<&serde_json::Value>::None,
-                true,
-            )
-            .await?;
-        Ok(response)
+        self.request_json(
+            Method::GET,
+            "/orgs/me",
+            Option::<&serde_json::Value>::None,
+            true,
+        )
+        .await
     }
 
     /// Lists API keys for the authenticated organization/user session.
@@ -497,9 +548,6 @@ impl RainySessionClient {
     }
 
     /// Creates a new API key for the authenticated session.
-    ///
-    /// `key_type` may be `Some("standard")`, `Some("platform")`, or `None`
-    /// to let the server default apply.
     pub async fn create_api_key(
         &self,
         name: &str,
@@ -511,23 +559,19 @@ impl RainySessionClient {
             #[serde(skip_serializing_if = "Option::is_none")]
             r#type: Option<&'a str>,
         }
-        let response: CreatedApiKey = self
-            .request_json(
-                Method::POST,
-                "/keys",
-                Some(&CreateKeyRequest {
-                    name,
-                    r#type: key_type,
-                }),
-                true,
-            )
-            .await?;
-        Ok(response)
+        self.request_json(
+            Method::POST,
+            "/keys",
+            Some(&CreateKeyRequest {
+                name,
+                r#type: key_type,
+            }),
+            true,
+        )
+        .await
     }
 
     /// Deletes an API key by ID.
-    ///
-    /// Returns the server JSON response as-is to avoid over-expanding the SDK surface.
     pub async fn delete_api_key(&self, id: &str) -> Result<serde_json::Value> {
         self.request_json(
             Method::DELETE,
@@ -550,8 +594,6 @@ impl RainySessionClient {
     }
 
     /// Returns usage statistics from `GET /api/v1/usage/stats`.
-    ///
-    /// When `days` is `None`, the server default period is used.
     pub async fn usage_stats(&self, days: Option<u32>) -> Result<UsageStatsResponse> {
         let path = match days {
             Some(days) => format!("/usage/stats?days={days}"),
@@ -559,6 +601,102 @@ impl RainySessionClient {
         };
         self.request_json(Method::GET, &path, Option::<&serde_json::Value>::None, true)
             .await
+    }
+}
+
+impl fmt::Debug for RainySessionClient {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RainySessionClient")
+            .field("base_url", &safe_url_label(&self.config.base_url))
+            .field("timeout_seconds", &self.config.timeout_seconds)
+            .field(
+                "access_token",
+                &self.access_token.as_ref().map(|_| "<redacted>"),
+            )
+            .finish()
+    }
+}
+
+impl fmt::Debug for SessionTokens {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SessionTokens")
+            .field("access_token", &"<redacted>")
+            .field("refresh_token", &"<redacted>")
+            .finish()
+    }
+}
+
+impl fmt::Debug for LoginResponse {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("LoginResponse")
+            .field("access_token", &"<redacted>")
+            .field("refresh_token", &"<redacted>")
+            .field("user", &self.user)
+            .finish()
+    }
+}
+
+impl fmt::Debug for RefreshResponse {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RefreshResponse")
+            .field("access_token", &"<redacted>")
+            .field("refresh_token", &"<redacted>")
+            .finish()
+    }
+}
+
+impl fmt::Debug for CreatedApiKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CreatedApiKey")
+            .field("key", &"<redacted>")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("type", &self.r#type)
+            .finish()
+    }
+}
+
+fn safe_error_component(value: &str, fallback: &str) -> String {
+    let mut output = value
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect::<String>();
+    if output.is_empty() {
+        fallback.to_string()
+    } else {
+        if output.chars().count() > 128 {
+            output = output.chars().take(128).collect();
+            output.push('…');
+        }
+        output
+    }
+}
+
+fn safe_error_message(value: &str) -> String {
+    let mut output = value
+        .chars()
+        .filter(|character| !character.is_control() || matches!(character, '\n' | '\t'))
+        .collect::<String>();
+    if output.chars().count() > 1024 {
+        output = output.chars().take(1024).collect();
+        output.push('…');
+    }
+    if output.is_empty() {
+        "The service returned an error".to_string()
+    } else {
+        output
+    }
+}
+
+fn redact_secret(value: &str, secret: Option<&str>) -> String {
+    match secret.filter(|secret| !secret.is_empty()) {
+        Some(secret) => value.replace(secret, "<redacted>"),
+        None => value.to_string(),
     }
 }
 
@@ -580,14 +718,32 @@ mod tests {
     fn parses_login_alias_shape() {
         let payload = r#"{
           "success": true,
-          "data": {"accessToken":"a","refreshToken":"r","user":{"id":"1","email":"e@x.com","role":"admin"}},
-          "accessToken":"a",
-          "refreshToken":"r",
+          "data": {"accessToken":"access-token-secret","refreshToken":"refresh-token-secret","user":{"id":"1","email":"e@x.com","role":"admin"}},
+          "accessToken":"access-token-secret",
+          "refreshToken":"refresh-token-secret",
           "user":{"id":"1","email":"e@x.com","role":"admin"}
         }"#;
         let parsed: LoginResponse = serde_json::from_str(payload).expect("deserialize login");
-        assert_eq!(parsed.access_token, "a");
-        assert_eq!(parsed.refresh_token, "r");
+        assert_eq!(parsed.access_token, "access-token-secret");
+        assert_eq!(parsed.refresh_token, "refresh-token-secret");
         assert_eq!(parsed.user.email, "e@x.com");
+        assert!(!format!("{parsed:?}").contains("access-token-secret"));
+        assert!(!format!("{parsed:?}").contains("refresh-token-secret"));
+    }
+
+    #[test]
+    fn session_client_rejects_non_loopback_http() {
+        let result = RainySessionClient::with_base_url("http://example.com");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn session_config_debug_uses_a_safe_url_label() {
+        let config = SessionConfig::new()
+            .with_base_url("https://user:password@example.com/private?token=should-not-print");
+        let rendered = format!("{config:?}");
+        assert!(!rendered.contains("user:password"));
+        assert!(!rendered.contains("token=should-not-print"));
+        assert!(rendered.contains("https://example.com"));
     }
 }

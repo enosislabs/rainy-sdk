@@ -11,6 +11,8 @@ pub mod health;
 /// Endpoint for managing API keys.
 #[cfg(feature = "legacy")]
 pub mod keys;
+/// Native Anthropic-compatible Messages endpoint.
+pub mod messages;
 /// Endpoint for web search via Tavily.
 pub mod search;
 /// Endpoint for retrieving usage statistics.

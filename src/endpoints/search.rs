@@ -12,8 +12,8 @@ use serde_json::json;
 impl RainyClient {
     /// Perform deep web research on a topic.
     ///
-    /// This method leverages the Rainy Agent Network to perform comprehensive
-    /// web research using providers like Exa or Tavily.
+    /// This method delegates to the configured compatible search service for
+    /// comprehensive web research.
     ///
     /// # Arguments
     ///
@@ -37,7 +37,7 @@ impl RainyClient {
     ///     println!("Report: {}", content);
     /// }
     ///
-    /// // Advanced deep research with Exa
+    /// // Advanced deep research with a selected search provider
     /// let config = ResearchConfig::new()
     ///     .with_provider(ResearchProvider::Exa)
     ///     .with_depth(ResearchDepth::Advanced);
@@ -125,10 +125,7 @@ impl RainyClient {
 
         self.wait_for_slot().await;
         let response = self
-            .send_request(
-                self.api_request(reqwest::Method::POST, "/search")
-                    .json(&request),
-            )
+            .send_request(self.json_request(reqwest::Method::POST, "/search", &request)?)
             .await?;
 
         let envelope: SearchEnvelope = self.handle_response(response).await?;
@@ -148,10 +145,7 @@ impl RainyClient {
 
         self.wait_for_slot().await;
         let response = self
-            .send_request(
-                self.api_request(reqwest::Method::POST, "/search/extract")
-                    .json(&request),
-            )
+            .send_request(self.json_request(reqwest::Method::POST, "/search/extract", &request)?)
             .await?;
 
         let envelope: ExtractEnvelope = self.handle_response(response).await?;

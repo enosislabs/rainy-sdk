@@ -13,8 +13,8 @@ async fn test_research_configuration() {
         .with_async(true);
 }
 
-#[tokio::test]
-async fn test_research_client_api() {
+#[test]
+fn test_research_client_api() {
     // This test just verifies API surface exists, doesn't make network calls
     // Use a valid format key: ra- + 48 hex characters
     let client =
@@ -22,11 +22,7 @@ async fn test_research_client_api() {
 
     // Check if method exists
     // Check if method exists and compiles - don't execute as it needs valid key
-    let _ = client.research("test topic", None).await;
-    let _ = client
-        .search("test topic", Some(ResearchDepth::Basic), Some(5))
-        .await;
-    let _ = client
-        .search_extract(vec!["https://example.com".to_string()])
-        .await;
+    let _research = client.research("test topic", None);
+    let _search = client.search("test topic", Some(ResearchDepth::Basic), Some(5));
+    let _extract = client.search_extract(vec!["https://example.com".to_string()]);
 }

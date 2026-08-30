@@ -1,3 +1,5 @@
+#![cfg(feature = "rainy-account")]
+
 use rainy_sdk::{RainySessionClient, SessionConfig};
 
 fn maybe_server() -> Option<mockito::ServerGuard> {
@@ -139,7 +141,7 @@ async fn session_usage_stats_parses_v3_alias_fields() {
               "periodDays": 7,
               "totalRequests": 12,
               "totalCreditsDeducted": 0.42,
-              "statsByProvider": { "openrouter": { "requests": 12, "creditsDeducted": 0.42 } },
+              "statsByProvider": { "compatible": { "requests": 12, "creditsDeducted": 0.42 } },
               "logs": []
             }"#,
         )

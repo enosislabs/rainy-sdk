@@ -79,7 +79,7 @@ impl RetryConfig {
 
         // Add jitter if enabled (±25%)
         if self.jitter && attempt > 0 {
-            use rand::RngExt;
+            use rand::Rng;
             let mut rng = rand::rng();
             let jitter_factor = rng.random_range(0.75..=1.25);
             delay *= jitter_factor;
@@ -128,8 +128,15 @@ where
                     return Err(error);
                 }
 
-                // Calculate delay for next attempt
-                let delay = config.delay_for_attempt(attempt);
+                // A server hint wins, but remains bounded by the local retry
+                // budget. This helper is used only for explicitly safe
+                // operations by the main client.
+                let delay = error
+                    .retry_after()
+                    .map(|seconds| {
+                        Duration::from_secs(seconds).min(Duration::from_millis(config.max_delay_ms))
+                    })
+                    .unwrap_or_else(|| config.delay_for_attempt(attempt));
 
                 #[cfg(feature = "tracing")]
                 tracing::warn!(
@@ -166,14 +173,16 @@ mod tests {
     fn test_delay_calculation() {
         let config = RetryConfig::default();
 
-        // Test delay progression
+        // Test the exponential bounds; jitter is intentionally random.
         let delay0 = config.delay_for_attempt(0);
         let delay1 = config.delay_for_attempt(1);
         let delay2 = config.delay_for_attempt(2);
 
         assert!(delay0.as_millis() >= 1000);
-        assert!(delay1.as_millis() >= delay0.as_millis());
-        assert!(delay2.as_millis() >= delay1.as_millis());
+        assert!(delay1.as_millis() >= 750);
+        assert!(delay1.as_millis() <= 2500);
+        assert!(delay2.as_millis() >= 3000);
+        assert!(delay2.as_millis() <= 6000);
         assert!(delay2.as_millis() <= 30000);
     }
 }

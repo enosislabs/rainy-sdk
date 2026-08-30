@@ -3,7 +3,7 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Initialize the API-key client for Rainy API v3 (models/chat/search endpoints)
+    // Initialize the API-key client with Rainy as the default backend.
     let client = RainyClient::with_config(AuthConfig::new("your-api-key-here").with_timeout(30))?;
 
     println!("🌟 Rainy API SDK Example");
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("\n3. Creating chat completion...");
     let messages = vec![ChatMessage::user("Hello! Can you tell me a short joke?")];
 
-    let request = ChatCompletionRequest::new("gemini-pro", messages)
+    let request = ChatCompletionRequest::new("example/model", messages)
         .with_max_tokens(150)
         .with_temperature(0.7);
 

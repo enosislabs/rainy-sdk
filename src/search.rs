@@ -6,20 +6,6 @@
 use crate::models::{ResearchDepth, ResearchProvider};
 use serde::{Deserialize, Serialize};
 
-/// Thinking level for Gemini 3 models
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ThinkingLevel {
-    /// Minimum reasoning depth
-    Minimal,
-    /// Fast reasoning depth
-    Low,
-    /// Balanced reasoning depth
-    Medium,
-    /// Maximum reasoning depth
-    High,
-}
-
 /// Options for configuring a web research request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResearchConfig {
@@ -38,16 +24,9 @@ pub struct ResearchConfig {
     /// Process the request asynchronously
     #[serde(default)]
     pub async_mode: bool,
-    /// The specific AI model to use for analysis (e.g. "gemini-2.0-flash-exp")
+    /// The specific compatible model to use for analysis.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
-    /// The thinking level for Gemini 3 models
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        rename = "thinkingLevel"
-    )]
-    pub thinking_level: Option<ThinkingLevel>,
 }
 
 fn default_max_sources() -> u32 {
@@ -63,7 +42,6 @@ impl Default for ResearchConfig {
             include_images: false,
             async_mode: false,
             model: None,
-            thinking_level: None,
         }
     }
 }
@@ -101,12 +79,6 @@ impl ResearchConfig {
     /// Set the specific AI model
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
-        self
-    }
-
-    /// Set the thinking level (Gemini 3 only)
-    pub fn with_thinking_level(mut self, level: ThinkingLevel) -> Self {
-        self.thinking_level = Some(level);
         self
     }
 }

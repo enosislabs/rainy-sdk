@@ -8,11 +8,13 @@ impl RainyClient {
         &self,
         request: EmbeddingsRequest,
     ) -> Result<EmbeddingsResponse> {
-        self.make_request(
-            reqwest::Method::POST,
-            "embeddings",
-            Some(serde_json::to_value(request)?),
-        )
-        .await
+        request
+            .validate()
+            .map_err(crate::error::RainyError::ValidationError)?;
+        self.wait_for_slot().await;
+        let response = self
+            .send_request(self.json_request(reqwest::Method::POST, "/embeddings", &request)?)
+            .await?;
+        self.handle_response(response).await
     }
 }

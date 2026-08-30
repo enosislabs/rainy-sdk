@@ -1,286 +1,268 @@
+//! Public error taxonomy with safe, non-secret diagnostics.
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// The comprehensive error type for all operations within the Rainy SDK.
-///
-/// `RainyError` is an enumeration of all possible errors that can occur,
-/// providing detailed context for each error variant.
+/// Errors returned by the SDK.
 #[derive(Error, Debug, Clone)]
 pub enum RainyError {
-    /// An error related to authentication, such as an invalid or expired API key.
+    /// Authentication or credential validation failed.
     #[error("Authentication failed: {message}")]
     Authentication {
-        /// A machine-readable error code (e.g., `INVALID_API_KEY`).
+        /// Machine-readable code.
         code: String,
-        /// A human-readable error message.
+        /// Safe human-readable message.
         message: String,
-        /// Indicates whether the request can be retried.
+        /// Whether a caller may retry this operation.
         retryable: bool,
     },
 
-    /// An error due to an invalid request, such as a missing required field.
+    /// The request could not be represented or accepted by the protocol.
     #[error("Invalid request: {message}")]
     InvalidRequest {
-        /// A machine-readable error code (e.g., `MISSING_REQUIRED_FIELD`).
+        /// Machine-readable code.
         code: String,
-        /// A human-readable error message.
+        /// Safe human-readable message.
         message: String,
-        /// Additional details about the error, if available.
+        /// Structured validation details, when useful.
         details: Option<serde_json::Value>,
     },
 
-    /// An error that originates from an underlying AI provider (e.g., OpenAI, Anthropic).
+    /// An upstream provider error exposed by a compatible gateway.
     #[error("Provider error ({provider}): {message}")]
     Provider {
-        /// The error code from the provider.
+        /// Provider-defined code.
         code: String,
-        /// The error message from the provider.
+        /// Safe provider message.
         message: String,
-        /// The name of the provider that returned the error.
+        /// Opaque provider label, if supplied by the API.
         provider: String,
-        /// Indicates whether the request can be retried.
+        /// Whether the API marked it retryable.
         retryable: bool,
     },
 
-    /// An error indicating that the rate limit for the API has been exceeded.
+    /// A rate limit response.
     #[error("Rate limit exceeded: {message}")]
     RateLimit {
-        /// A machine-readable error code (e.g., `RATE_LIMIT_EXCEEDED`).
+        /// Machine-readable code.
         code: String,
-        /// A human-readable error message.
+        /// Safe human-readable message.
         message: String,
-        /// The recommended time to wait before retrying, in seconds.
+        /// Bounded server-provided retry delay.
         retry_after: Option<u64>,
-        /// Information about the current usage, if available.
+        /// Optional usage summary.
         current_usage: Option<String>,
     },
 
-    /// An error indicating that the account has insufficient credits to perform the request.
+    /// The service rejected a request for lack of credits.
     #[error("Insufficient credits: {message}")]
     InsufficientCredits {
-        /// A machine-readable error code (e.g., `INSUFFICIENT_CREDITS`).
+        /// Machine-readable code.
         code: String,
-        /// A human-readable error message.
+        /// Safe human-readable message.
         message: String,
-        /// The current credit balance of the account.
+        /// Current balance.
         current_credits: f64,
-        /// The estimated cost of the request.
+        /// Estimated cost.
         estimated_cost: f64,
-        /// The date when the credits are scheduled to be reset or topped up.
+        /// Reset date when supplied.
         reset_date: Option<String>,
     },
 
-    /// An error related to network connectivity or HTTP-level issues.
+    /// A network or connection error.
     #[error("Network error: {message}")]
     Network {
-        /// A message describing the network error.
+        /// Safe high-level message.
         message: String,
-        /// Indicates whether the request can be retried.
+        /// Whether the operation may be retried if it is otherwise safe.
         retryable: bool,
-        /// The underlying error message, if available.
+        /// Optional deliberately sanitized source detail.
         source_error: Option<String>,
     },
 
-    /// A generic API error that doesn't fit into the other categories.
+    /// A non-specialized HTTP API error.
     #[error("API error [{status_code}]: {message}")]
     Api {
-        /// A machine-readable error code.
+        /// Machine-readable code.
         code: String,
-        /// A human-readable error message.
+        /// Safe response message.
         message: String,
-        /// The HTTP status code of the response.
+        /// HTTP status code.
         status_code: u16,
-        /// Indicates whether the request can be retried.
+        /// Whether the status is transient.
         retryable: bool,
-        /// The unique ID of the request, for debugging purposes.
+        /// Request correlation identifier.
         request_id: Option<String>,
     },
 
-    /// An error indicating that the request timed out.
+    /// A request timeout.
     #[error("Request timeout: {message}")]
     Timeout {
-        /// A message describing the timeout.
+        /// Safe high-level message.
         message: String,
-        /// The timeout duration in milliseconds.
+        /// Configured timeout in milliseconds.
         duration_ms: u64,
     },
 
-    /// An error that occurs during serialization or deserialization of data.
+    /// JSON serialization/deserialization failed.
     #[error("Serialization error: {message}")]
     Serialization {
-        /// A message describing the serialization error.
+        /// Safe parse/serialization message.
         message: String,
-        /// The underlying error message, if available.
+        /// Non-secret parser detail.
         source_error: Option<String>,
     },
 
-    /// An error indicating that a feature is not available for the current plan.
+    /// A feature is not available on the selected service.
     #[error("Feature not available: {feature} - {message}")]
     FeatureNotAvailable {
-        /// The feature that is not available.
+        /// Feature name.
         feature: String,
-        /// A message explaining why the feature is not available.
+        /// Explanation.
         message: String,
     },
 
-    /// A model or capability rejected by plan, organization, or privacy policy.
+    /// The service denied a model or inference capability.
     #[error("Access denied ({code}): {message}")]
     AccessDenied {
-        /// Machine-readable Rainy API error code.
+        /// Machine-readable code.
         code: String,
-        /// Human-readable explanation from the API.
+        /// Safe explanation.
         message: String,
-        /// Structured plan, tier, model, or policy context.
+        /// Structured details, when supplied.
         details: Option<serde_json::Value>,
     },
 
-    /// A generic network error.
+    /// The request or response exceeded an SDK safety bound.
+    #[error("Payload too large: {message} (maximum {max_bytes} bytes)")]
+    PayloadTooLarge {
+        /// Safe high-level message.
+        message: String,
+        /// Enforced limit.
+        max_bytes: usize,
+    },
+
+    /// Compatibility alias for older callers.
     #[error("Network error: {0}")]
     NetworkError(String),
 
-    /// A validation error for invalid input.
+    /// Compatibility alias for older callers.
     #[error("Validation error: {0}")]
     ValidationError(String),
 }
 
 impl RainyError {
-    /// Checks if the error is considered retryable.
-    ///
-    /// Some errors, like network issues or rate limiting, are transient and can be resolved
-    /// by retrying the request.
-    ///
-    /// # Returns
-    ///
-    /// `true` if the error is retryable, `false` otherwise.
+    /// Returns whether this error is generally transient.
     pub fn is_retryable(&self) -> bool {
         match self {
-            RainyError::Authentication { retryable, .. } => *retryable,
-            RainyError::Provider { retryable, .. } => *retryable,
-            RainyError::Network { retryable, .. } => *retryable,
-            RainyError::Api { retryable, .. } => *retryable,
-            RainyError::RateLimit { .. } => true,
-            RainyError::Timeout { .. } => true,
+            Self::Authentication { retryable, .. }
+            | Self::Provider { retryable, .. }
+            | Self::Network { retryable, .. }
+            | Self::Api { retryable, .. } => *retryable,
+            Self::RateLimit { .. } | Self::Timeout { .. } => true,
             _ => false,
         }
     }
 
-    /// Returns the recommended delay in seconds before a retry, if applicable.
-    ///
-    /// This is typically used with `RateLimit` errors.
-    ///
-    /// # Returns
-    ///
-    /// An `Option<u64>` containing the retry delay in seconds, or `None` if not applicable.
+    /// Returns a bounded server-requested retry delay.
     pub fn retry_after(&self) -> Option<u64> {
         match self {
-            RainyError::RateLimit { retry_after, .. } => *retry_after,
+            Self::RateLimit { retry_after, .. } => *retry_after,
             _ => None,
         }
     }
 
-    /// Returns the machine-readable error code, if available.
+    /// Returns the machine-readable code, if one exists.
     pub fn code(&self) -> Option<&str> {
         match self {
-            RainyError::Authentication { code, .. }
-            | RainyError::InvalidRequest { code, .. }
-            | RainyError::Provider { code, .. }
-            | RainyError::RateLimit { code, .. }
-            | RainyError::InsufficientCredits { code, .. }
-            | RainyError::AccessDenied { code, .. }
-            | RainyError::Api { code, .. } => Some(code),
+            Self::Authentication { code, .. }
+            | Self::InvalidRequest { code, .. }
+            | Self::Provider { code, .. }
+            | Self::RateLimit { code, .. }
+            | Self::InsufficientCredits { code, .. }
+            | Self::AccessDenied { code, .. }
+            | Self::Api { code, .. } => Some(code),
             _ => None,
         }
     }
 
-    /// Returns the unique request ID associated with the error, if available.
-    ///
-    /// This is useful for debugging and support requests.
+    /// Returns a request correlation identifier, if one exists.
     pub fn request_id(&self) -> Option<&str> {
         match self {
-            RainyError::Api { request_id, .. } => request_id.as_deref(),
+            Self::Api { request_id, .. } => request_id.as_deref(),
             _ => None,
         }
     }
 }
 
-/// The structure of a standard error response from the Rainy API.
+/// Standard Rainy error response shape.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiErrorResponse {
-    /// The detailed error information.
+    /// Error details.
     pub error: ApiErrorDetails,
 }
 
-/// Detailed information about an API error.
+/// Detailed standard Rainy error response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiErrorDetails {
-    /// A machine-readable error code.
+    /// Machine-readable error code.
     pub code: String,
-    /// A human-readable error message.
+    /// Human-readable message.
     pub message: String,
-    /// Additional, structured details about the error.
+    /// Structured details.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<serde_json::Value>,
-    /// Indicates whether the request that caused this error can be retried.
+    /// Server retry hint.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retryable: Option<bool>,
-    /// The timestamp of when the error occurred.
+    /// Error timestamp.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
-    /// The unique ID of the request.
+    /// Request identifier.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
 }
 
-/// A convenience type alias for `Result<T, RainyError>`.
+/// Result alias used throughout the crate.
 pub type Result<T> = std::result::Result<T, RainyError>;
 
-/// Converts a `reqwest::Error` into a `RainyError`.
-///
-/// This implementation categorizes `reqwest` errors into `Timeout`, `Network`,
-/// or other appropriate `RainyError` variants.
 impl From<reqwest::Error> for RainyError {
-    fn from(err: reqwest::Error) -> Self {
-        if err.is_timeout() {
-            RainyError::Timeout {
+    fn from(error: reqwest::Error) -> Self {
+        if error.is_timeout() {
+            Self::Timeout {
                 message: "Request timed out".to_string(),
-                duration_ms: 30000, // Default timeout
-            }
-        } else if err.is_connect() || err.is_request() {
-            RainyError::Network {
-                message: err.to_string(),
-                retryable: true,
-                source_error: Some(err.to_string()),
+                duration_ms: 0,
             }
         } else {
-            RainyError::Network {
-                message: err.to_string(),
-                retryable: false,
-                source_error: Some(err.to_string()),
+            Self::Network {
+                message: if error.is_connect() {
+                    "Could not connect to the service".to_string()
+                } else if error.is_request() {
+                    "The HTTP request could not be sent".to_string()
+                } else {
+                    "The HTTP request failed".to_string()
+                },
+                retryable: error.is_connect() || error.is_request(),
+                source_error: None,
             }
         }
     }
 }
 
-/// Converts a `serde_json::Error` into a `RainyError`.
-///
-/// This is used for errors that occur during the serialization or deserialization of JSON data.
 impl From<serde_json::Error> for RainyError {
-    fn from(err: serde_json::Error) -> Self {
-        RainyError::Serialization {
-            message: err.to_string(),
-            source_error: Some(err.to_string()),
+    fn from(error: serde_json::Error) -> Self {
+        Self::Serialization {
+            message: error.to_string(),
+            source_error: Some(error.to_string()),
         }
     }
 }
 
-/// Converts a `reqwest::header::InvalidHeaderValue` into a `RainyError`.
-///
-/// This is used when an invalid value is provided for an HTTP header.
 impl From<reqwest::header::InvalidHeaderValue> for RainyError {
-    fn from(err: reqwest::header::InvalidHeaderValue) -> Self {
-        RainyError::InvalidRequest {
+    fn from(_: reqwest::header::InvalidHeaderValue) -> Self {
+        Self::InvalidRequest {
             code: "INVALID_HEADER".to_string(),
-            message: format!("Invalid header value: {}", err),
+            message: "request contained an invalid header value".to_string(),
             details: None,
         }
     }

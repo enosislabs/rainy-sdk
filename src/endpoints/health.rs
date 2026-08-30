@@ -1,28 +1,13 @@
+//! Public health operations.
+
 use crate::client::RainyClient;
 use crate::error::Result;
 use crate::models::{HealthStatus, ServiceStatus};
 use serde::Deserialize;
+use serde_json::Value;
 
 impl RainyClient {
-    /// Performs a basic health check on the Rainy API.
-    ///
-    /// This method is useful for quickly verifying that the API is up and running.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a `HealthStatus` struct with basic health information.
-    ///
-    /// # Example
-    ///
-    /// ```rust,no_run
-    /// # use rainy_sdk::RainyClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RainyClient::with_api_key("user-api-key")?;
-    /// let health = client.health_check().await?;
-    /// println!("API Status: {}", health.status);
-    /// # Ok(())
-    /// # }
-    /// ```
+    /// Performs the public root health check.
     pub async fn health_check(&self) -> Result<HealthStatus> {
         #[derive(Deserialize)]
         struct RootHealthResponse {
@@ -35,7 +20,6 @@ impl RainyClient {
             .send_request(self.root_request(reqwest::Method::GET, "/health"))
             .await?;
         let payload: RootHealthResponse = self.handle_response(response).await?;
-
         Ok(HealthStatus {
             status: payload.status,
             timestamp: payload.timestamp,
@@ -48,42 +32,17 @@ impl RainyClient {
         })
     }
 
-    /// Performs a detailed health check on the Rainy API and its underlying services.
+    /// Performs a detailed health check when the service exposes one.
     ///
-    /// This method provides more in-depth information, including the status of the database,
-    /// Redis, and connections to AI providers.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a `HealthStatus` struct with detailed service status.
-    ///
-    /// # Example
-    ///
-    /// ```rust,no_run
-    /// # use rainy_sdk::RainyClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = RainyClient::with_api_key("user-api-key")?;
-    /// let health = client.detailed_health_check().await?;
-    /// println!("Database status: {}", health.services.database);
-    /// println!("Providers status: {}", health.services.providers);
-    /// # Ok(())
-    /// # }
-    /// ```
+    /// Only generic dependency labels are interpreted. Unknown fields are
+    /// ignored so the SDK does not encode service-internal topology.
     pub async fn detailed_health_check(&self) -> Result<HealthStatus> {
-        #[derive(Deserialize)]
-        struct DependencyFlags {
-            database: bool,
-            redis: bool,
-            #[serde(rename = "openrouterConfigured")]
-            openrouter_configured: bool,
-            #[serde(rename = "polarConfigured")]
-            polar_configured: bool,
-        }
         #[derive(Deserialize)]
         struct DependenciesHealthResponse {
             status: String,
             timestamp: String,
-            dependencies: DependencyFlags,
+            #[serde(default)]
+            dependencies: Value,
         }
 
         self.wait_for_slot().await;
@@ -91,16 +50,24 @@ impl RainyClient {
             .send_request(self.root_request(reqwest::Method::GET, "/health/dependencies"))
             .await?;
         let payload: DependenciesHealthResponse = self.handle_response(response).await?;
-
+        let dependencies = payload.dependencies.as_object();
+        let bool_value = |names: &[&str]| {
+            names
+                .iter()
+                .find_map(|name| dependencies.and_then(|items| items.get(*name)))
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        };
         Ok(HealthStatus {
             status: payload.status,
             timestamp: payload.timestamp,
             uptime: 0.0,
             services: ServiceStatus {
-                database: payload.dependencies.database,
-                redis: Some(payload.dependencies.redis),
-                providers: payload.dependencies.openrouter_configured
-                    && payload.dependencies.polar_configured,
+                database: bool_value(&["database"]),
+                redis: dependencies
+                    .and_then(|items| items.get("redis"))
+                    .and_then(Value::as_bool),
+                providers: bool_value(&["providers", "inference"]),
             },
         })
     }

@@ -6,9 +6,8 @@ mod integration_tests {
     use super::*;
 
     fn get_test_client() -> RainyClient {
-        // Use env var or generate a valid 51-char test key (ra- + 48 hex)
         let api_key =
-            env::var("RAINY_TEST_API_KEY").unwrap_or_else(|_| format!("ra-{}", "0".repeat(48)));
+            env::var("RAINY_TEST_API_KEY").unwrap_or_else(|_| "compatible-test-key".to_string());
         let base_url =
             env::var("RAINY_TEST_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
 
@@ -36,13 +35,13 @@ mod integration_tests {
     async fn test_chat_completion_request_creation() {
         let messages = vec![ChatMessage::user("Hello, world!")];
 
-        let request = ChatCompletionRequest::new("gemini-pro", messages)
+        let request = ChatCompletionRequest::new("compatible/chat-model", messages)
             .with_max_tokens(100)
             .with_temperature(0.7);
 
         // Test serialization
         let json = serde_json::to_string(&request).unwrap();
-        assert!(json.contains("gemini-pro"));
+        assert!(json.contains("compatible/chat-model"));
         assert!(json.contains("Hello, world!"));
     }
 

@@ -3,15 +3,29 @@ name = "rainy-sdk"
 version = "0.6.16"
 edition = "2024"
 authors = ["Enosis Labs <hello@enosislabs.com>"]
-description = "Official Rust SDK for Rainy API by Enosis Labs v0.6.16 - Responses, embeddings, model discovery, and native streaming events"
+description = "Universal Rust SDK for OpenAI-compatible and Anthropic-compatible inference APIs"
 license = "Apache-2.0"
 repository = "https://github.com/enosislabs/rainy-sdk"
 homepage = "https://github.com/enosislabs/rainy-sdk"
 documentation = "https://docs.rs/rainy-sdk"
 readme = "README.md"
-keywords = ["ai", "api", "openai", "anthropic", "gemini"]
+keywords = ["ai", "api", "openai", "anthropic"]
 categories = ["api-bindings", "asynchronous", "web-programming::http-client"]
 rust-version = "1.98.0"
+
+# Include only public SDK source, documentation, examples, and benchmarks.
+# Private repository notes and CI metadata are intentionally not packaged.
+include = [
+    "src/**/*",
+    "benches/**/*",
+    "examples/**/*.rs",
+    "Cargo.toml",
+    "Cargo.lock",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+]
 
 # Package metadata for better crates.io presentation
 [package.metadata.docs.rs]
@@ -23,16 +37,6 @@ default-target = "x86_64-unknown-linux-gnu"
 targets = ["x86_64-apple-darwin", "aarch64-apple-darwin"]
 # Use rustdoc-args for better documentation
 rustdoc-args = ["--cfg", "docsrs"]
-
-# Include specific files for packaging
-include = [
-    "src/**/*",
-    "benches/**/*",
-    "Cargo.toml",
-    "README.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-]
 
 [dependencies]
 # Core dependencies
@@ -51,18 +55,16 @@ governor = { version = "0.10.4", optional = true }
 tracing = { version = "0.1.44", optional = true }
 futures = { version = "0.3.34", default-features = false, features = ["std"] }
 
-# Dependencies for retry logic with jitter
-rand = "0.10.2"
-
-# SSE parsing (keep for backward compatibility)
-eventsource-stream = "0.2.3"
+# Retry jitter shares the version already used by the optional rate limiter.
+rand = "0.9.5"
 
 [features]
-default = ["rate-limiting", "tracing"]
+default = []
 rate-limiting = ["dep:governor"]
 tracing = ["dep:tracing"]
 cache = []
-legacy = ["dep:uuid", "dep:chrono"]  # Legacy v2 endpoints/types (opt-in)
+rainy-account = []
+legacy = ["rainy-account", "dep:uuid", "dep:chrono"]  # Legacy v2 endpoints/types (opt-in)
 
 # Development dependencies
 [dev-dependencies]
@@ -74,6 +76,10 @@ criterion = { version = "0.8.2", features = ["html_reports"] }
 [[bench]]
 name = "client_benchmark"
 harness = false
+
+[[example]]
+name = "session_auth"
+required-features = ["rainy-account"]
 
 # Production optimizations
 [profile.release]

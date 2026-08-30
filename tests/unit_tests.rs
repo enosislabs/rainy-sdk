@@ -1,247 +1,152 @@
 use rainy_sdk::{
-    AuthConfig, ChatCompletionRequest, ChatMessage, MessageRole, RainyError, RainySessionClient,
-    RetryConfig, SessionConfig, ThinkingLevel,
+    AuthConfig, ChatCompletionRequest, ChatMessage, ModelCatalogItem, ModelSelectionCriteria,
+    RainyError, ReasoningConfig, ReasoningEffort, ReasoningPreference, ResponsesRequest,
+    RetryConfig, build_reasoning_config, select_models,
 };
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[cfg(feature = "rainy-account")]
+use rainy_sdk::{RainySessionClient, SessionConfig};
 
-    #[test]
-    fn test_auth_config_validation() {
-        // Test valid standard API key (51 chars: ra- + 48 hex)
-        let standard_key = format!("ra-{}", "a".repeat(48));
-        let config = AuthConfig::new(&standard_key);
-        assert!(config.validate().is_ok());
+#[test]
+fn auth_accepts_protocol_neutral_keys() {
+    assert!(AuthConfig::new("sk-compatible-key").validate().is_ok());
+    assert!(AuthConfig::new("").validate().is_err());
+    assert!(AuthConfig::new("key with whitespace").validate().is_err());
+}
 
-        // Test invalid API key format (no ra- prefix)
-        let config = AuthConfig::new("invalid-key");
-        assert!(config.validate().is_err());
+#[test]
+fn auth_rejects_unsafe_service_urls() {
+    let key = "sk-compatible-key";
+    assert!(
+        AuthConfig::new(key)
+            .with_base_url("http://example.com")
+            .validate()
+            .is_err()
+    );
+    assert!(
+        AuthConfig::new(key)
+            .with_base_url("https://user:password@example.com")
+            .validate()
+            .is_err()
+    );
+    assert!(
+        AuthConfig::new(key)
+            .with_base_url("https://example.com/v1?token=secret")
+            .validate()
+            .is_err()
+    );
+    assert!(
+        AuthConfig::new(key)
+            .with_base_url("http://127.0.0.1:3000")
+            .validate()
+            .is_ok()
+    );
+}
 
-        // Test invalid standard key length (too short)
-        let config = AuthConfig::new("ra-tooshort");
-        assert!(config.validate().is_err());
-    }
+#[test]
+fn secret_does_not_appear_in_debug_or_display() {
+    let secret = "sk-this-must-not-be-printed";
+    let config = AuthConfig::new(secret);
+    assert!(!format!("{config:?}").contains(secret));
+    assert!(!config.to_string().contains(secret));
+}
 
-    #[test]
-    fn test_auth_config_builder() {
-        // Use valid 51-char key format
-        let valid_key = format!("ra-{}", "c".repeat(48));
-        let config = AuthConfig::new(&valid_key)
-            .with_api_base_url("https://gateway.example.com/openai/v1/")
-            .with_timeout(60)
-            .with_max_retries(5);
+#[test]
+fn compact_chat_builder_and_validation_are_protocol_only() {
+    let messages = vec![ChatMessage::user("hello")];
+    let request = ChatCompletionRequest::new("any/model", messages.clone())
+        .with_temperature(0.7)
+        .with_max_tokens(100)
+        .with_user("user-1")
+        .with_reasoning_effort(ReasoningEffort::High)
+        .with_include_reasoning(true);
 
-        assert_eq!(config.timeout_seconds, 60);
-        assert_eq!(config.max_retries, 5);
-        assert_eq!(
-            config.api_base_url.as_deref(),
-            Some("https://gateway.example.com/openai/v1/")
-        );
-        assert!(config.validate().is_ok());
-    }
+    assert_eq!(request.messages, messages);
+    assert_eq!(request.temperature, Some(0.7));
+    assert_eq!(request.reasoning_effort, Some(ReasoningEffort::High));
+    assert!(request.validate_openai_compatibility().is_ok());
 
-    #[test]
-    fn test_auth_config_rejects_invalid_api_base_url() {
-        let valid_key = format!("ra-{}", "c".repeat(48));
-        let config = AuthConfig::new(valid_key).with_api_base_url("not a URL");
+    let zero_choices = ChatCompletionRequest::new("any/model", vec![]).with_n(0);
+    assert!(zero_choices.validate_openai_compatibility().is_err());
+}
 
-        assert!(matches!(
-            config.validate(),
-            Err(RainyError::InvalidRequest { ref code, .. }) if code == "INVALID_API_BASE_URL"
-        ));
-    }
+#[test]
+fn reasoning_effort_and_explicit_budget_are_not_converted() {
+    let effort = serde_json::to_value(ReasoningConfig::effort(ReasoningEffort::XHigh)).unwrap();
+    assert_eq!(effort, serde_json::json!({"effort": "xhigh"}));
 
-    #[test]
-    fn test_session_client_builder() {
-        let client = RainySessionClient::with_config(
-            SessionConfig::new()
-                .with_base_url("http://localhost:3000")
-                .with_timeout(15),
-        )
-        .expect("session client should build");
+    let budget = serde_json::to_value(ReasoningConfig::manual_budget(2048)).unwrap();
+    assert_eq!(budget, serde_json::json!({"max_tokens": 2048}));
 
-        assert_eq!(client.base_url(), "http://localhost:3000");
-        assert!(client.access_token().is_none());
-    }
+    let request = ResponsesRequest::text("any/model", "hello")
+        .with_reasoning_effort(ReasoningEffort::High)
+        .with_reasoning_budget(4096);
+    let value = serde_json::to_value(request).unwrap();
+    assert_eq!(value["reasoning_effort"], "high");
+    assert_eq!(value["reasoning"]["max_tokens"], 4096);
+}
 
-    #[test]
-    fn test_chat_message_creation() {
-        let user_msg = ChatMessage::user("Hello");
-        assert_eq!(user_msg.role, MessageRole::User);
-        assert_eq!(user_msg.content, "Hello");
+#[test]
+fn catalog_selection_uses_public_capabilities_only() {
+    let model = ModelCatalogItem {
+        id: "any/reasoning-model".to_string(),
+        supported_parameters: Some(vec!["reasoning_effort".to_string()]),
+        ..Default::default()
+    };
+    let selected = select_models(
+        std::slice::from_ref(&model),
+        &ModelSelectionCriteria {
+            require_reasoning: Some(true),
+            ..Default::default()
+        },
+    );
+    assert_eq!(selected.len(), 1);
+    let config = build_reasoning_config(&model, &ReasoningPreference::effort("high"));
+    assert_eq!(config, Some(serde_json::json!({"effort": "high"})));
+}
 
-        let system_msg = ChatMessage::system("You are helpful");
-        assert_eq!(system_msg.role, MessageRole::System);
-        assert_eq!(system_msg.content, "You are helpful");
+#[test]
+fn retry_config_is_monotonic_without_jitter() {
+    let mut config = RetryConfig::new(5);
+    config.jitter = false;
+    let delay0 = config.delay_for_attempt(0);
+    let delay1 = config.delay_for_attempt(1);
+    let delay2 = config.delay_for_attempt(2);
+    assert!(delay1 >= delay0);
+    assert!(delay2 >= delay1);
+    assert!(delay2.as_millis() <= config.max_delay_ms as u128);
+}
 
-        let assistant_msg = ChatMessage::assistant("Hi there");
-        assert_eq!(assistant_msg.role, MessageRole::Assistant);
-        assert_eq!(assistant_msg.content, "Hi there");
-    }
+#[test]
+fn error_helpers_remain_safe_and_typed() {
+    let auth_error = RainyError::Authentication {
+        code: "INVALID_KEY".to_string(),
+        message: "Invalid key".to_string(),
+        retryable: false,
+    };
+    assert!(!auth_error.is_retryable());
+    assert_eq!(auth_error.code(), Some("INVALID_KEY"));
+    assert_eq!(auth_error.request_id(), None);
 
-    #[test]
-    fn test_chat_completion_request_builder() {
-        let messages = vec![ChatMessage::user("Test message")];
-        let request = ChatCompletionRequest::new("gpt-4o", messages.clone())
-            .with_temperature(0.7)
-            .with_max_tokens(100)
-            .with_user("test-user");
+    let rate_limit = RainyError::RateLimit {
+        code: "RATE_LIMIT_EXCEEDED".to_string(),
+        message: "Too many requests".to_string(),
+        retry_after: Some(4),
+        current_usage: None,
+    };
+    assert!(rate_limit.is_retryable());
+    assert_eq!(rate_limit.retry_after(), Some(4));
+}
 
-        assert_eq!(request.model, "gpt-4o");
-        assert_eq!(request.messages, messages);
-        assert_eq!(request.temperature, Some(0.7));
-        assert_eq!(request.max_tokens, Some(100));
-        assert_eq!(request.user, Some("test-user".to_string()));
-    }
-
-    #[test]
-    fn test_retry_config() {
-        let config = RetryConfig::new(5);
-        assert_eq!(config.max_retries, 5);
-
-        // Test delay calculation
-        let delay0 = config.delay_for_attempt(0);
-        let delay1 = config.delay_for_attempt(1);
-        let delay2 = config.delay_for_attempt(2);
-
-        assert!(delay1.as_millis() >= delay0.as_millis());
-        assert!(delay2.as_millis() >= delay1.as_millis());
-        assert!(delay2.as_millis() <= config.max_delay_ms as u128);
-    }
-
-    #[test]
-    fn test_error_retryability() {
-        let auth_error = RainyError::Authentication {
-            code: "INVALID_KEY".to_string(),
-            message: "Invalid key".to_string(),
-            retryable: false,
-        };
-        assert!(!auth_error.is_retryable());
-
-        let network_error = RainyError::Network {
-            message: "Connection failed".to_string(),
-            retryable: true,
-            source_error: None,
-        };
-        assert!(network_error.is_retryable());
-
-        let rate_limit_error = RainyError::RateLimit {
-            code: "RATE_LIMIT_EXCEEDED".to_string(),
-            message: "Too many requests".to_string(),
-            retry_after: Some(60),
-            current_usage: None,
-        };
-        assert!(rate_limit_error.is_retryable());
-        assert_eq!(rate_limit_error.retry_after(), Some(60));
-    }
-
-    #[test]
-    fn test_error_codes() {
-        let auth_error = RainyError::Authentication {
-            code: "INVALID_KEY".to_string(),
-            message: "Invalid key".to_string(),
-            retryable: false,
-        };
-        assert_eq!(auth_error.code(), Some("INVALID_KEY"));
-
-        let network_error = RainyError::Network {
-            message: "Connection failed".to_string(),
-            retryable: true,
-            source_error: None,
-        };
-        assert_eq!(network_error.code(), None);
-    }
-
-    #[test]
-    fn test_thinking_capability_flags() {
-        let gemini3 = ChatCompletionRequest::new("gemini-3-pro-preview", vec![]);
-        assert!(gemini3.supports_thinking());
-        assert!(gemini3.requires_thought_signatures());
-
-        let gemini25 = ChatCompletionRequest::new("gemini-2.5-pro", vec![]);
-        assert!(gemini25.supports_thinking());
-        assert!(!gemini25.requires_thought_signatures());
-
-        let gpt = ChatCompletionRequest::new("gpt-4o", vec![]);
-        assert!(!gpt.supports_thinking());
-        assert!(!gpt.requires_thought_signatures());
-    }
-
-    #[test]
-    fn test_thinking_validation_rules() {
-        let valid_gemini3 = ChatCompletionRequest::new("gemini-3-flash-preview", vec![])
-            .with_thinking_level(ThinkingLevel::Medium)
-            .validate_openai_compatibility();
-        assert!(valid_gemini3.is_ok());
-
-        let invalid_non_gemini = ChatCompletionRequest::new("gpt-4o", vec![])
-            .with_thinking_level(ThinkingLevel::High)
-            .validate_openai_compatibility();
-        assert!(invalid_non_gemini.is_err());
-        assert!(
-            invalid_non_gemini
-                .err()
-                .unwrap()
-                .contains("thinking_level is only supported for Gemini 3")
-        );
-
-        let invalid_gemini3_pro_level = ChatCompletionRequest::new("gemini-3-pro-preview", vec![])
-            .with_thinking_level(ThinkingLevel::Minimal)
-            .validate_openai_compatibility();
-        assert!(invalid_gemini3_pro_level.is_err());
-        assert!(
-            invalid_gemini3_pro_level
-                .err()
-                .unwrap()
-                .contains("Gemini 3 Pro only supports 'low' and 'high'")
-        );
-
-        let valid_budget = ChatCompletionRequest::new("gemini-2.5-pro", vec![])
-            .with_thinking_budget(1024)
-            .validate_openai_compatibility();
-        assert!(valid_budget.is_ok());
-
-        let invalid_budget_model = ChatCompletionRequest::new("gemini-3-pro-preview", vec![])
-            .with_thinking_budget(1024)
-            .validate_openai_compatibility();
-        assert!(invalid_budget_model.is_err());
-        assert!(
-            invalid_budget_model
-                .err()
-                .unwrap()
-                .contains("thinking_budget is only supported for Gemini 2.5")
-        );
-
-        let conflicting = ChatCompletionRequest::new("gemini-3-pro-preview", vec![])
-            .with_thinking_level(ThinkingLevel::High)
-            .with_thinking_budget(1024)
-            .validate_openai_compatibility();
-        assert!(conflicting.is_err());
-        let conflict_error = conflicting.err().unwrap();
-        assert!(
-            conflict_error.contains("Cannot specify both thinking_level")
-                || conflict_error.contains("thinking_budget is only supported for Gemini 2.5")
-        );
-    }
-
-    #[test]
-    fn test_openai_validation_rejects_zero_choices() {
-        let result = ChatCompletionRequest::new("gpt-5", vec![])
-            .with_n(0)
-            .validate_openai_compatibility();
-
-        assert_eq!(result, Err("n must be greater than 0".to_string()));
-    }
-
-    #[cfg(feature = "legacy")]
-    #[test]
-    fn test_model_constants() {
-        use rainy_sdk::models::model_constants::*;
-
-        assert_eq!(OPENAI_GPT_4O, "gpt-4o");
-        assert_eq!(GOOGLE_GEMINI_2_5_PRO, "gemini-2.5-pro");
-        assert_eq!(GROQ_LLAMA_3_1_8B_INSTANT, "llama-3.1-8b-instant");
-        assert_eq!(CEREBRAS_LLAMA3_1_8B, "cerebras/llama3.1-8b");
-    }
+#[cfg(feature = "rainy-account")]
+#[test]
+fn account_client_is_an_explicit_opt_in() {
+    let client = RainySessionClient::with_config(
+        SessionConfig::new()
+            .with_base_url("http://localhost:3000")
+            .with_timeout(15),
+    )
+    .expect("session client");
+    assert_eq!(client.base_url(), "http://localhost:3000");
+    assert!(client.access_token().is_none());
 }
