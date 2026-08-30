@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["RAINY_API_CAPABILITY_MATRIX"],"enum":["ApiRouteClass","ApiSupport"],"fn":["capability_matrix"],"struct":["CapabilityRoute"]};

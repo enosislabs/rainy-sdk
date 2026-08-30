@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["ToolAuthType"],"struct":["RegisteredTool","ToolDefinition","ToolUpdate"]};

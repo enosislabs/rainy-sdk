@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["AnthropicContent","AnthropicContentBlock","AnthropicMessageStreamEventType","AnthropicServiceTier","AnthropicToolChoice"],"struct":["AnthropicImageSource","AnthropicMessage","AnthropicMessageRequest","AnthropicMessageResponse","AnthropicMessageStreamEvent","AnthropicThinking","AnthropicTool","AnthropicUsage"]};
