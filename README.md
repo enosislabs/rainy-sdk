@@ -23,7 +23,7 @@ discovery or account calls before inference.
 
 ```toml
 [dependencies]
-rainy-sdk = "0.6.16"
+rainy-sdk = "0.6.50"
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
 futures = "0.3"
 ```
@@ -44,7 +44,7 @@ For example, enable account/session APIs only in an application that needs
 them:
 
 ```toml
-rainy-sdk = { version = "0.6.16", features = ["rainy-account"] }
+rainy-sdk = { version = "0.6.50", features = ["rainy-account"] }
 ```
 
 ## Quick start
@@ -96,6 +96,20 @@ required by default; plain HTTP is accepted only for loopback test servers.
 Authentication is selected by protocol. Chat, Responses, embeddings, and
 Rainy extensions use `Authorization: Bearer ...`. Messages uses
 `x-api-key: ...` and `anthropic-version: 2023-06-01`.
+
+To target a compatible Messages deployment that requires another API version,
+configure it on the client:
+
+```rust,no_run
+use rainy_sdk::{AuthConfig, RainyClient};
+
+# fn example() -> Result<(), Box<dyn std::error::Error>> {
+let client = RainyClient::with_config(AuthConfig::new(std::env::var("API_KEY")?))?
+    .with_anthropic_version("2024-10-22")?;
+# let _ = client;
+# Ok(())
+# }
+```
 
 ## Chat Completions
 

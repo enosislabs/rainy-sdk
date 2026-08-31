@@ -143,6 +143,49 @@ async fn anthropic_messages_use_native_headers_and_thinking() {
 }
 
 #[tokio::test]
+async fn anthropic_messages_allow_an_overridden_version_header() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("POST", "/api/v1/messages")
+        .match_header("x-api-key", "anthropic-version-secret")
+        .match_header("anthropic-version", "2024-10-22")
+        .match_header("authorization", mockito::Matcher::Missing)
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{
+              "id":"msg_override",
+              "type":"message",
+              "role":"assistant",
+              "content":[{"type":"text","text":"done"}],
+              "model":"custom/messages-model",
+              "usage":{"input_tokens":1,"output_tokens":1}
+            }"#,
+        )
+        .create_async()
+        .await;
+
+    let client = RainyClient::with_config(
+        AuthConfig::new("anthropic-version-secret")
+            .with_base_url(server.url())
+            .with_retry(false),
+    )
+    .expect("client")
+    .with_anthropic_version("2024-10-22")
+    .expect("valid Anthropic version");
+    client
+        .create_message(AnthropicMessageRequest::new(
+            "custom/messages-model",
+            vec![AnthropicMessage::user("hello")],
+            128,
+        ))
+        .await
+        .expect("Messages response");
+
+    mock.assert();
+}
+
+#[tokio::test]
 async fn anthropic_message_stream_preserves_native_event_names_and_types() {
     let mut server = mockito::Server::new_async().await;
     let mock = server
@@ -354,6 +397,16 @@ fn public_auth_headers_are_protocol_specific_and_redacted() {
     assert!(anthropic.get("authorization").is_none());
     assert!(!format!("{config:?}").contains("header-secret"));
     assert!(!config.to_string().contains("header-secret"));
+}
+
+#[test]
+fn anthropic_version_override_rejects_invalid_header_values() {
+    let client = RainyClient::with_config(AuthConfig::new("header-secret")).expect("client");
+    let result = client.with_anthropic_version("2024-10-22\r\nX-Injected: value");
+    assert!(matches!(
+        result,
+        Err(RainyError::InvalidRequest { code, .. }) if code == "INVALID_ANTHROPIC_VERSION"
+    ));
 }
 
 #[test]

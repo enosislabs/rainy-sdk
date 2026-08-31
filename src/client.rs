@@ -28,8 +28,6 @@ use governor::{
     state::{InMemoryState, NotKeyed},
 };
 
-const DEFAULT_ANTHROPIC_VERSION: &str = "2023-06-01";
-
 fn normalize_path(path: &str) -> String {
     if path.starts_with('/') {
         path.to_string()
@@ -70,6 +68,7 @@ pub struct RainyClient {
     client: Client,
     auth_config: AuthConfig,
     retry_config: RetryConfig,
+    anthropic_version: String,
     #[cfg(feature = "rate-limiting")]
     rate_limiter: Option<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>,
 }
@@ -148,6 +147,7 @@ impl RainyClient {
             client,
             retry_config: RetryConfig::new(auth_config.max_retries),
             auth_config,
+            anthropic_version: crate::DEFAULT_ANTHROPIC_VERSION.to_string(),
             #[cfg(feature = "rate-limiting")]
             rate_limiter,
         })
@@ -157,6 +157,21 @@ impl RainyClient {
     pub fn with_retry_config(mut self, retry_config: RetryConfig) -> Self {
         self.retry_config = retry_config;
         self
+    }
+
+    /// Sets the `anthropic-version` header used by native Messages requests.
+    ///
+    /// The default is [`crate::DEFAULT_ANTHROPIC_VERSION`]. The value must be
+    /// accepted by HTTP header-value validation.
+    pub fn with_anthropic_version(mut self, version: impl Into<String>) -> Result<Self> {
+        let version = version.into();
+        HeaderValue::from_str(&version).map_err(|_| RainyError::InvalidRequest {
+            code: "INVALID_ANTHROPIC_VERSION".to_string(),
+            message: "Anthropic API version is not a valid header value".to_string(),
+            details: None,
+        })?;
+        self.anthropic_version = version;
+        Ok(self)
     }
 
     pub(crate) async fn wait_for_slot(&self) {
@@ -240,7 +255,7 @@ impl RainyClient {
     ) -> Result<RequestBuilder> {
         let body = serialize_json_body(body, request_body_limit(endpoint))?;
         Ok(self
-            .anthropic_request(method, endpoint, DEFAULT_ANTHROPIC_VERSION)?
+            .anthropic_request(method, endpoint, &self.anthropic_version)?
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(body))
     }
