@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ResearchDepth","ResearchProvider"],"struct":["AvailableModels","CompatWarning","CreditInfo","FeaturesUsed","HealthStatus","RainyEnvelope","RainyEnvelopeMeta","ReasoningMeta","RequestMetadata","ServiceStatus","Usage"]};

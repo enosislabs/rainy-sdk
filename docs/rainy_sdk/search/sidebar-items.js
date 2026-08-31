@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ResearchResponse","ThinkingLevel"],"struct":["DeepResearchResponse","ResearchConfig","ResearchResult","ResearchSource","SearchExtractResponse","SearchResponse","SearchResultItem"]};
+window.SIDEBAR_ITEMS = {"enum":["ResearchResponse"],"struct":["DeepResearchResponse","ResearchConfig","ResearchResult","ResearchSource","SearchExtractResponse","SearchResponse","SearchResultItem"]};

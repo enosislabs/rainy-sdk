@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["EmbeddingEncodingFormat","EmbeddingInput","EmbeddingValue"],"struct":["EmbeddingData","EmbeddingsRequest","EmbeddingsResponse","EmbeddingsUsage"]};

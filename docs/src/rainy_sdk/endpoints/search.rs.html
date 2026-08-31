@@ -12,8 +12,8 @@
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">impl </span>RainyClient {
 <a href=#13 id=13 data-nosnippet>13</a>    <span class="doccomment">/// Perform deep web research on a topic.
 <a href=#14 id=14 data-nosnippet>14</a>    ///
-<a href=#15 id=15 data-nosnippet>15</a>    /// This method leverages the Rainy Agent Network to perform comprehensive
-<a href=#16 id=16 data-nosnippet>16</a>    /// web research using providers like Exa or Tavily.
+<a href=#15 id=15 data-nosnippet>15</a>    /// This method delegates to the configured compatible search service for
+<a href=#16 id=16 data-nosnippet>16</a>    /// comprehensive web research.
 <a href=#17 id=17 data-nosnippet>17</a>    ///
 <a href=#18 id=18 data-nosnippet>18</a>    /// # Arguments
 <a href=#19 id=19 data-nosnippet>19</a>    ///
@@ -37,7 +37,7 @@
 <a href=#37 id=37 data-nosnippet>37</a>    ///     println!("Report: {}", content);
 <a href=#38 id=38 data-nosnippet>38</a>    /// }
 <a href=#39 id=39 data-nosnippet>39</a>    ///
-<a href=#40 id=40 data-nosnippet>40</a>    /// // Advanced deep research with Exa
+<a href=#40 id=40 data-nosnippet>40</a>    /// // Advanced deep research with a selected search provider
 <a href=#41 id=41 data-nosnippet>41</a>    /// let config = ResearchConfig::new()
 <a href=#42 id=42 data-nosnippet>42</a>    ///     .with_provider(ResearchProvider::Exa)
 <a href=#43 id=43 data-nosnippet>43</a>    ///     .with_depth(ResearchDepth::Advanced);
@@ -125,37 +125,31 @@
 <a href=#125 id=125 data-nosnippet>125</a>
 <a href=#126 id=126 data-nosnippet>126</a>        <span class="self">self</span>.wait_for_slot().<span class="kw">await</span>;
 <a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">let </span>response = <span class="self">self
-<a href=#128 id=128 data-nosnippet>128</a>            </span>.send_request(
-<a href=#129 id=129 data-nosnippet>129</a>                <span class="self">self</span>.api_request(reqwest::Method::POST, <span class="string">"/search"</span>)
-<a href=#130 id=130 data-nosnippet>130</a>                    .json(<span class="kw-2">&amp;</span>request),
-<a href=#131 id=131 data-nosnippet>131</a>            )
-<a href=#132 id=132 data-nosnippet>132</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#133 id=133 data-nosnippet>133</a>
-<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">let </span>envelope: SearchEnvelope = <span class="self">self</span>.handle_response(response).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#135 id=135 data-nosnippet>135</a>        <span class="prelude-val">Ok</span>(envelope.data)
-<a href=#136 id=136 data-nosnippet>136</a>    }
-<a href=#137 id=137 data-nosnippet>137</a>
-<a href=#138 id=138 data-nosnippet>138</a>    <span class="doccomment">/// Performs a native `/api/v1/search/extract` request.
-<a href=#139 id=139 data-nosnippet>139</a>    </span><span class="kw">pub async fn </span>search_extract(<span class="kw-2">&amp;</span><span class="self">self</span>, urls: Vec&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;SearchExtractResponse&gt; {
-<a href=#140 id=140 data-nosnippet>140</a>        <span class="attr">#[derive(serde::Deserialize)]
-<a href=#141 id=141 data-nosnippet>141</a>        </span><span class="kw">struct </span>ExtractEnvelope {
-<a href=#142 id=142 data-nosnippet>142</a>            data: SearchExtractResponse,
-<a href=#143 id=143 data-nosnippet>143</a>        }
-<a href=#144 id=144 data-nosnippet>144</a>
-<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">let </span>request = <span class="macro">json!</span>({
-<a href=#146 id=146 data-nosnippet>146</a>            <span class="string">"urls"</span>: urls,
-<a href=#147 id=147 data-nosnippet>147</a>        });
-<a href=#148 id=148 data-nosnippet>148</a>
-<a href=#149 id=149 data-nosnippet>149</a>        <span class="self">self</span>.wait_for_slot().<span class="kw">await</span>;
-<a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">let </span>response = <span class="self">self
-<a href=#151 id=151 data-nosnippet>151</a>            </span>.send_request(
-<a href=#152 id=152 data-nosnippet>152</a>                <span class="self">self</span>.api_request(reqwest::Method::POST, <span class="string">"/search/extract"</span>)
-<a href=#153 id=153 data-nosnippet>153</a>                    .json(<span class="kw-2">&amp;</span>request),
-<a href=#154 id=154 data-nosnippet>154</a>            )
-<a href=#155 id=155 data-nosnippet>155</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#156 id=156 data-nosnippet>156</a>
-<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">let </span>envelope: ExtractEnvelope = <span class="self">self</span>.handle_response(response).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#158 id=158 data-nosnippet>158</a>        <span class="prelude-val">Ok</span>(envelope.data)
-<a href=#159 id=159 data-nosnippet>159</a>    }
-<a href=#160 id=160 data-nosnippet>160</a>}
+<a href=#128 id=128 data-nosnippet>128</a>            </span>.send_request(<span class="self">self</span>.json_request(reqwest::Method::POST, <span class="string">"/search"</span>, <span class="kw-2">&amp;</span>request)<span class="question-mark">?</span>)
+<a href=#129 id=129 data-nosnippet>129</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#130 id=130 data-nosnippet>130</a>
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">let </span>envelope: SearchEnvelope = <span class="self">self</span>.handle_response(response).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="prelude-val">Ok</span>(envelope.data)
+<a href=#133 id=133 data-nosnippet>133</a>    }
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="doccomment">/// Performs a native `/api/v1/search/extract` request.
+<a href=#136 id=136 data-nosnippet>136</a>    </span><span class="kw">pub async fn </span>search_extract(<span class="kw-2">&amp;</span><span class="self">self</span>, urls: Vec&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;SearchExtractResponse&gt; {
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="attr">#[derive(serde::Deserialize)]
+<a href=#138 id=138 data-nosnippet>138</a>        </span><span class="kw">struct </span>ExtractEnvelope {
+<a href=#139 id=139 data-nosnippet>139</a>            data: SearchExtractResponse,
+<a href=#140 id=140 data-nosnippet>140</a>        }
+<a href=#141 id=141 data-nosnippet>141</a>
+<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">let </span>request = <span class="macro">json!</span>({
+<a href=#143 id=143 data-nosnippet>143</a>            <span class="string">"urls"</span>: urls,
+<a href=#144 id=144 data-nosnippet>144</a>        });
+<a href=#145 id=145 data-nosnippet>145</a>
+<a href=#146 id=146 data-nosnippet>146</a>        <span class="self">self</span>.wait_for_slot().<span class="kw">await</span>;
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">let </span>response = <span class="self">self
+<a href=#148 id=148 data-nosnippet>148</a>            </span>.send_request(<span class="self">self</span>.json_request(reqwest::Method::POST, <span class="string">"/search/extract"</span>, <span class="kw-2">&amp;</span>request)<span class="question-mark">?</span>)
+<a href=#149 id=149 data-nosnippet>149</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#150 id=150 data-nosnippet>150</a>
+<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">let </span>envelope: ExtractEnvelope = <span class="self">self</span>.handle_response(response).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#152 id=152 data-nosnippet>152</a>        <span class="prelude-val">Ok</span>(envelope.data)
+<a href=#153 id=153 data-nosnippet>153</a>    }
+<a href=#154 id=154 data-nosnippet>154</a>}
 </code></pre></div></section></main></body></html>

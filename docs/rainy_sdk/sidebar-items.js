@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_BASE_URL","VERSION"],"mod":["auth","client","error","models","retry","search","session"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_ANTHROPIC_VERSION","DEFAULT_BASE_URL","VERSION"],"mod":["auth","client","error","models","retry","search","session"]};

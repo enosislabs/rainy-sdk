@@ -1,2 +1,2 @@
-createSrcSidebar('[["rainy_sdk",["",[["endpoints",[],["chat.rs","embeddings.rs","health.rs","keys.rs","mod.rs","search.rs","usage.rs","user.rs"]],["models",[],["legacy_types.rs","model_constants.rs"]]],["auth.rs","client.rs","error.rs","lib.rs","models.rs","retry.rs","search.rs","session.rs"]]]]');
-//{"start":19,"fragment_lengths":[276]}
+createSrcSidebar('[["rainy_sdk",["",[["endpoints",[],["chat.rs","embeddings.rs","health.rs","keys.rs","messages.rs","mod.rs","search.rs","usage.rs","user.rs"]],["models",[],["catalog.rs","chat.rs","common.rs","embeddings.rs","legacy_types.rs","messages.rs","reasoning.rs","responses.rs","streaming.rs","tools.rs"]]],["auth.rs","client.rs","error.rs","lib.rs","models.rs","retry.rs","search.rs","session.rs","sse.rs"]]]]');
+//{"start":19,"fragment_lengths":[399]}

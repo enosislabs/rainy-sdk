@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ResponsesEventType","ResponsesInputItem"],"struct":["ResponsesApiResponse","ResponsesEvent","ResponsesRequest","ResponsesUsage"],"type":["ResponsesStreamEvent"]};

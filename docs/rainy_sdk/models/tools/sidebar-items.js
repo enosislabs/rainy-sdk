@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ResponseFormat","ToolChoice","ToolType"],"struct":["FunctionDefinition","Tool","ToolFunction"]};
