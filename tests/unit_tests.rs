@@ -124,9 +124,19 @@ fn error_helpers_remain_safe_and_typed() {
         message: "Invalid key".to_string(),
         retryable: false,
     };
+    assert!(!auth_error.is_access_denied());
     assert!(!auth_error.is_retryable());
     assert_eq!(auth_error.code(), Some("INVALID_KEY"));
     assert_eq!(auth_error.request_id(), None);
+
+    let access_denied = RainyError::AccessDenied {
+        code: "CAPABILITY_DENIED".to_string(),
+        message: "The requested capability is unavailable".to_string(),
+        details: None,
+    };
+    assert!(access_denied.is_access_denied());
+    assert!(!access_denied.is_retryable());
+    assert_eq!(access_denied.code(), Some("CAPABILITY_DENIED"));
 
     let rate_limit = RainyError::RateLimit {
         code: "RATE_LIMIT_EXCEEDED".to_string(),

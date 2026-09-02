@@ -23,7 +23,7 @@ discovery or account calls before inference.
 
 ```toml
 [dependencies]
-rainy-sdk = "0.6.50"
+rainy-sdk = "0.6.51"
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
 futures = "0.3"
 ```
@@ -44,7 +44,7 @@ For example, enable account/session APIs only in an application that needs
 them:
 
 ```toml
-rainy-sdk = { version = "0.6.50", features = ["rainy-account"] }
+rainy-sdk = { version = "0.6.51", features = ["rainy-account"] }
 ```
 
 ## Quick start
@@ -345,6 +345,10 @@ JSON responses are bounded, SSE frames are bounded, redirects are disabled,
 and diagnostic messages avoid raw request URLs and credential values.
 
 Use `RainyError::is_retryable` and `retry_after` for explicit recovery logic.
+Use `RainyError::is_access_denied` when the service rejects a model or
+capability; retain `RainyError::code` only as an opaque service-defined value.
+The SDK does not perform account-policy preflights or encode private
+authorization rules.
 Do not automatically replay an inference POST: a retry can duplicate model work
 or billing when the server accepted the original request.
 

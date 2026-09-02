@@ -1,6 +1,6 @@
 [package]
 name = "rainy-sdk"
-version = "0.6.50"
+version = "0.6.51"
 edition = "2024"
 authors = ["Enosis Labs <hello@enosislabs.com>"]
 description = "Universal Rust SDK for OpenAI-compatible and Anthropic-compatible inference APIs"

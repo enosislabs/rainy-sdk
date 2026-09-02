@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.51] - 2026-09-02
+
+### Added
+
+- Added `RainyError::is_access_denied()` as a stable, protocol-level way for
+  applications to handle service-denied models or capabilities without
+  matching private or service-specific policy rules.
+
+### Changed
+
+- Clarified that machine-readable error codes remain opaque service values and
+  that the public SDK does not perform account-policy preflights or bundle
+  private authorization logic.
+
 ## [0.6.50] - 2026-08-30
 
 ### Changed

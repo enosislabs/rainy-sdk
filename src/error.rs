@@ -152,6 +152,15 @@ pub enum RainyError {
 }
 
 impl RainyError {
+    /// Returns whether the service rejected the requested model or capability.
+    ///
+    /// This is a protocol-level classification. The machine-readable value
+    /// returned by [`Self::code`] remains service-defined; the SDK does not
+    /// encode account policy or private authorization rules.
+    pub fn is_access_denied(&self) -> bool {
+        matches!(self, Self::AccessDenied { .. })
+    }
+
     /// Returns whether this error is generally transient.
     pub fn is_retryable(&self) -> bool {
         match self {
